@@ -10052,6 +10052,24 @@ class AdvancedEnergyCardEditor extends HTMLElement {
     return next;
   }
 
+  _normalizeBackgroundConfig(config) {
+    if (!config || typeof config !== 'object') {
+      return config;
+    }
+    const next = { ...config };
+    const legacy = typeof next.background_image === 'string' ? next.background_image.trim() : '';
+    if (legacy) {
+      if (!next.background_day) {
+        next.background_day = legacy;
+      }
+      if (!next.background_night) {
+        next.background_night = legacy;
+      }
+    }
+    delete next.background_image;
+    return next;
+  }
+
   _buildStrings() {
     return {
       en: {
@@ -12290,23 +12308,12 @@ class AdvancedEnergyCardEditor extends HTMLElement {
     devLabel.textContent = 'Developers:';
     devs.appendChild(devLabel);
 
-    const saliernLink = document.createElement('a');
-    saliernLink.href = 'https://github.com/Giorgio866';
-    saliernLink.target = '_blank';
-    saliernLink.rel = 'noopener noreferrer';
-    saliernLink.textContent = 'Saliern Giorgio';
-
     const brentLink = document.createElement('a');
     brentLink.href = 'https://github.com/ratava';
     brentLink.target = '_blank';
     brentLink.rel = 'noopener noreferrer';
     brentLink.textContent = 'Brent Wesley';
 
-    devs.appendChild(saliernLink);
-    const separator = document.createElement('span');
-    separator.textContent = '-';
-    separator.className = 'about-separator';
-    devs.appendChild(separator);
     devs.appendChild(brentLink);
 
     container.appendChild(links);
