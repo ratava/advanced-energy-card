@@ -1,7 +1,4 @@
-﻿{
+{
   "name": "Advanced Energy Card",
-  "render_readme": true,
-  "content_in_root": false,
-  "filename": "advanced-energy-card.js",
-  "homeassistant": "2025.1.0"
+  "content_in_root": false
 }
