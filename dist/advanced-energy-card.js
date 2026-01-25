@@ -1,7 +1,7 @@
 ﻿/**
  * Advanced Energy Card
  * Custom Home Assistant card for energy flow visualization
- * Version: 1.0.0
+ * Version: 1.0.9
  * Tested with Home Assistant 2025.12+
  */
 const BATTERY_GEOMETRY = { X: 260, Y_BASE: 350, WIDTH: 55, MAX_HEIGHT: 84 };
@@ -83,6 +83,8 @@ const HEADLIGHT_BLUR_RADIUS_PX = 12;
 const HEADLIGHT_SVG_FILTER_ID = 'advanced-headlight-glow';
 const HEADLIGHT_SVG_FILTER_URL = `url(#${HEADLIGHT_SVG_FILTER_ID})`;
 const HEADLIGHT_SVG_FILTER_STD_DEV = Math.max(0.1, HEADLIGHT_BLUR_RADIUS_PX);
+// Test flag: disable battery fill clipping entirely.
+const DISABLE_BATTERY_CLIP = true;
 
 // Polyfill CSS.escape for older browsers / HA webviews.
 // (Used by existing filter/clip-path code and the odometer feature.)
@@ -320,13 +322,6 @@ const SVG_LAYER_CONFIG = [
   },
 
   // Individual elements within layers - show/hide based on specific entity configuration
-
-  // Battery elements - show when battery sensors are configured
-  {
-    configKey: 'battery_system',
-    svgSelector: '[data-role="battery-soc"], [data-role="battery-power"], [data-role="battery-fill"]',
-    condition: (config) => config.sensor_bat1_soc || config.sensor_bat2_soc || config.sensor_bat3_soc || config.sensor_bat4_soc
-  },
 
   // Heat pump object - show when heat pump consumption entity is configured
   {
@@ -861,6 +856,8 @@ class AdvancedEnergyCard extends HTMLElement {
       car1_label: '',
       car2_label: '',
       car_headlight_flash: true,
+      car1_glow_brightness: 50,
+      car2_glow_brightness: 50,
       animation_speed_factor: 1,
       animation_style: 'dashes',
       night_animation_style: 'dashes',
@@ -1443,6 +1440,19 @@ class AdvancedEnergyCard extends HTMLElement {
     return bucket.filter((node) => node && node.isConnected);
   }
 
+  _getCarEffectElements(carKey) {
+    if (!this._domRefs || !this._domRefs.backgroundSvg) {
+      return [];
+    }
+    const key = (carKey || '').toLowerCase();
+    if (!key) {
+      return [];
+    }
+    const root = this._domRefs.backgroundSvg;
+    const selector = `[data-car-effect="${key}"], [data-effect-car="${key}"]`;
+    return Array.from(root.querySelectorAll(selector)).filter((node) => node && node.isConnected);
+  }
+
   _activateHeadlightFlash(carKey, nodes) {
     if (!nodes || !nodes.length) {
       return;
@@ -1453,13 +1463,15 @@ class AdvancedEnergyCard extends HTMLElement {
 
     const existing = this._headlightAnimations.get(carKey);
     const nodesChanged = !existing || !this._areSameHeadlightNodes(existing.nodes, nodes);
+    const effectNodes = this._getCarEffectElements(carKey);
+    const effectChanged = !existing || !this._areSameHeadlightNodes(existing.effectNodes || [], effectNodes);
 
-    if (existing && !nodesChanged && existing.timeline) {
+    if (existing && !nodesChanged && !effectChanged && existing.timeline) {
       this._logHeadlightDebug(`${carKey} headlights resume`, { nodeCount: nodes.length });
       existing.timeline.play();
       return;
     }
-    if (existing && !nodesChanged) {
+    if (existing && !nodesChanged && !effectChanged) {
       return;
     }
 
@@ -1467,7 +1479,7 @@ class AdvancedEnergyCard extends HTMLElement {
       this._teardownHeadlightFlash(carKey);
     }
 
-    const entry = { nodes: nodes.slice(), timeline: null };
+    const entry = { nodes: nodes.slice(), effectNodes: effectNodes.slice(), timeline: null };
     this._headlightAnimations.set(carKey, entry);
     this._logHeadlightDebug(`${carKey} headlights activate`, { nodeCount: nodes.length });
 
@@ -1479,6 +1491,9 @@ class AdvancedEnergyCard extends HTMLElement {
         }
         const useHeadlightFilters = Boolean(HEADLIGHT_FILTERS_ENABLED);
         current.nodes.forEach((node) => this._prepareHeadlightNode(node, useHeadlightFilters));
+        if (current.effectNodes && current.effectNodes.length) {
+          current.effectNodes.forEach((node) => this._prepareCarEffectFlashNode(node));
+        }
         const initialStyles = { opacity: 0 };
         if (useHeadlightFilters) {
           initialStyles.filter = '';
@@ -1488,12 +1503,18 @@ class AdvancedEnergyCard extends HTMLElement {
           initialStyles.mixBlendMode = '';
         }
         gsap.set(current.nodes, initialStyles);
+        if (current.effectNodes && current.effectNodes.length) {
+          gsap.set(current.effectNodes, { opacity: 0 });
+        }
         const timeline = gsap.timeline({ repeat: -1, defaults: { ease: 'sine.inOut' } });
         const brightenStep = {
           duration: 0.5,
           opacity: 1
         };
         timeline.to(current.nodes, brightenStep);
+        if (current.effectNodes && current.effectNodes.length) {
+          timeline.to(current.effectNodes, { duration: 0.5, opacity: 1 }, 0);
+        }
         const peakHoldStep = {
           duration: 0.5
         };
@@ -1503,6 +1524,9 @@ class AdvancedEnergyCard extends HTMLElement {
           opacity: 0
         };
         timeline.to(current.nodes, dimStep);
+        if (current.effectNodes && current.effectNodes.length) {
+          timeline.to(current.effectNodes, { duration: 0.5, opacity: 0 }, '<');
+        }
         const idleStep = {
           duration: 0.5
         };
@@ -1521,6 +1545,9 @@ class AdvancedEnergyCard extends HTMLElement {
       return;
     }
     this._moveHeadlightNodeToOverlay(node);
+    if (useFilters) {
+      this._ensureHeadlightSvgFilter(node.ownerSVGElement || null);
+    }
     if (node.dataset && node.dataset.advancedHeadlightOpacity === undefined) {
       node.dataset.advancedHeadlightOpacity = node.style.opacity || '';
     }
@@ -1555,6 +1582,49 @@ class AdvancedEnergyCard extends HTMLElement {
         // ignore removal errors
       }
     }
+  }
+
+  _ensureHeadlightSvgFilter(svgElement) {
+    if (!svgElement || typeof svgElement.querySelector !== 'function') {
+      return null;
+    }
+    const escapeFn = (typeof CSS !== 'undefined' && CSS.escape) ? CSS.escape : (v) => v;
+    let filterEl = null;
+    try {
+      filterEl = svgElement.querySelector(`#${escapeFn(HEADLIGHT_SVG_FILTER_ID)}`);
+    } catch (e) {
+      filterEl = svgElement.querySelector(`#${HEADLIGHT_SVG_FILTER_ID}`);
+    }
+    if (filterEl) {
+      return filterEl;
+    }
+    let defs = svgElement.querySelector('defs');
+    if (!defs) {
+      defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+      svgElement.insertBefore(defs, svgElement.firstChild);
+    }
+    filterEl = document.createElementNS('http://www.w3.org/2000/svg', 'filter');
+    filterEl.setAttribute('id', HEADLIGHT_SVG_FILTER_ID);
+    filterEl.setAttribute('x', '-50%');
+    filterEl.setAttribute('y', '-50%');
+    filterEl.setAttribute('width', '200%');
+    filterEl.setAttribute('height', '200%');
+    filterEl.setAttribute('color-interpolation-filters', 'sRGB');
+    const blur = document.createElementNS('http://www.w3.org/2000/svg', 'feGaussianBlur');
+    blur.setAttribute('in', 'SourceGraphic');
+    blur.setAttribute('stdDeviation', String(HEADLIGHT_SVG_FILTER_STD_DEV));
+    blur.setAttribute('result', 'blur');
+    const merge = document.createElementNS('http://www.w3.org/2000/svg', 'feMerge');
+    const mergeBlur = document.createElementNS('http://www.w3.org/2000/svg', 'feMergeNode');
+    mergeBlur.setAttribute('in', 'blur');
+    const mergeSource = document.createElementNS('http://www.w3.org/2000/svg', 'feMergeNode');
+    mergeSource.setAttribute('in', 'SourceGraphic');
+    merge.appendChild(mergeBlur);
+    merge.appendChild(mergeSource);
+    filterEl.appendChild(blur);
+    filterEl.appendChild(merge);
+    defs.appendChild(filterEl);
+    return filterEl;
   }
 
   _resetHeadlightNode(node) {
@@ -1615,6 +1685,47 @@ class AdvancedEnergyCard extends HTMLElement {
     }
   }
 
+  _prepareCarEffectFlashNode(node) {
+    if (!node || !node.style) {
+      return;
+    }
+    if (node.dataset && node.dataset.advancedCarEffectOpacity === undefined) {
+      node.dataset.advancedCarEffectOpacity = node.style.opacity || '';
+    }
+    if (node.dataset && node.dataset.advancedCarEffectAnimation === undefined) {
+      node.dataset.advancedCarEffectAnimation = node.style.animation || '';
+    }
+    if (node.dataset && node.dataset.advancedCarEffectWillChange === undefined) {
+      node.dataset.advancedCarEffectWillChange = node.style.willChange || '';
+    }
+    node.style.willChange = 'opacity';
+    node.style.animation = 'none';
+  }
+
+  _resetCarEffectFlashNode(node) {
+    if (!node || !node.style) {
+      return;
+    }
+    if (node.dataset && node.dataset.advancedCarEffectOpacity !== undefined) {
+      node.style.opacity = node.dataset.advancedCarEffectOpacity || '';
+      delete node.dataset.advancedCarEffectOpacity;
+    } else if (node.style.opacity) {
+      node.style.opacity = '';
+    }
+    if (node.dataset && node.dataset.advancedCarEffectAnimation !== undefined) {
+      node.style.animation = node.dataset.advancedCarEffectAnimation || '';
+      delete node.dataset.advancedCarEffectAnimation;
+    } else if (node.style.animation) {
+      node.style.animation = '';
+    }
+    if (node.dataset && node.dataset.advancedCarEffectWillChange !== undefined) {
+      node.style.willChange = node.dataset.advancedCarEffectWillChange || '';
+      delete node.dataset.advancedCarEffectWillChange;
+    } else if (node.style.willChange) {
+      node.style.willChange = '';
+    }
+  }
+
   _moveHeadlightNodeToOverlay(node) {
     if (!node || !node.ownerSVGElement) {
       return;
@@ -1671,6 +1782,9 @@ class AdvancedEnergyCard extends HTMLElement {
     }
     if (entry.nodes && entry.nodes.length) {
       entry.nodes.forEach((node) => this._resetHeadlightNode(node));
+    }
+    if (entry.effectNodes && entry.effectNodes.length) {
+      entry.effectNodes.forEach((node) => this._resetCarEffectFlashNode(node));
     }
     this._headlightAnimations.delete(carKey);
   }
@@ -3260,108 +3374,60 @@ class AdvancedEnergyCard extends HTMLElement {
       const state = this._hass.states[entityId].state;
       return state !== 'unavailable' && state !== 'unknown';
     };
-    // Prefer combined battery power sensors, but derive net power from charge/discharge entities when needed.
-    const computeBatteryPowerReading = (powerEntityId, chargeEntityId, dischargeEntityId) => {
-      const combinedId = resolveEntityId(powerEntityId);
-      const chargeId = resolveEntityId(chargeEntityId);
-      const dischargeId = resolveEntityId(dischargeEntityId);
-      const configured = Boolean(combinedId || chargeId || dischargeId);
-      const chargeAvailable = Boolean(chargeId && isEntityAvailable(chargeId));
-      const dischargeAvailable = Boolean(dischargeId && isEntityAvailable(dischargeId));
-
-      // Prefer explicit charge/discharge sensors when either is available for more accurate per-battery data.
-      if (chargeAvailable || dischargeAvailable) {
-        const chargeValue = chargeAvailable ? this.getStateSafe(chargeId) : 0;
-        const dischargeValue = dischargeAvailable ? this.getStateSafe(dischargeId) : 0;
-        const safeCharge = Number.isFinite(chargeValue) ? chargeValue : 0;
-        const safeDischarge = Number.isFinite(dischargeValue) ? dischargeValue : 0;
-        const chargeActive = safeCharge !== 0;
-        const dischargeActive = safeDischarge !== 0;
-        const derivedValue = chargeActive
-          ? safeCharge  // Positive => charging, negative => discharging per upstream semantics
-          : (dischargeActive
-            ? (safeDischarge > 0 ? -safeDischarge : safeDischarge)
-            : 0);
-        return {
-          configured,
-          hasValue: true,
-          value: derivedValue,
-          combinedId,
-          chargeId,
-          dischargeId,
-          chargeAvailable,
-          dischargeAvailable,
-          source: 'charge_discharge',
-          chargeSample: safeCharge,
-          dischargeSample: safeDischarge
-        };
+    // Battery validity (active if SOC + power are both valid).
+    const getNumericState = (entityId) => {
+      const id = (typeof entityId === 'string') ? entityId.trim() : '';
+      if (!id || !isEntityAvailable(id)) {
+        return null;
       }
-
-      if (combinedId && isEntityAvailable(combinedId)) {
-        const combinedValue = this.getStateSafe(combinedId);
-        const safeValue = Number.isFinite(combinedValue) ? combinedValue : 0;
-        return {
-          configured,
-          hasValue: true,
-          value: safeValue,
-          combinedId,
-          chargeId,
-          dischargeId,
-          chargeAvailable: false,
-          dischargeAvailable: false,
-          source: 'combined',
-          combinedSample: safeValue
-        };
+      const raw = this.getStateSafe(id);
+      const num = Number(raw);
+      return Number.isFinite(num) ? num : null;
+    };
+    const buildBatteryState = (index, socId, powerId, chargeId, dischargeId, invertFlag) => {
+      const soc = getNumericState(socId);
+      const combinedPower = getNumericState(powerId);
+      const chargePower = getNumericState(chargeId);
+      const dischargePower = getNumericState(dischargeId);
+      const hasSoc = soc !== null;
+      const hasCombinedPower = combinedPower !== null;
+      const hasSplitPower = chargePower !== null && dischargePower !== null;
+      let power = null;
+      let powerMode = 'none';
+      if (hasCombinedPower) {
+        power = combinedPower;
+        powerMode = 'combined';
+      } else if (hasSplitPower) {
+        power = chargePower - dischargePower;
+        powerMode = 'split';
       }
-
+      if (power !== null && invertFlag) {
+        power = power * -1;
+      }
+      const active = hasSoc && power !== null;
       return {
-        configured,
-        hasValue: false,
-        value: 0,
-        combinedId,
-        chargeId,
-        dischargeId,
-        chargeAvailable: false,
-        dischargeAvailable: false,
-        source: 'unavailable'
+        index,
+        role: `battery${index}`,
+        soc,
+        power,
+        charge: chargePower,
+        discharge: dischargePower,
+        powerMode,
+        visible: active
       };
     };
-
-    const batteryPowerReadings = [
-      computeBatteryPowerReading(config.sensor_bat1_power, config.sensor_bat1_charge_power, config.sensor_bat1_discharge_power),
-      computeBatteryPowerReading(config.sensor_bat2_power, config.sensor_bat2_charge_power, config.sensor_bat2_discharge_power),
-      computeBatteryPowerReading(config.sensor_bat3_power, config.sensor_bat3_charge_power, config.sensor_bat3_discharge_power),
-      computeBatteryPowerReading(config.sensor_bat4_power, config.sensor_bat4_charge_power, config.sensor_bat4_discharge_power)
+    const batteryStates = [
+      buildBatteryState(1, config.sensor_bat1_soc, config.sensor_bat1_power, config.sensor_bat1_charge_power, config.sensor_bat1_discharge_power, Boolean(config.invert_bat1 || config.invert_battery)),
+      buildBatteryState(2, config.sensor_bat2_soc, config.sensor_bat2_power, config.sensor_bat2_charge_power, config.sensor_bat2_discharge_power, Boolean(config.invert_bat2 || config.invert_battery)),
+      buildBatteryState(3, config.sensor_bat3_soc, config.sensor_bat3_power, config.sensor_bat3_charge_power, config.sensor_bat3_discharge_power, Boolean(config.invert_bat3 || config.invert_battery)),
+      buildBatteryState(4, config.sensor_bat4_soc, config.sensor_bat4_power, config.sensor_bat4_charge_power, config.sensor_bat4_discharge_power, Boolean(config.invert_battery))
     ];
-
-    // Get battery configs
-    const bat_configs = [
-      { soc: config.sensor_bat1_soc, readingIndex: 0 },
-      { soc: config.sensor_bat2_soc, readingIndex: 1 },
-      { soc: config.sensor_bat3_soc, readingIndex: 2 },
-      { soc: config.sensor_bat4_soc, readingIndex: 3 }
-    ].filter((b) => b.soc && b.soc !== '');
-
-    // Calculate battery totals
-    let total_bat_w = 0;
-    let total_soc = 0;
-    let activeSocCount = 0;
-    
-    bat_configs.forEach((b) => {
-      const socId = resolveEntityId(b.soc);
-      if (socId && isEntityAvailable(socId)) {
-        total_soc += this.getStateSafe(socId);
-        activeSocCount++;
-      }
-    });
-    
-    batteryPowerReadings.forEach((reading) => {
-      if (reading && reading.hasValue) {
-        total_bat_w += reading.value;
-      }
-    });
-
-    const avg_soc = activeSocCount > 0 ? Math.round(total_soc / activeSocCount) : 0;
+    const activeBatteries = batteryStates.filter((bat) => bat.visible);
+    const total_bat_w = activeBatteries.reduce((acc, bat) => acc + (bat.power || 0), 0);
+    const activeSocCount = activeBatteries.length;
+    const avg_soc = activeSocCount > 0
+      ? (activeBatteries.reduce((acc, bat) => acc + (bat.soc || 0), 0) / activeSocCount)
+      : 0;
 
     // Get other sensors
     const toNumber = (value) => {
@@ -3836,7 +3902,6 @@ class AdvancedEnergyCard extends HTMLElement {
     }
 
     // 3D coordinates
-    const current_h = (avg_soc / 100) * BATTERY_GEOMETRY.MAX_HEIGHT;
 
     const C_CYAN = '#00FFFF';
     const C_BLUE = '#0088FF';
@@ -3847,9 +3912,6 @@ class AdvancedEnergyCard extends HTMLElement {
     const pvSecondaryColor = resolveColor(config.pv_secondary_color, C_BLUE);
     const loadFlowColor = resolveColor(config.load_flow_color, C_CYAN);
     const loadTextBaseColor = resolveColor(config.load_text_color, C_WHITE);
-    const batterySocTextColor = resolveColor(config.battery_soc_color, C_WHITE);
-    const batteryChargeColor = resolveColor(config.battery_charge_color, C_CYAN);
-    const batteryDischargeColor = resolveColor(config.battery_discharge_color, C_WHITE);
     const gridImportColor = resolveColor(config.grid_import_color, C_RED);
     const gridExportColor = resolveColor(config.grid_export_color, C_CYAN);
     const grid2ImportColor = resolveColor(config.grid2_import_color, gridImportColor);
@@ -3859,22 +3921,6 @@ class AdvancedEnergyCard extends HTMLElement {
     const heatPumpTextColor = resolveColor(config.heat_pump_text_color, '#FFA500');
     const windmillFlowColor = resolveColor(config.windmill_flow_color, C_CYAN);
     const windmillTextColor = resolveColor(config.windmill_text_color, C_WHITE);
-    const batteryFillHighColor = resolveColor(config.battery_fill_high_color, DEFAULT_BATTERY_FILL_HIGH_COLOR);
-    const batteryFillLowColor = resolveColor(config.battery_fill_low_color, DEFAULT_BATTERY_FILL_LOW_COLOR);
-    const batteryLowThreshold = (() => {
-      const raw = toNumber(config.battery_fill_low_threshold);
-      if (raw === null) {
-        return DEFAULT_BATTERY_LOW_THRESHOLD;
-      }
-      return Math.min(Math.max(raw, 0), 100);
-    })();
-    const batteryFillOpacity = (() => {
-      const raw = toNumber(config.battery_fill_opacity);
-      if (raw === null) {
-        return 1;
-      }
-      return Math.min(Math.max(raw, 0), 1);
-    })();
     const loadMagnitude = Math.abs(loadValue);
     const effectiveLoadFlowColor = (() => {
       if (loadCriticalColor && loadCriticalThreshold !== null && loadMagnitude >= loadCriticalThreshold) {
@@ -3900,13 +3946,12 @@ class AdvancedEnergyCard extends HTMLElement {
     const washingMachineTextColor = resolveColor(config.washing_machine_text_color, effectiveLoadTextColor);
     const dryerTextColor = resolveColor(config.dryer_text_color, effectiveLoadTextColor);
     const refrigeratorTextColor = resolveColor(config.refrigerator_text_color, effectiveLoadTextColor);
-    const invertBattery = Boolean(config.invert_battery);
-    const isBatPositive = total_bat_w >= 0;
-    const bat_col = isBatPositive
-      ? (invertBattery ? batteryDischargeColor : batteryChargeColor)
-      : (invertBattery ? batteryChargeColor : batteryDischargeColor);
-    let batteryDirectionSign = isBatPositive ? 1 : -1;
-    if (invertBattery) batteryDirectionSign *= -1;
+    const batteryChargeColor = resolveColor(config.battery_charge_color, C_CYAN);
+    const batteryDischargeColor = resolveColor(config.battery_discharge_color, C_WHITE);
+    const batterySocColor = resolveColor(config.battery_soc_color, C_WHITE);
+    const invertBattery = false;
+    const bat_col = C_CYAN;
+    const batteryDirectionSign = 1;
 
     // Windmill
     const windmillTotalId = (typeof config.sensor_windmill_total === 'string') ? config.sensor_windmill_total.trim() : '';
@@ -3916,90 +3961,6 @@ class AdvancedEnergyCard extends HTMLElement {
     const windmillSpin = windmillTotalAvailable && windmillTotalW > 0;
     const windmillFlowActive = windmillTotalAvailable && windmillTotalW > 10;
 
-    const bat1SocId = resolveEntityId(config.sensor_bat1_soc);
-    const bat2SocId = resolveEntityId(config.sensor_bat2_soc);
-    const bat3SocId = resolveEntityId(config.sensor_bat3_soc);
-    const bat4SocId = resolveEntityId(config.sensor_bat4_soc);
-
-    const hasBat1SocValue = Boolean(bat1SocId) && isEntityAvailable(bat1SocId);
-    const hasBat2SocValue = Boolean(bat2SocId) && isEntityAvailable(bat2SocId);
-    const hasBat3SocValue = Boolean(bat3SocId) && isEntityAvailable(bat3SocId);
-    const hasBat4SocValue = Boolean(bat4SocId) && isEntityAvailable(bat4SocId);
-
-    const bat1SocValue = hasBat1SocValue ? this.getStateSafe(bat1SocId) : null;
-    const bat2SocValue = hasBat2SocValue ? this.getStateSafe(bat2SocId) : null;
-    const bat3SocValue = hasBat3SocValue ? this.getStateSafe(bat3SocId) : null;
-    const bat4SocValue = hasBat4SocValue ? this.getStateSafe(bat4SocId) : null;
-
-    const battery1Fill = (() => {
-      const soc = (bat1SocValue !== null) ? Number(bat1SocValue) : NaN;
-      if (!Number.isFinite(soc)) {
-        return { visible: false, level: 0, fill: batteryFillHighColor, opacity: batteryFillOpacity };
-      }
-      const clampedSoc = Math.min(Math.max(soc, 0), 100);
-      const fill = clampedSoc <= batteryLowThreshold ? batteryFillLowColor : batteryFillHighColor;
-      return {
-        visible: hasBat1SocValue,
-        level: clampedSoc / 100,
-        fill,
-        opacity: batteryFillOpacity
-      };
-    })();
-
-    const battery2Fill = (() => {
-      const soc = (bat2SocValue !== null) ? Number(bat2SocValue) : NaN;
-      if (!Number.isFinite(soc)) {
-        return { visible: false, level: 0, fill: batteryFillHighColor, opacity: batteryFillOpacity };
-      }
-      const clampedSoc = Math.min(Math.max(soc, 0), 100);
-      const fill = clampedSoc <= batteryLowThreshold ? batteryFillLowColor : batteryFillHighColor;
-      return {
-        visible: hasBat2SocValue,
-        level: clampedSoc / 100,
-        fill,
-        opacity: batteryFillOpacity
-      };
-    })();
-
-    const [bat1PowerReading, bat2PowerReading, bat3PowerReading, bat4PowerReading] = batteryPowerReadings;
-
-    const hasBat1PowerSensor = Boolean(bat1PowerReading && bat1PowerReading.configured);
-    const hasBat2PowerSensor = Boolean(bat2PowerReading && bat2PowerReading.configured);
-    const hasBat3PowerSensor = Boolean(bat3PowerReading && bat3PowerReading.configured);
-    const hasBat4PowerSensor = Boolean(bat4PowerReading && bat4PowerReading.configured);
-
-    const hasBat1PowerValue = Boolean(bat1PowerReading && bat1PowerReading.hasValue);
-    const hasBat2PowerValue = Boolean(bat2PowerReading && bat2PowerReading.hasValue);
-    const hasBat3PowerValue = Boolean(bat3PowerReading && bat3PowerReading.hasValue);
-    const hasBat4PowerValue = Boolean(bat4PowerReading && bat4PowerReading.hasValue);
-
-    const invertBat1 = Boolean(config.invert_bat1);
-    const invertBat2 = Boolean(config.invert_bat2);
-    const invertBat3 = Boolean(config.invert_bat3);
-
-    // Apply inversion as a sign multiplier so downstream logic can rely on signed power.
-    const baseBatSign = invertBattery ? -1 : 1;
-    const bat1Sign = baseBatSign * (invertBat1 ? -1 : 1);
-    const bat2Sign = baseBatSign * (invertBat2 ? -1 : 1);
-    const bat3Sign = baseBatSign * (invertBat3 ? -1 : 1);
-    const bat4Sign = baseBatSign;
-
-    const bat1PowerW = hasBat1PowerValue ? (bat1Sign * bat1PowerReading.value) : 0;
-    const bat2PowerW = hasBat2PowerValue ? (bat2Sign * bat2PowerReading.value) : 0;
-    const bat3PowerW = hasBat3PowerValue ? (bat3Sign * bat3PowerReading.value) : 0;
-    const bat4PowerW = hasBat4PowerValue ? (bat4Sign * bat4PowerReading.value) : 0;
-
-    const resolveBatteryFlowState = (powerW) => {
-      const isPositive = Number(powerW) >= 0;
-      const stroke = isPositive ? batteryChargeColor : batteryDischargeColor;
-      const direction = isPositive ? 1 : -1;
-      return { stroke, glowColor: stroke, direction };
-    };
-
-    const bat1Flow = resolveBatteryFlowState(bat1PowerW);
-    const bat2Flow = resolveBatteryFlowState(bat2PowerW);
-    const bat3Flow = resolveBatteryFlowState(bat3PowerW);
-    const bat4Flow = resolveBatteryFlowState(bat4PowerW);
     const computeEffectiveGridColor = (directionSign, magnitude, importColor, exportColor, warningThreshold, criticalThreshold, warningColor, criticalColor) => {
       const baseColor = (directionSign >= 0 ? importColor : exportColor);
       // Export is always the base export color; thresholds apply only for import.
@@ -4050,7 +4011,6 @@ class AdvancedEnergyCard extends HTMLElement {
     const gridHouseDirection = gridDirectionSign;
     const inverter1ImportExportDirection = -grid1Direction;
     const inverter2ImportExportDirection = -grid2Direction;
-    const liquid_fill = (avg_soc <= batteryLowThreshold) ? batteryFillLowColor : batteryFillHighColor;
     const show_double_flow = (pv_primary_w > 10 && pv_secondary_w > 10);
     const pvLinesRaw = [];
     // If Array 2 is producing, show totals only: PV TOTAL, Array 1 total, Array 2 total
@@ -4167,16 +4127,25 @@ class AdvancedEnergyCard extends HTMLElement {
       car2Charging
     });
 
+    const batteryFlowStates = batteryStates.map((bat) => {
+      const powerValue = Number.isFinite(bat.power) ? bat.power : 0;
+      const magnitude = Math.abs(powerValue);
+      const direction = powerValue >= 0 ? 1 : -1;
+      const color = direction >= 0 ? batteryChargeColor : batteryDischargeColor;
+      return {
+        key: `inverter1-battery${bat.index}`,
+        stroke: color,
+        glowColor: color,
+        active: Boolean(bat.visible && magnitude > 10),
+        direction
+      };
+    });
+
     const flows = {
-      pv1: { stroke: pvPrimaryColor, glowColor: pvPrimaryColor, active: pv_primary_w > 0 && !(pv_secondary_w > 0) },
+      // Keep Array 1 visible even when Array 2 is generating so both flows animate together.
+      pv1: { stroke: pvPrimaryColor, glowColor: pvPrimaryColor, active: pv_primary_w > 0 },
       pv2: { stroke: pvSecondaryColor, glowColor: pvSecondaryColor, active: pv_secondary_w > 0 },
       windmill: { stroke: windmillFlowColor, glowColor: windmillFlowColor, active: windmillFlowActive, direction: 1 },
-      bat: { stroke: bat_col, glowColor: bat_col, active: Math.abs(total_bat_w) > 10, direction: batteryDirectionSign },
-      battery1: { stroke: bat1Flow.stroke, glowColor: bat1Flow.glowColor, active: Boolean(hasBat1PowerSensor) && Math.abs(bat1PowerW) > 10, direction: bat1Flow.direction },
-      battery2: { stroke: bat2Flow.stroke, glowColor: bat2Flow.glowColor, active: Boolean(hasBat2PowerSensor) && Math.abs(bat2PowerW) > 10, direction: bat2Flow.direction },
-      battery3: { stroke: bat3Flow.stroke, glowColor: bat3Flow.glowColor, active: Boolean(hasBat3PowerSensor) && Math.abs(bat3PowerW) > 10, direction: bat3Flow.direction },
-      'inverter1-battery1': { stroke: bat1Flow.stroke, glowColor: bat1Flow.glowColor, active: Boolean(hasBat1PowerSensor) && Math.abs(bat1PowerW) > 10, direction: bat1Flow.direction },
-      'inverter2-battery2': { stroke: bat2Flow.stroke, glowColor: bat2Flow.glowColor, active: Boolean(hasBat2PowerSensor) && Math.abs(bat2PowerW) > 10, direction: bat2Flow.direction },
       load: { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: loadMagnitude > 10, direction: 1 },
       'house-load': { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: loadMagnitude > 10, direction: 1 },
       grid: { stroke: effectiveGridColor, glowColor: effectiveGridColor, active: gridActiveForGrid, direction: gridAnimationDirection },
@@ -4201,7 +4170,13 @@ class AdvancedEnergyCard extends HTMLElement {
       car1: { stroke: carFlowColor, glowColor: carFlowColor, active: showCar1 && Math.abs(car1PowerValue) > 10, direction: car1Direction },
       car2: { stroke: carFlowColor, glowColor: carFlowColor, active: showCar2 && Math.abs(car2PowerValue) > 10, direction: car2Direction },
       heatPump: { stroke: heatPumpFlowColor, glowColor: heatPumpFlowColor, active: hasHeatPumpSensor && heat_pump_w > 10, direction: 1 },
-      pool: { stroke: poolFlowColor, glowColor: poolFlowColor, active: hasPoolSensor && Math.abs(pool_w) > 10, direction: 1 }
+      pool: { stroke: poolFlowColor, glowColor: poolFlowColor, active: hasPoolSensor && Math.abs(pool_w) > 10, direction: 1 },
+      ...Object.fromEntries(batteryFlowStates.map((state) => [state.key, {
+        stroke: state.stroke,
+        glowColor: state.glowColor,
+        active: state.active,
+        direction: state.direction
+      }]))
     };
 
     flows.pv1.direction = 1;
@@ -4213,6 +4188,22 @@ class AdvancedEnergyCard extends HTMLElement {
     const flowDurations = Object.fromEntries(
       Object.entries(flows).map(([key, state]) => [key, state.active ? 1 : 0])
     );
+
+    const batteryText = batteryStates.map((bat) => {
+      const socText = (bat.visible && Number.isFinite(bat.soc)) ? `${Math.round(bat.soc)}%` : '';
+      const powerText = (bat.visible && Number.isFinite(bat.power)) ? this.formatPower(bat.power, use_kw) : '';
+      const powerColor = (Number.isFinite(bat.power) && bat.power < 0) ? batteryDischargeColor : batteryChargeColor;
+      return {
+        index: bat.index,
+        visible: bat.visible,
+        socText,
+        powerText,
+        socColor: batterySocColor,
+        powerColor,
+        socFontSize: battery_soc_font_size,
+        powerFontSize: battery_power_font_size
+      };
+    });
 
     const car1Color = resolveColor(config.car1_color, C_WHITE);
     const car2Color = resolveColor(config.car2_color, C_WHITE);
@@ -4274,14 +4265,6 @@ class AdvancedEnergyCard extends HTMLElement {
       return gridValueText;
     })();
 
-    const hasAnyBatteryEntityDefined = [
-      config.sensor_bat1_soc, config.sensor_bat1_power,
-      config.sensor_bat2_soc, config.sensor_bat2_power,
-      config.sensor_bat3_soc, config.sensor_bat3_power,
-      config.sensor_bat4_soc, config.sensor_bat4_power
-    ].some((v) => typeof v === 'string' && v.trim());
-    const hasAnyBatteryPowerDefined = batteryPowerReadings.some((reading) => Boolean(reading && reading.configured));
-
     const viewState = {
       language: lang,
       backgroundImage: bg_img,
@@ -4303,34 +4286,6 @@ class AdvancedEnergyCard extends HTMLElement {
       pv2Total: { text: this.formatPower(pv_secondary_w, use_kw), fontSize: pv_font_size, fill: pvTotColor, visible: pv_secondary_w > 10 },
       pvTotal: { text: this.formatPower(total_pv_w, use_kw), fontSize: pv_font_size, fill: pvTotColor, visible: pvUiEnabled },
       windmillPower: { text: windmillTotalAvailable ? this.formatPower(windmillTotalW, use_kw) : '', fontSize: windmill_power_font_size, fill: windmillTextColor, visible: Boolean(windmillTotalId) },
-      battery: { levelOffset: BATTERY_GEOMETRY.MAX_HEIGHT - current_h, fill: liquid_fill, visible: activeSocCount > 0, opacity: batteryFillOpacity },
-      battery1Fill,
-      battery2Fill,
-      batterySoc: {
-        text: (hasAnyBatteryEntityDefined && activeSocCount > 0) ? `${Math.floor(avg_soc)}%` : '',
-        fontSize: battery_soc_font_size,
-        fill: batterySocTextColor,
-        visible: Boolean(hasAnyBatteryEntityDefined)
-      },
-      batteryPower: {
-        text: (hasAnyBatteryEntityDefined && hasAnyBatteryPowerDefined) ? this.formatPower(Math.abs(total_bat_w), use_kw) : '',
-        fontSize: battery_power_font_size,
-        fill: bat_col,
-        visible: Boolean(hasAnyBatteryEntityDefined)
-      },
-      battery1: { text: hasBat1PowerValue ? this.formatPower(Math.abs(bat1PowerW), use_kw) : '', fontSize: battery_power_font_size, fill: bat1Flow.stroke, visible: Boolean(hasBat1PowerSensor) },
-      battery2: { text: hasBat2PowerValue ? this.formatPower(Math.abs(bat2PowerW), use_kw) : '', fontSize: battery_power_font_size, fill: bat2Flow.stroke, visible: Boolean(hasBat2PowerSensor) },
-      battery3: { text: hasBat3PowerValue ? this.formatPower(Math.abs(bat3PowerW), use_kw) : '', fontSize: battery_power_font_size, fill: bat3Flow.stroke, visible: Boolean(hasBat3PowerSensor) },
-
-      // Per-battery SVG placeholders
-      battery1Soc: { text: (bat1SocValue !== null) ? `${Math.round(bat1SocValue)}%` : '', fontSize: battery_soc_font_size, fill: batterySocTextColor, visible: Boolean(bat1SocId) },
-      battery1Power: { text: hasBat1PowerValue ? this.formatPower(Math.abs(bat1PowerW), use_kw) : '', fontSize: battery_power_font_size, fill: bat1Flow.stroke, visible: Boolean(hasBat1PowerSensor) },
-      battery2Soc: { text: (bat2SocValue !== null) ? `${Math.round(bat2SocValue)}%` : '', fontSize: battery_soc_font_size, fill: batterySocTextColor, visible: Boolean(bat2SocId) },
-      battery2Power: { text: hasBat2PowerValue ? this.formatPower(Math.abs(bat2PowerW), use_kw) : '', fontSize: battery_power_font_size, fill: bat2Flow.stroke, visible: Boolean(hasBat2PowerSensor) },
-      battery3Soc: { text: (bat3SocValue !== null) ? `${Math.round(bat3SocValue)}%` : '', fontSize: battery_soc_font_size, fill: batterySocTextColor, visible: Boolean(bat3SocId) },
-      battery3Power: { text: hasBat3PowerValue ? this.formatPower(Math.abs(bat3PowerW), use_kw) : '', fontSize: battery_power_font_size, fill: bat3Flow.stroke, visible: Boolean(hasBat3PowerSensor) },
-      battery4Soc: { text: (bat4SocValue !== null) ? `${Math.round(bat4SocValue)}%` : '', fontSize: battery_soc_font_size, fill: batterySocTextColor, visible: Boolean(bat4SocId) },
-      battery4Power: { text: hasBat4PowerValue ? this.formatPower(Math.abs(bat4PowerW), use_kw) : '', fontSize: battery_power_font_size, fill: bat4Flow.stroke, visible: Boolean(hasBat4PowerSensor) },
       load: (loadLines && loadLines.length) ? { lines: loadLines, y: loadY, fontSize: load_font_size, fill: effectiveLoadTextColor } : { text: this.formatPower(loadValue, use_kw), fontSize: load_font_size, fill: effectiveLoadTextColor },
       houseLoad: { text: this.formatPower(loadValue, use_kw), fontSize: load_font_size, fill: effectiveLoadFlowColor, visible: true, odometer: grid_current_odometer, odometerDuration: grid_current_odometer_duration },
       grid: { text: gridText, fontSize: grid_font_size, fill: effectiveGridColor, lines: gridLines },
@@ -4387,10 +4342,12 @@ class AdvancedEnergyCard extends HTMLElement {
         lines: popupPvValues.map((valueText, i) => (valueText ? `${popupPvNames[i]}: ${valueText}` : '')),
         hasContent: popupPvValues.some((valueText) => Boolean(valueText))
       },
+      batteries: batteryStates,
       pvUiEnabled,
       showDailyGrid,
       flows,
       flowDurations,
+      batteryText,
       windmillSpin,
       headlightFlash: headlightFlashState,
       showDebugGrid
@@ -4467,6 +4424,16 @@ class AdvancedEnergyCard extends HTMLElement {
         .alive-text { fill: #00FFFF; }
         @keyframes wave-slide { 0% { transform: translateX(0); } 100% { transform: translateX(-80px); } }
         .liquid-shape { animation: wave-slide 2s linear infinite; }
+        @keyframes advanced-car-effect-car1 {
+          0% { opacity: calc(var(--car-effect-opacity, 0.8) * 0.3); }
+          50% { opacity: var(--car-effect-opacity, 0.8); }
+          100% { opacity: calc(var(--car-effect-opacity, 0.8) * 0.3); }
+        }
+        @keyframes advanced-car-effect-car2 {
+          0% { opacity: calc(var(--car-effect-opacity, 0.8) * 0.3); }
+          50% { opacity: var(--car-effect-opacity, 0.8); }
+          100% { opacity: calc(var(--car-effect-opacity, 0.8) * 0.3); }
+        }
         .title-text { fill: #00FFFF; font-weight: 900; font-family: 'Orbitron', sans-serif; text-anchor: middle; letter-spacing: 3px; text-transform: uppercase; }
         /* Editor helpers */
         .editor-divider {
@@ -4660,28 +4627,8 @@ class AdvancedEnergyCard extends HTMLElement {
           </g>
           -->
 
-          <!-- Old battery fill - commented out for SVG transition -->
-          <!--
-          <g transform="${BATTERY_TRANSFORM}">
-            <g clip-path="url(#battery-clip)">
-              <g data-role="battery-liquid-group" style="transition: transform 1s ease-in-out;" transform="translate(0, ${viewState.battery.levelOffset})">
-                <g transform="translate(0, ${BATTERY_OFFSET_BASE})">
-                  <path data-role="battery-liquid-shape" class="liquid-shape" fill="${viewState.battery.fill}" d="${batteryPath}" />
-                </g>
-              </g>
-            </g>
-          </g>
-          -->
-
-
           <!-- Old PV power and string values - commented out for SVG transition -->
           <!-- ${pvLineElements} -->
-
-          <!-- Old battery SOC and power text - commented out for SVG transition -->
-          <!--
-          <text data-role="battery-soc" x="${TEXT_POSITIONS.battery.x}" y="${TEXT_POSITIONS.battery.y}" transform="${TEXT_TRANSFORMS.battery}" fill="${viewState.batterySoc.fill}" font-size="${viewState.batterySoc.fontSize}" style="${TXT_STYLE}">${viewState.batterySoc.text}</text>
-          <text data-role="battery-power" x="${TEXT_POSITIONS.battery.x}" y="${TEXT_POSITIONS.battery.y + 20}" transform="${TEXT_TRANSFORMS.battery}" fill="${viewState.batteryPower.fill}" font-size="${viewState.batteryPower.fontSize}" style="${TXT_STYLE}">${viewState.batteryPower.text}</text>
-          -->
 
           <!-- Old house consumption - commented out for SVG transition -->
           <!--
@@ -4793,14 +4740,7 @@ class AdvancedEnergyCard extends HTMLElement {
       dailyYieldGroup: root.querySelector('[data-role="daily-yield-group"]'),
       dailyLabel: root.querySelector('[data-role="daily-label"]'),
       dailyValue: root.querySelector('[data-role="daily-value"]'),
-      batteryLiquidGroup: root.querySelector('[data-role="battery-liquid-group"]'),
-      batteryLiquidShape: root.querySelector('[data-role="battery-liquid-shape"]'),
-      battery1FillLevel: root.querySelector('[data-role="battery1-fill-level"]'),
-      battery2FillLevel: root.querySelector('[data-role="battery2-fill-level"]'),
-      batteryFillLevel: root.querySelector('[data-role="battery-fill-level"]'),
       pvLines: Array.from({ length: MAX_PV_LINES }, (_, index) => root.querySelector(`[data-role="pv-line-${index}"]`)),
-      batterySoc: root.querySelector('[data-role="battery-soc"]'),
-      batteryPower: root.querySelector('[data-role="battery-power"]'),
       loadText: root.querySelector('[data-role="load-power"]'),
       loadLines: Array.from({ length: 3 }, (_, index) => root.querySelector(`[data-role="load-line-${index}"]`)),
       gridText: root.querySelector('[data-role="grid-power"]'),
@@ -4814,8 +4754,6 @@ class AdvancedEnergyCard extends HTMLElement {
       car2Soc: root.querySelector('[data-role="car2-soc"]'),
       pvPopup: root.querySelector('[data-role="pv-popup"]'),
       pvPopupLines: Array.from({ length: 6 }, (_, index) => root.querySelector(`[data-role="pv-popup-line-${index}"]`)),
-      batteryPopup: root.querySelector('[data-role="battery-popup"]'),
-      batteryPopupLines: Array.from({ length: 6 }, (_, index) => root.querySelector(`[data-role="battery-popup-line-${index}"]`)),
       housePopup: root.querySelector('[data-role="house-popup"]'),
       housePopupLines: Array.from({ length: 6 }, (_, index) => root.querySelector(`[data-role="house-popup-line-${index}"]`)),
       gridPopup: root.querySelector('[data-role="grid-popup"]'),
@@ -4830,12 +4768,6 @@ class AdvancedEnergyCard extends HTMLElement {
         pv1: root.querySelector('[data-flow-key="pv1"]'),
         pv2: root.querySelector('[data-flow-key="pv2"]'),
         windmill: root.querySelector('[data-flow-key="windmill"]'),
-        bat: root.querySelector('[data-flow-key="bat"]'),
-        battery1: root.querySelector('[data-flow-key="battery1"]'),
-        battery2: root.querySelector('[data-flow-key="battery2"]'),
-        battery3: root.querySelector('[data-flow-key="battery3"]'),
-        'inverter1-battery1': root.querySelector('[data-flow-key="inverter1-battery1"]'),
-        'inverter2-battery2': root.querySelector('[data-flow-key="inverter2-battery2"]'),
         load: root.querySelector('[data-flow-key="load"]'),
         'house-load': root.querySelector('[data-flow-key="house-load"]'),
         grid: root.querySelector('[data-flow-key="grid"]'),
@@ -4850,6 +4782,10 @@ class AdvancedEnergyCard extends HTMLElement {
         car1: root.querySelector('[data-flow-key="car1"]'),
         car2: root.querySelector('[data-flow-key="car2"]'),
         heatPump: root.querySelector('[data-flow-key="heatPump"]'),
+        'inverter1-battery1': root.querySelector('[data-flow-key="inverter1-battery1"], [inverter1-battery1="inverter1-battery1"]'),
+        'inverter1-battery2': root.querySelector('[data-flow-key="inverter1-battery2"]'),
+        'inverter1-battery3': root.querySelector('[data-flow-key="inverter1-battery3"]'),
+        'inverter1-battery4': root.querySelector('[data-flow-key="inverter1-battery4"]'),
         pool: root.querySelector('[data-flow-key="pool"]')
       },
       rotateElements: []
@@ -4874,12 +4810,6 @@ class AdvancedEnergyCard extends HTMLElement {
     this._domRefs.arrows = {
       pv1: root.querySelector('[data-arrow-key="pv1"]'),
       pv2: root.querySelector('[data-arrow-key="pv2"]'),
-      bat: root.querySelector('[data-arrow-key="bat"]'),
-      battery1: root.querySelector('[data-arrow-key="battery1"]'),
-      battery2: root.querySelector('[data-arrow-key="battery2"]'),
-      battery3: root.querySelector('[data-arrow-key="battery3"]'),
-      'inverter1-battery1': root.querySelector('[data-arrow-key="inverter1-battery1"]'),
-      'inverter2-battery2': root.querySelector('[data-arrow-key="inverter2-battery2"]'),
       load: root.querySelector('[data-arrow-key="load"]'),
       'house-load': root.querySelector('[data-arrow-key="house-load"]'),
       grid: root.querySelector('[data-arrow-key="grid"]'),
@@ -4893,17 +4823,15 @@ class AdvancedEnergyCard extends HTMLElement {
       'grid-import-export': root.querySelector('[data-arrow-key="grid-import-export"]') || root.querySelector('[data-arrow-key="inverter1-import-export"]'),
       car1: root.querySelector('[data-arrow-key="car1"]'),
       car2: root.querySelector('[data-arrow-key="car2"]'),
-      heatPump: root.querySelector('[data-arrow-key="heatPump"]')
+      heatPump: root.querySelector('[data-arrow-key="heatPump"]'),
+      'inverter1-battery1': root.querySelector('[data-arrow-key="inverter1-battery1"]'),
+      'inverter1-battery2': root.querySelector('[data-arrow-key="inverter1-battery2"]'),
+      'inverter1-battery3': root.querySelector('[data-arrow-key="inverter1-battery3"]'),
+      'inverter1-battery4': root.querySelector('[data-arrow-key="inverter1-battery4"]')
     };
     this._domRefs.arrowShapes = {
       pv1: Array.from(root.querySelectorAll('[data-arrow-shape="pv1"]')),
       pv2: Array.from(root.querySelectorAll('[data-arrow-shape="pv2"]')),
-      bat: Array.from(root.querySelectorAll('[data-arrow-shape="bat"]')),
-      battery1: Array.from(root.querySelectorAll('[data-arrow-shape="battery1"]')),
-      battery2: Array.from(root.querySelectorAll('[data-arrow-shape="battery2"]')),
-      battery3: Array.from(root.querySelectorAll('[data-arrow-shape="battery3"]')),
-      'inverter1-battery1': Array.from(root.querySelectorAll('[data-arrow-shape="inverter1-battery1"]')),
-      'inverter2-battery2': Array.from(root.querySelectorAll('[data-arrow-shape="inverter2-battery2"]')),
       load: Array.from(root.querySelectorAll('[data-arrow-shape="load"]')),
       'house-load': Array.from(root.querySelectorAll('[data-arrow-shape="house-load"]')),
       grid: Array.from(root.querySelectorAll('[data-arrow-shape="grid"]')),
@@ -4917,7 +4845,11 @@ class AdvancedEnergyCard extends HTMLElement {
       'grid-import-export': Array.from(root.querySelectorAll('[data-arrow-shape="grid-import-export"], [data-arrow-shape="inverter1-import-export"]')),
       car1: Array.from(root.querySelectorAll('[data-arrow-shape="car1"]')),
       car2: Array.from(root.querySelectorAll('[data-arrow-shape="car2"]')),
-      heatPump: Array.from(root.querySelectorAll('[data-arrow-shape="heatPump"]'))
+      heatPump: Array.from(root.querySelectorAll('[data-arrow-shape="heatPump"]')),
+      'inverter1-battery1': Array.from(root.querySelectorAll('[data-arrow-shape="inverter1-battery1"]')),
+      'inverter1-battery2': Array.from(root.querySelectorAll('[data-arrow-shape="inverter1-battery2"]')),
+      'inverter1-battery3': Array.from(root.querySelectorAll('[data-arrow-shape="inverter1-battery3"]')),
+      'inverter1-battery4': Array.from(root.querySelectorAll('[data-arrow-shape="inverter1-battery4"]'))
     };
     this._domRefs.headlights = {
       car1: Array.from(root.querySelectorAll('[data-feature~="car1-headlights"]')),
@@ -5543,152 +5475,6 @@ class AdvancedEnergyCard extends HTMLElement {
     }
   }
 
-  _toggleBatteryPopup() {
-    if (!this._domRefs || !this._domRefs.batteryPopup) return;
-
-    const config = this._config || this.config || {};
-    const hasContent = config.sensor_popup_bat_1 || config.sensor_popup_bat_2 ||
-                      config.sensor_popup_bat_3 || config.sensor_popup_bat_4 ||
-                      config.sensor_popup_bat_5 || config.sensor_popup_bat_6;
-    if (!hasContent) return;
-
-    const popup = this._domRefs.batteryPopup;
-    const isVisible = popup.style.display !== 'none';
-    if (isVisible) {
-      this._hideBatteryPopup();
-    } else {
-      this._closeOtherPopups('battery');
-      this._showBatteryPopup();
-    }
-  }
-
-  async _showBatteryPopup() {
-    if (!this._domRefs || !this._domRefs.batteryPopup) return;
-    const popup = this._domRefs.batteryPopup;
-
-    const config = this._config || this.config || {};
-    const popupBatSensorIds = [
-      config.sensor_popup_bat_1,
-      config.sensor_popup_bat_2,
-      config.sensor_popup_bat_3,
-      config.sensor_popup_bat_4,
-      config.sensor_popup_bat_5,
-      config.sensor_popup_bat_6
-    ];
-    const popupBatValues = popupBatSensorIds.map((sensorId) => this.formatPopupValue(null, sensorId));
-
-    const popupBatNames = [
-      config.sensor_popup_bat_1_name && config.sensor_popup_bat_1_name.trim() ? config.sensor_popup_bat_1_name.trim() : this.getEntityName(config.sensor_popup_bat_1),
-      config.sensor_popup_bat_2_name && config.sensor_popup_bat_2_name.trim() ? config.sensor_popup_bat_2_name.trim() : this.getEntityName(config.sensor_popup_bat_2),
-      config.sensor_popup_bat_3_name && config.sensor_popup_bat_3_name.trim() ? config.sensor_popup_bat_3_name.trim() : this.getEntityName(config.sensor_popup_bat_3),
-      config.sensor_popup_bat_4_name && config.sensor_popup_bat_4_name.trim() ? config.sensor_popup_bat_4_name.trim() : this.getEntityName(config.sensor_popup_bat_4),
-      config.sensor_popup_bat_5_name && config.sensor_popup_bat_5_name.trim() ? config.sensor_popup_bat_5_name.trim() : this.getEntityName(config.sensor_popup_bat_5),
-      config.sensor_popup_bat_6_name && config.sensor_popup_bat_6_name.trim() ? config.sensor_popup_bat_6_name.trim() : this.getEntityName(config.sensor_popup_bat_6)
-    ];
-
-    const lines = popupBatValues
-      .map((valueText, i) => (valueText ? `${popupBatNames[i]}: ${valueText}` : ''))
-      .filter((line) => line);
-    if (!lines.length) return;
-
-    // Calculate popup dimensions based on content
-    // Find the maximum font size used in the popup for width and height calculation
-    const maxFontSize = Math.max(...lines.map((_, index) => {
-      const fontSizeKey = `sensor_popup_bat_${index + 1}_font_size`;
-      return config[fontSizeKey] || 16;
-    }));
-    
-    // Calculate line height based on font size (font-size + 1px padding for readability)
-    const lineHeight = maxFontSize + 1;
-    
-    // Measure actual text width for accurate sizing
-    let maxTextWidth = 0;
-    const canvas = document.createElement('canvas');
-    const ctx = canvas.getContext('2d');
-    ctx.font = `${maxFontSize}px Arial, sans-serif`;
-    
-    lines.forEach((line) => {
-      const textWidth = ctx.measureText(line).width;
-      maxTextWidth = Math.max(maxTextWidth, textWidth);
-    });
-    
-    const contentWidth = Math.max(200, Math.min(500, maxTextWidth));
-    const popupWidth = contentWidth + 40; // 40px padding as requested
-    
-    // Calculate height based on content: top padding + lines + bottom padding
-    const topPadding = 20;
-    const bottomPadding = 20;
-    const contentHeight = lines.length * lineHeight;
-    const popupHeight = topPadding + contentHeight + bottomPadding;
-    
-    const popupX = (800 - popupWidth) / 2; // Center horizontally
-    const popupY = (450 - popupHeight) / 2; // Center vertically
-
-    const rect = popup.querySelector('rect');
-    if (rect) {
-      rect.setAttribute('x', popupX);
-      rect.setAttribute('y', popupY);
-      rect.setAttribute('width', popupWidth);
-      rect.setAttribute('height', popupHeight);
-      // Ensure popup background is opaque and shows glowing border
-      rect.setAttribute('fill', '#001428');
-      rect.setAttribute('stroke', '#00FFFF');
-      rect.setAttribute('stroke-width', '2');
-    }
-
-    // Update text positions and styling
-    const lineElements = this._domRefs.batteryPopupLines || [];
-    lines.forEach((line, index) => {
-      const element = lineElements[index];
-      if (element) {
-        element.setAttribute('x', popupX + popupWidth / 2);
-        element.setAttribute('y', popupY + topPadding + (index * lineHeight) + (lineHeight / 2));
-        element.textContent = line;
-        element.style.display = 'inline';
-        
-        // Apply font size
-        const fontSizeKey = `sensor_popup_bat_${index + 1}_font_size`;
-        const fontSize = config[fontSizeKey] || 16;
-        element.setAttribute('font-size', fontSize);
-        
-        // Apply color
-        const colorKey = `sensor_popup_bat_${index + 1}_color`;
-        const color = config[colorKey] || '#80ffff';
-        element.setAttribute('fill', color);
-      }
-    });
-
-    // Hide unused lines
-    for (let i = lines.length; i < lineElements.length; i++) {
-      const element = lineElements[i];
-      if (element) {
-        element.style.display = 'none';
-      }
-    }
-
-    popup.style.display = 'inline';
-    this._activePopup = 'battery';
-    const gsap = await this._ensureGsap();
-    if (gsap) {
-      gsap.fromTo(popup, { opacity: 0, scale: 0.8 }, { opacity: 1, scale: 1, duration: 0.3, ease: 'back.out(1.7)' });
-    }
-  }
-
-  async _hideBatteryPopup() {
-    if (!this._domRefs || !this._domRefs.batteryPopup) return;
-    const popup = this._domRefs.batteryPopup;
-    const gsap = await this._ensureGsap();
-    if (gsap) {
-      gsap.to(popup, { opacity: 0, scale: 0.8, duration: 0.2, ease: 'power2.in', onComplete: () => {
-        popup.style.display = 'none';
-        if (this._activePopup === 'battery') this._activePopup = null;
-      }});
-    } else {
-      popup.style.display = 'none';
-      if (this._activePopup === 'battery') this._activePopup = null;
-    }
-  }
-
   _toggleHousePopup() {
     if (!this._domRefs || !this._domRefs.housePopup) return;
     
@@ -6155,7 +5941,6 @@ class AdvancedEnergyCard extends HTMLElement {
 
   _closeOtherPopups(except) {
     if (except !== 'pv') this._hidePvPopup();
-    if (except !== 'battery') this._hideBatteryPopup();
     if (except !== 'house') this._hideHousePopup();
     if (except !== 'grid') this._hideGridPopup();
     if (except !== 'inverter') this._hideInverterPopup();
@@ -6305,6 +6090,9 @@ class AdvancedEnergyCard extends HTMLElement {
           // Apply layer visibility after loading
           applySvgLayerVisibility(refs.backgroundSvg, this._layerConfigWithEffectiveNight(this.config));
 
+          // Apply custom car effects defined in the background SVG.
+          this._applyCarEffectFilters(refs.backgroundSvg, viewState);
+
           // Populate any SVG-embedded text placeholders once the SVG is present.
           this._applySvgTextBindings(viewState);
           // Refresh DOM caches so feature references (like headlights) resolve immediately.
@@ -6351,459 +6139,235 @@ class AdvancedEnergyCard extends HTMLElement {
       }
     }
 
-    const batteryFillCandidates = [
-      refs.battery1FillLevel,
-      refs.battery2FillLevel,
-      refs.batteryFillLevel
-    ].filter(Boolean);
-    if (refs.backgroundSvg) {
-      try {
-        const extra = Array.from(refs.backgroundSvg.querySelectorAll('[data-role="battery1-fill-level"],[data-role="battery2-fill-level"],[data-role="battery-fill-level"]'));
-        extra.forEach((el) => {
-          if (el && !batteryFillCandidates.includes(el)) {
-            batteryFillCandidates.push(el);
-          }
-        });
-      } catch (e) {
-        // ignore
-      }
-    }
-    const hasBatteryFillLevel = batteryFillCandidates.length > 0;
-    if (hasBatteryFillLevel) {
-      const clamp01 = (v) => Math.min(Math.max(v, 0), 1);
-      const ensurePerElementRafMap = () => {
-        if (!this._batteryFillAnimRafs) {
-          this._batteryFillAnimRafs = new WeakMap();
-        }
-        return this._batteryFillAnimRafs;
-      };
-
-      const getBatteryFillState = (role) => {
-        if (role === 'battery1-fill-level') {
-          return viewState && viewState.battery1Fill ? viewState.battery1Fill : null;
-        }
-        if (role === 'battery2-fill-level') {
-          return viewState && viewState.battery2Fill ? viewState.battery2Fill : null;
-        }
-        const levelOffset = (viewState && viewState.battery && Number.isFinite(Number(viewState.battery.levelOffset)))
-          ? Number(viewState.battery.levelOffset)
-          : 0;
-        const maxH = BATTERY_GEOMETRY.MAX_HEIGHT || 1;
-        const scaleY = clamp01(1 - (levelOffset / maxH));
-        const fill = (viewState && viewState.battery && typeof viewState.battery.fill === 'string') ? viewState.battery.fill : '';
-        const opacity = (viewState && viewState.battery && Number.isFinite(Number(viewState.battery.opacity)))
-          ? clamp01(Number(viewState.battery.opacity))
-          : 1;
-        const visible = Boolean(viewState && viewState.battery && viewState.battery.visible);
-        return { visible, level: scaleY, fill, opacity };
-      };
-
-      batteryFillCandidates.forEach((batteryFillLevelEl) => {
-        const role = batteryFillLevelEl.getAttribute('data-role') || '';
-        const state = getBatteryFillState(role);
-        const visible = Boolean(state && state.visible);
-        const display = visible ? 'inline' : 'none';
-        if (batteryFillLevelEl.style.display !== display) {
-          batteryFillLevelEl.style.display = display;
-        }
-        if (!visible) {
-          return;
-        }
-
-        const level = (state && Number.isFinite(Number(state.level))) ? clamp01(Number(state.level)) : 0;
-        const fill = (state && typeof state.fill === 'string') ? state.fill : '';
-        const opacity = (state && Number.isFinite(Number(state.opacity))) ? clamp01(Number(state.opacity)) : 1;
-
-        const el = batteryFillLevelEl;
-        if (el.style.transition) {
-          el.style.transition = '';
-        }
-        const nextOpacity = String(opacity);
-        if (el.style.opacity !== nextOpacity) {
-          el.style.opacity = nextOpacity;
-        }
-
-        const target = clamp01(level);
-        const tag = (el.tagName || '').toLowerCase();
-        const isRect = tag === 'rect';
-
-        if (!isRect) {
-          // NOTE: Some Inkscape-exported paths include transform matrices.
-          // Using objectBoundingBox clipping can yield skewed/mirrored fill boundaries.
-          // userSpaceOnUse + getBBox keeps the clip aligned to the SVG's coordinate space.
+    if (Array.isArray(viewState.batteries) && viewState.batteries.length) {
+      const svgRoot = refs.backgroundSvg || refs.svgRoot;
+      if (svgRoot) {
+        const clamp01 = (v) => Math.min(Math.max(v, 0), 1);
+        const ensureClipRect = (target) => {
+          if (!target || !target.ownerSVGElement) return null;
+          const svg = target.ownerSVGElement;
           const SVG_NS = 'http://www.w3.org/2000/svg';
-          const ensureClipPolygon = () => {
-            const svg = el.ownerSVGElement || refs.svgRoot;
-            if (!svg) {
-              return null;
-            }
-            let defs = svg.querySelector('defs[data-role="advanced-defs"]');
-            if (!defs) {
-              defs = svg.querySelector('defs');
-            }
-            if (!defs) {
-              defs = document.createElementNS(SVG_NS, 'defs');
-              defs.setAttribute('data-role', 'advanced-defs');
-              svg.insertBefore(defs, svg.firstChild);
-            } else if (!defs.getAttribute('data-role')) {
-              defs.setAttribute('data-role', 'advanced-defs');
-            }
+          let defs = svg.querySelector('defs[data-role="advanced-defs"]') || svg.querySelector('defs');
+          if (!defs) {
+            defs = document.createElementNS(SVG_NS, 'defs');
+            defs.setAttribute('data-role', 'advanced-defs');
+            svg.insertBefore(defs, svg.firstChild);
+          } else if (!defs.getAttribute('data-role')) {
+            defs.setAttribute('data-role', 'advanced-defs');
+          }
 
-            if (!el.dataset) {
-              return null;
-            }
-            if (!el.dataset.fillClipId) {
-              el.dataset.fillClipId = `advanced-batfill-${Math.random().toString(36).slice(2, 9)}`;
-            }
-            const clipId = el.dataset.fillClipId;
-            let clipPath = defs.querySelector(`#${CSS.escape(clipId)}`);
-            if (!clipPath) {
-              clipPath = document.createElementNS(SVG_NS, 'clipPath');
-              clipPath.setAttribute('id', clipId);
-              clipPath.setAttribute('clipPathUnits', 'userSpaceOnUse');
-              const poly = document.createElementNS(SVG_NS, 'polygon');
-              poly.setAttribute('points', '0,0 0,0 0,0 0,0');
-              clipPath.appendChild(poly);
-              defs.appendChild(clipPath);
-            }
-            let poly = clipPath.querySelector('polygon');
-            if (!poly) {
-              // Migrate older rect-based clip to polygon-based.
-              try {
-                while (clipPath.firstChild) {
-                  clipPath.removeChild(clipPath.firstChild);
-                }
-              } catch (e) {
-                // ignore
-              }
-              poly = document.createElementNS(SVG_NS, 'polygon');
-              poly.setAttribute('points', '0,0 0,0 0,0 0,0');
-              clipPath.appendChild(poly);
-            }
-            return poly || null;
+          if (!target.dataset) return null;
+          if (!target.dataset.fillClipId) {
+            target.dataset.fillClipId = `advanced-batfill-${Math.random().toString(36).slice(2, 9)}`;
+          }
+          const clipId = target.dataset.fillClipId;
+          let clipPath = defs.querySelector(`#${CSS.escape(clipId)}`);
+          if (!clipPath) {
+            clipPath = document.createElementNS(SVG_NS, 'clipPath');
+            clipPath.setAttribute('id', clipId);
+            clipPath.setAttribute('clipPathUnits', 'objectBoundingBox');
+            const rect = document.createElementNS(SVG_NS, 'rect');
+            rect.setAttribute('x', '0');
+            rect.setAttribute('y', '0');
+            rect.setAttribute('width', '1');
+            rect.setAttribute('height', '1');
+            clipPath.appendChild(rect);
+            defs.appendChild(clipPath);
+          } else if (clipPath.getAttribute('clipPathUnits') !== 'objectBoundingBox') {
+            clipPath.setAttribute('clipPathUnits', 'objectBoundingBox');
+          }
+          const rect = clipPath.querySelector('rect');
+          return rect || null;
+        };
+        const getWorldBBox = (target) => {
+          if (!target || typeof target.getBBox !== 'function') {
+            return null;
+          }
+          let bbox = null;
+          try {
+            bbox = target.getBBox();
+          } catch (e) {
+            bbox = null;
+          }
+          if (!bbox || !Number.isFinite(bbox.x) || !Number.isFinite(bbox.y)
+            || !Number.isFinite(bbox.width) || !Number.isFinite(bbox.height)
+            || bbox.width <= 0 || bbox.height <= 0) {
+            return null;
+          }
+          const ctm = (typeof target.getCTM === 'function') ? target.getCTM() : null;
+          if (!ctm || !Number.isFinite(ctm.a) || !Number.isFinite(ctm.b)
+            || !Number.isFinite(ctm.c) || !Number.isFinite(ctm.d)
+            || !Number.isFinite(ctm.e) || !Number.isFinite(ctm.f)) {
+            return bbox;
+          }
+          const toWorld = (pt) => ({
+            x: (pt.x * ctm.a) + (pt.y * ctm.c) + ctm.e,
+            y: (pt.x * ctm.b) + (pt.y * ctm.d) + ctm.f
+          });
+          const corners = [
+            { x: bbox.x, y: bbox.y },
+            { x: bbox.x + bbox.width, y: bbox.y },
+            { x: bbox.x + bbox.width, y: bbox.y + bbox.height },
+            { x: bbox.x, y: bbox.y + bbox.height }
+          ].map(toWorld);
+          const xs = corners.map((p) => p.x);
+          const ys = corners.map((p) => p.y);
+          const minX = Math.min(...xs);
+          const maxX = Math.max(...xs);
+          const minY = Math.min(...ys);
+          const maxY = Math.max(...ys);
+          return {
+            x: minX,
+            y: minY,
+            width: maxX - minX,
+            height: maxY - minY
           };
-
-          const applyLevel = (level01) => {
-            const lvl = clamp01(level01);
-            if (el.style.transform) el.style.transform = '';
-            if (el.style.transformOrigin) el.style.transformOrigin = '';
-            if (el.style.transformBox) el.style.transformBox = '';
-
-            const poly = ensureClipPolygon();
-            if (!poly || !el.dataset || !el.dataset.fillClipId) {
-              return;
-            }
-
-            let bbox = null;
-            try {
-              bbox = (typeof el.getBBox === 'function') ? el.getBBox() : null;
-            } catch (e) {
-              bbox = null;
-            }
-            if (!bbox || !Number.isFinite(bbox.x) || !Number.isFinite(bbox.y) || !Number.isFinite(bbox.width) || !Number.isFinite(bbox.height) || bbox.width <= 0 || bbox.height <= 0) {
-              return;
-            }
-
-            const computeTopEdgeLine = () => {
-              // Returns { m, b } for y = m*x + b, approximating the *top edge* of the shape.
-              // Cached per bbox signature to avoid expensive sampling every frame.
-              const sig = `${bbox.x.toFixed(2)},${bbox.y.toFixed(2)},${bbox.width.toFixed(2)},${bbox.height.toFixed(2)}`;
-              if (el.dataset.fillTopSig === sig
-                && Number.isFinite(Number(el.dataset.fillTopM))
-                && Number.isFinite(Number(el.dataset.fillTopB))) {
-                return { m: Number(el.dataset.fillTopM), b: Number(el.dataset.fillTopB) };
-              }
-
-              let m = 0;
-              let b = bbox.y;
-              const tagName = (el.tagName || '').toLowerCase();
-
-              const updateFromPoints = (pts) => {
-                if (!Array.isArray(pts) || pts.length < 2) {
-                  return;
-                }
-                // Prefer sampling the *top* at the left and right ends of the shape.
-                // Using a minY band can fail on strongly slanted tops (only a single corner
-                // is at minY, so the band misses the far end and the slope becomes wrong).
-                const finitePts = pts.filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
-                if (finitePts.length < 2) {
-                  return;
-                }
-
-                let minX = Infinity;
-                let maxX = -Infinity;
-                for (let i = 0; i < finitePts.length; i++) {
-                  const x = finitePts[i].x;
-                  if (x < minX) minX = x;
-                  if (x > maxX) maxX = x;
-                }
-                if (!Number.isFinite(minX) || !Number.isFinite(maxX) || Math.abs(maxX - minX) < 1e-6) {
-                  return;
-                }
-
-                const xBand = Math.max(1, (maxX - minX) * 0.12);
-                const leftStrip = finitePts.filter((p) => p.x <= (minX + xBand));
-                const rightStrip = finitePts.filter((p) => p.x >= (maxX - xBand));
-
-                const pickMinY = (arr) => {
-                  if (!arr.length) return null;
-                  let best = arr[0];
-                  for (let i = 1; i < arr.length; i++) {
-                    if (arr[i].y < best.y) best = arr[i];
-                  }
-                  return best;
-                };
-
-                const leftTop = pickMinY(leftStrip);
-                const rightTop = pickMinY(rightStrip);
-                if (leftTop && rightTop && Math.abs(rightTop.x - leftTop.x) >= 1e-6) {
-                  m = (rightTop.y - leftTop.y) / (rightTop.x - leftTop.x);
-                  b = leftTop.y - (m * leftTop.x);
-                  return;
-                }
-
-                // Fallback: minY band (works fine for flatter tops).
-                let minY = Infinity;
-                for (let i = 0; i < finitePts.length; i++) {
-                  if (finitePts[i].y < minY) minY = finitePts[i].y;
-                }
-                if (!Number.isFinite(minY)) {
-                  return;
-                }
-                const band = Math.max(1, bbox.height * 0.05);
-                const topPts = finitePts.filter((p) => p.y <= (minY + band));
-                if (topPts.length < 2) {
-                  return;
-                }
-                let minXPt = topPts[0];
-                let maxXPt = topPts[0];
-                for (let i = 1; i < topPts.length; i++) {
-                  const p = topPts[i];
-                  if (p.x < minXPt.x) minXPt = p;
-                  if (p.x > maxXPt.x) maxXPt = p;
-                }
-                const dx = maxXPt.x - minXPt.x;
-                if (Math.abs(dx) < 1e-6) {
-                  m = 0;
-                  b = minXPt.y;
-                  return;
-                }
-                m = (maxXPt.y - minXPt.y) / dx;
-                b = minXPt.y - (m * minXPt.x);
-              };
-
-              if (tagName === 'path' && typeof el.getTotalLength === 'function' && typeof el.getPointAtLength === 'function') {
-                try {
-                  const len = el.getTotalLength();
-                  if (Number.isFinite(len) && len > 0) {
-                    const samples = 160;
-                    const pts = [];
-                    for (let i = 0; i < samples; i++) {
-                      const p = el.getPointAtLength((i / (samples - 1)) * len);
-                      if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) {
-                        pts.push({ x: p.x, y: p.y });
-                      }
-                    }
-                    updateFromPoints(pts);
-                  }
-                } catch (e) {
-                  // ignore
-                }
-              } else if ((tagName === 'polygon' || tagName === 'polyline') && typeof el.getAttribute === 'function') {
-                try {
-                  const raw = el.getAttribute('points') || '';
-                  const parts = raw.trim().split(/\s+/);
-                  const pts = parts.map((pair) => {
-                    const xy = pair.split(',');
-                    return { x: Number.parseFloat(xy[0]), y: Number.parseFloat(xy[1]) };
-                  }).filter((p) => Number.isFinite(p.x) && Number.isFinite(p.y));
-                  updateFromPoints(pts);
-                } catch (e) {
-                  // ignore
-                }
-              }
-
-              el.dataset.fillTopSig = sig;
-              el.dataset.fillTopM = String(m);
-              el.dataset.fillTopB = String(b);
-              return { m, b };
-            };
-
-            const { m, b } = computeTopEdgeLine();
-            // Move the edge down as lvl decreases (lvl=1 => offset 0 at top edge).
-            const offset = (1 - lvl) * bbox.height;
-            const pad = Math.max(10, bbox.width * 2, bbox.height * 2);
-            const left = bbox.x - pad;
-            const right = bbox.x + bbox.width + pad;
-            const yLeft = (m * left) + b + offset;
-            const yRight = (m * right) + b + offset;
-            const bottom = bbox.y + bbox.height + pad;
-            poly.setAttribute('points', `${left},${yLeft} ${right},${yRight} ${right},${bottom} ${left},${bottom}`);
-            el.setAttribute('clip-path', `url(#${el.dataset.fillClipId})`);
-            el.dataset.fillLevel = String(lvl);
-          };
-
-          const prevLevel = (el.dataset && el.dataset.fillLevel && Number.isFinite(Number(el.dataset.fillLevel)))
-            ? clamp01(Number(el.dataset.fillLevel))
-            : target;
-
-          if (Math.abs(target - prevLevel) < 0.001) {
-            applyLevel(target);
-          } else {
-            const rafMap = ensurePerElementRafMap();
-            const existing = rafMap.get(el);
-            if (existing) {
-              cancelAnimationFrame(existing);
-              rafMap.delete(el);
-            }
-            const start = performance.now();
-            const duration = 800;
-            const from = prevLevel;
-            const to = target;
-            const easeInOutQuad = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
-            const tick = () => {
-              const now = performance.now();
-              const t = Math.min(Math.max((now - start) / duration, 0), 1);
-              const v = from + (to - from) * easeInOutQuad(t);
-              applyLevel(v);
-              if (t < 1) {
-                rafMap.set(el, requestAnimationFrame(tick));
-              } else {
-                rafMap.delete(el);
-                applyLevel(to);
-              }
-            };
-            rafMap.set(el, requestAnimationFrame(tick));
-          }
-        } else {
-          if (el.style.transform) {
-            el.style.transform = '';
-          }
-          if (el.style.transformOrigin) {
-            el.style.transformOrigin = '';
-          }
-          if (el.style.transformBox) {
-            el.style.transformBox = '';
-          }
-
-        const baseBox = (() => {
-          const cachedY = el.dataset && el.dataset.baseY ? Number(el.dataset.baseY) : NaN;
-          const cachedH = el.dataset && el.dataset.baseH ? Number(el.dataset.baseH) : NaN;
-          if (Number.isFinite(cachedY) && Number.isFinite(cachedH) && cachedH > 0) {
-            return { y: cachedY, h: cachedH };
-          }
-
-          const rawY = el.getAttribute('y');
-          const rawH = el.getAttribute('height');
-          const parsedY = rawY !== null ? Number.parseFloat(rawY) : NaN;
-          const parsedH = rawH !== null ? Number.parseFloat(rawH) : NaN;
-          if (Number.isFinite(parsedY) && Number.isFinite(parsedH) && parsedH > 0) {
-            if (el.dataset) {
-              el.dataset.baseY = String(parsedY);
-              el.dataset.baseH = String(parsedH);
-            }
-            return { y: parsedY, h: parsedH };
-          }
-
-          // Fallback: some exported SVGs omit numeric y/height attributes.
-          // Use getBBox() as the authoritative baseline.
-          if (typeof el.getBBox === 'function') {
-            try {
-              const bbox = el.getBBox();
-              if (bbox && Number.isFinite(bbox.y) && Number.isFinite(bbox.height) && bbox.height > 0) {
-                if (el.dataset) {
-                  el.dataset.baseY = String(bbox.y);
-                  el.dataset.baseH = String(bbox.height);
-                }
-                return { y: bbox.y, h: bbox.height };
-              }
-            } catch (e) {
-              // ignore
-            }
-          }
-          return { y: 0, h: 0 };
-        })();
-
-        const applyLevel = (level01) => {
-          const level = clamp01(level01);
-          const h = baseBox.h * level;
-          const y = baseBox.y + (baseBox.h - h);
-          el.setAttribute('height', String(h));
-          el.setAttribute('y', String(y));
-          if (el.dataset) {
-            el.dataset.fillLevel = String(level);
-          }
         };
 
-        const prevLevel = (el.dataset && el.dataset.fillLevel && Number.isFinite(Number(el.dataset.fillLevel)))
-          ? clamp01(Number(el.dataset.fillLevel))
-          : target;
+        viewState.batteries.forEach((bat) => {
+          const role = bat && bat.role ? bat.role : '';
+          if (!role) return;
+          const fillEl = svgRoot.querySelector(`[data-role="${role}-fill-level"]`);
+          const topEl = svgRoot.querySelector(`[data-role="${role}-fill-top"]`);
+          const bottomEl = svgRoot.querySelector(`[data-role="${role}-fill-bottom"]`);
+          if (!fillEl) return;
 
-        if (baseBox.h > 0) {
-          if (Math.abs(target - prevLevel) < 0.001) {
-            applyLevel(target);
-          } else {
-            if (this._batteryFillAnimRaf) {
-              cancelAnimationFrame(this._batteryFillAnimRaf);
-              this._batteryFillAnimRaf = null;
+          const config = this._config || this.config || {};
+          const lowThreshold = Number.isFinite(Number(config.battery_fill_low_threshold))
+            ? Number(config.battery_fill_low_threshold)
+            : DEFAULT_BATTERY_LOW_THRESHOLD;
+          const fillHigh = (typeof config.battery_fill_high_color === 'string' && config.battery_fill_high_color.trim())
+            ? config.battery_fill_high_color.trim()
+            : DEFAULT_BATTERY_FILL_HIGH_COLOR;
+          const fillLow = (typeof config.battery_fill_low_color === 'string' && config.battery_fill_low_color.trim())
+            ? config.battery_fill_low_color.trim()
+            : DEFAULT_BATTERY_FILL_LOW_COLOR;
+          const fillOpacity = (() => {
+            const raw = Number(config.battery_fill_opacity);
+            if (!Number.isFinite(raw)) return 1;
+            return Math.min(Math.max(raw, 0), 1);
+          })();
+
+          const display = bat.visible ? 'inline' : 'none';
+          if (fillEl.style.display !== display) {
+            fillEl.style.display = display;
+          }
+          if (!bat.visible) return;
+
+          const socValue = Number.isFinite(bat.soc) ? bat.soc : 0;
+          const chosenFill = socValue <= lowThreshold ? fillLow : fillHigh;
+          if (chosenFill) {
+            if (fillEl.getAttribute('fill') !== chosenFill) {
+              fillEl.setAttribute('fill', chosenFill);
             }
-            const start = performance.now();
-            const duration = 800;
-            const from = prevLevel;
-            const to = target;
-            const easeInOutQuad = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
-            const tick = () => {
-              const now = performance.now();
-              const t = Math.min(Math.max((now - start) / duration, 0), 1);
-              const v = from + (to - from) * easeInOutQuad(t);
-              applyLevel(v);
-              if (t < 1) {
-                this._batteryFillAnimRaf = requestAnimationFrame(tick);
-              } else {
-                this._batteryFillAnimRaf = null;
-                applyLevel(to);
-              }
-            };
-            this._batteryFillAnimRaf = requestAnimationFrame(tick);
+            if (fillEl.style.fill !== chosenFill) {
+              fillEl.style.fill = chosenFill;
+            }
           }
-        }
-        }
-        if (fill) {
-          if (el.getAttribute('fill') !== fill) {
-            el.setAttribute('fill', fill);
+          const opacityText = String(fillOpacity);
+          if (fillEl.style.opacity !== opacityText) {
+            fillEl.style.opacity = opacityText;
           }
-          if (el.style.fill !== fill) {
-            el.style.fill = fill;
+          if (fillEl.style.fillOpacity !== opacityText) {
+            fillEl.style.fillOpacity = opacityText;
           }
-          if (el.getAttribute('stroke') !== 'none') {
-            el.setAttribute('stroke', 'none');
-          }
-        }
-      });
 
-      // When the new fill-level rect exists, hide the legacy wave-based liquid elements.
-      if (refs.batteryLiquidGroup && refs.batteryLiquidGroup.style.display !== 'none') {
-        refs.batteryLiquidGroup.style.display = 'none';
-      }
-      if (refs.batteryLiquidShape && refs.batteryLiquidShape.style.display !== 'none') {
-        refs.batteryLiquidShape.style.display = 'none';
-      }
-    } else {
-      // Legacy battery fill path (wave): translate group + update liquid colour.
-      if (refs.batteryLiquidGroup) {
-        const transform = `translate(0, ${viewState.battery.levelOffset})`;
-        if (refs.batteryLiquidGroup.getAttribute('transform') !== transform) {
-          refs.batteryLiquidGroup.setAttribute('transform', transform);
-        }
-      }
+          const fillBox = getWorldBBox(fillEl);
+          const topBox = topEl ? getWorldBBox(topEl) : null;
+          const bottomBox = bottomEl ? getWorldBBox(bottomEl) : null;
 
-      if (refs.batteryLiquidShape && (!prev.battery || prev.battery.fill !== viewState.battery.fill)) {
-        refs.batteryLiquidShape.setAttribute('fill', viewState.battery.fill);
+          if (!fillBox) {
+            return;
+          }
+
+          const topYRaw = (topBox && Number.isFinite(topBox.y)) ? topBox.y : fillBox.y;
+          const bottomYRaw = (bottomBox && Number.isFinite(bottomBox.y) && Number.isFinite(bottomBox.height))
+            ? (bottomBox.y + bottomBox.height)
+            : (fillBox.y + fillBox.height);
+          const topY = Math.min(topYRaw, bottomYRaw);
+          const bottomY = Math.max(topYRaw, bottomYRaw);
+          const range = Math.max(bottomY - topY, 1);
+          const level = clamp01(socValue / 100);
+          const currentHeight = range * level;
+          const y = bottomY - currentHeight;
+
+          const rectY = clamp01((y - fillBox.y) / fillBox.height);
+          const rectH = clamp01(currentHeight / fillBox.height);
+
+          const rect = ensureClipRect(fillEl);
+          if (!rect) return;
+          rect.setAttribute('x', '0');
+          rect.setAttribute('y', String(rectY));
+          rect.setAttribute('width', '1');
+          rect.setAttribute('height', String(rectH));
+          fillEl.setAttribute('clip-path', `url(#${fillEl.dataset.fillClipId})`);
+        });
+      }
+    }
+
+    if (Array.isArray(viewState.batteries) && viewState.batteries.length) {
+      const svgRoot = refs.backgroundSvg || refs.svgRoot;
+      if (svgRoot) {
+        viewState.batteries.forEach((bat) => {
+          const role = bat && bat.role ? bat.role : '';
+          if (!role) return;
+          const group = svgRoot.querySelector(`[data-role="${role}"]`);
+          if (!group) return;
+          const display = bat.visible ? 'inline' : 'none';
+          if (group.style.display !== display) {
+            group.style.display = display;
+          }
+          const opacity = bat.visible ? '1' : '0';
+          if (group.getAttribute('opacity') !== opacity) {
+            group.setAttribute('opacity', opacity);
+          }
+          if (group.style && group.style.opacity !== opacity) {
+            group.style.opacity = opacity;
+          }
+        });
+      }
+    }
+
+    if (Array.isArray(viewState.batteryText) && viewState.batteryText.length) {
+      const svgRoot = refs.backgroundSvg || refs.svgRoot;
+      if (svgRoot) {
+        viewState.batteryText.forEach((bat) => {
+          const index = bat && Number.isFinite(bat.index) ? bat.index : null;
+          if (!index) return;
+          const group = svgRoot.querySelector(`[data-role="battery${index}-text"]`);
+          if (!group) return;
+          const opacity = bat.visible ? '1' : '0';
+          if (group.getAttribute('opacity') !== opacity) {
+            group.setAttribute('opacity', opacity);
+          }
+          if (group.style && group.style.opacity !== opacity) {
+            group.style.opacity = opacity;
+          }
+        });
+      }
+    }
+
+    if (viewState.car1 || viewState.car2) {
+      const svgRoot = refs.backgroundSvg || refs.svgRoot;
+      if (svgRoot) {
+        const applyCarOpacity = (key, visible) => {
+          const group = svgRoot.querySelector(`[data-role="${key}"]`);
+          if (!group) return;
+          const opacity = visible ? '1' : '0';
+          if (group.getAttribute('opacity') !== opacity) {
+            group.setAttribute('opacity', opacity);
+          }
+          if (group.style && group.style.opacity !== opacity) {
+            group.style.opacity = opacity;
+          }
+        };
+        applyCarOpacity('car1', Boolean(viewState.car1 && viewState.car1.visible));
+        applyCarOpacity('car2', Boolean(viewState.car2 && viewState.car2.visible));
       }
     }
 
     // Force-hide legacy SVG popups (single HTML overlay is used instead)
-    const legacyPopups = [refs.pvPopup, refs.batteryPopup, refs.housePopup, refs.gridPopup, refs.inverterPopup].filter(Boolean);
+    const legacyPopups = [refs.pvPopup, refs.housePopup, refs.gridPopup, refs.inverterPopup].filter(Boolean);
     legacyPopups.forEach((popup) => {
       if (popup && popup.style && popup.style.display !== 'none') {
         popup.style.display = 'none';
@@ -6886,6 +6450,7 @@ class AdvancedEnergyCard extends HTMLElement {
     // Apply layer visibility if background is already loaded
     if (refs.backgroundSvg && refs.backgroundSvg.children.length > 0) {
       applySvgLayerVisibility(refs.backgroundSvg, this._layerConfigWithEffectiveNight(this.config));
+      this._applyCarEffectFilters(refs.backgroundSvg, viewState);
     }
 
     // Windmill blades: rotate only when windmill total is positive.
@@ -6915,6 +6480,198 @@ class AdvancedEnergyCard extends HTMLElement {
     // Re-attach event listeners after DOM updates
     this._cacheDomReferences(); // Re-cache refs in case DOM was updated
     this._attachEventListeners();
+  }
+
+  _applyCarEffectFilters(root, viewState) {
+    const targetRoot = root || (this._domRefs ? this._domRefs.backgroundSvg : null);
+    if (!targetRoot || typeof targetRoot.querySelectorAll !== 'function') {
+      return;
+    }
+
+    const elements = Array.from(targetRoot.querySelectorAll('[data-car-effect], [data-effect-car]'));
+    if (!elements.length) {
+      return;
+    }
+
+    const applyGlowFilter = (element, color, key, intensity = 0.85, glowColor = 'cyan') => {
+      if (!element) return;
+      const clamped = Math.min(Math.max(Number(intensity) || 0, 0), 1);
+      const userFactor = 1;
+      const blurBoost = 0.85 + 0.15 * userFactor;
+      const opacityBoost = 0.6 + 0.7 * userFactor;
+
+      const svgRoot = element.ownerSVGElement || (
+        element.tagName && element.tagName.toLowerCase && element.tagName.toLowerCase() === 'svg' ? element : null
+      );
+
+      const safeKey = String(key || 'effect').replace(/[^a-z0-9_-]/gi, '_');
+      const filterId = `advanced-car-effect-${safeKey}`;
+
+      if (svgRoot && typeof svgRoot.querySelector === 'function') {
+        const defs = (() => {
+          let d = svgRoot.querySelector('defs');
+          if (!d) {
+            d = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+            svgRoot.insertBefore(d, svgRoot.firstChild);
+          }
+          return d;
+        })();
+
+        let filterEl = defs.querySelector(`#${CSS.escape(filterId)}`);
+        if (!filterEl) {
+          filterEl = document.createElementNS('http://www.w3.org/2000/svg', 'filter');
+          filterEl.setAttribute('id', filterId);
+          filterEl.setAttribute('x', '-30%');
+          filterEl.setAttribute('y', '-30%');
+          filterEl.setAttribute('width', '160%');
+          filterEl.setAttribute('height', '160%');
+          filterEl.setAttribute('color-interpolation-filters', 'sRGB');
+
+          const opacityMatrix = document.createElementNS('http://www.w3.org/2000/svg', 'feColorMatrix');
+          opacityMatrix.setAttribute('type', 'matrix');
+          opacityMatrix.setAttribute('data-role', 'opacity');
+          opacityMatrix.setAttribute('values', '1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.35 0');
+          opacityMatrix.setAttribute('result', 'opacity');
+
+          const brightnessContrast = document.createElementNS('http://www.w3.org/2000/svg', 'feComponentTransfer');
+          brightnessContrast.setAttribute('in', 'opacity');
+          brightnessContrast.setAttribute('result', 'bc');
+          const r = document.createElementNS('http://www.w3.org/2000/svg', 'feFuncR');
+          const g = document.createElementNS('http://www.w3.org/2000/svg', 'feFuncG');
+          const b = document.createElementNS('http://www.w3.org/2000/svg', 'feFuncB');
+          r.setAttribute('type', 'linear');
+          g.setAttribute('type', 'linear');
+          b.setAttribute('type', 'linear');
+          r.setAttribute('slope', '1.2');
+          g.setAttribute('slope', '1.2');
+          b.setAttribute('slope', '1.2');
+          r.setAttribute('intercept', '0.05');
+          g.setAttribute('intercept', '0.05');
+          b.setAttribute('intercept', '0.05');
+          brightnessContrast.appendChild(r);
+          brightnessContrast.appendChild(g);
+          brightnessContrast.appendChild(b);
+
+          const saturate = document.createElementNS('http://www.w3.org/2000/svg', 'feColorMatrix');
+          saturate.setAttribute('type', 'saturate');
+          saturate.setAttribute('values', '1.3');
+          saturate.setAttribute('in', 'bc');
+          saturate.setAttribute('result', 'sat');
+
+          // const hueRotate = document.createElementNS('http://www.w3.org/2000/svg', 'feColorMatrix');
+          // hueRotate.setAttribute('type', 'hueRotate');
+          // hueRotate.setAttribute('values', '120');
+          // hueRotate.setAttribute('in', 'sat');
+          // hueRotate.setAttribute('result', 'hue');
+
+          const baseBlur = document.createElementNS('http://www.w3.org/2000/svg', 'feGaussianBlur');
+          baseBlur.setAttribute('in', 'sat');
+          baseBlur.setAttribute('stdDeviation', '1.2');
+          baseBlur.setAttribute('result', 'b');
+
+          const dropShadow = document.createElementNS('http://www.w3.org/2000/svg', 'feDropShadow');
+          dropShadow.setAttribute('in', 'b');
+          dropShadow.setAttribute('dx', '0');
+          dropShadow.setAttribute('dy', '0');
+          dropShadow.setAttribute('stdDeviation', '2');
+          dropShadow.setAttribute('flood-color', glowColor);
+          dropShadow.setAttribute('flood-opacity', '0.6');
+          dropShadow.setAttribute('result', 'shadow');
+
+          const merge = document.createElementNS('http://www.w3.org/2000/svg', 'feMerge');
+          const mergeShadow = document.createElementNS('http://www.w3.org/2000/svg', 'feMergeNode');
+          mergeShadow.setAttribute('in', 'shadow');
+          const mergeGraphic = document.createElementNS('http://www.w3.org/2000/svg', 'feMergeNode');
+          mergeGraphic.setAttribute('in', 'sat');
+          merge.appendChild(mergeShadow);
+          merge.appendChild(mergeGraphic);
+
+          filterEl.appendChild(opacityMatrix);
+          filterEl.appendChild(brightnessContrast);
+          filterEl.appendChild(saturate);
+          // filterEl.appendChild(hueRotate);
+          filterEl.appendChild(baseBlur);
+          filterEl.appendChild(dropShadow);
+          filterEl.appendChild(merge);
+          defs.appendChild(filterEl);
+        }
+
+        if (filterEl) {
+          const opacityMatrixEl = filterEl.querySelector('feColorMatrix[data-role="opacity"]')
+            || filterEl.querySelector('feColorMatrix[type="matrix"]');
+          if (opacityMatrixEl) {
+            opacityMatrixEl.setAttribute('values', '1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.35 0');
+          }
+          const dropShadowEl = filterEl.querySelector('feDropShadow');
+          if (dropShadowEl) {
+            dropShadowEl.setAttribute('flood-color', glowColor);
+          }
+        }
+
+        if (element.style) {
+          element.style.filter = '';
+        }
+        if (typeof element.setAttribute === 'function') {
+          element.setAttribute('filter', `url(#${filterId})`);
+        }
+        return;
+      }
+
+      const filterValue = `brightness(1.15) contrast(1.2) saturate(1.3) drop-shadow(0 0 2px ${glowColor})`;
+      if (element.style) {
+        element.style.filter = filterValue;
+      }
+    };
+
+    const config = this.config || {};
+    const flashState = viewState && viewState.headlightFlash ? viewState.headlightFlash : null;
+    const flashEnabled = Boolean(flashState && flashState.enabled);
+    const car1Charging = Boolean(flashEnabled && flashState && flashState.car1 && flashState.car1.charging);
+    const car2Charging = Boolean(flashEnabled && flashState && flashState.car2 && flashState.car2.charging);
+    const defaultGlow = 0.5;
+    const car1GlowPercentRaw = Number.isFinite(parseFloat(config.car1_glow_brightness))
+      ? parseFloat(config.car1_glow_brightness)
+      : 50;
+    const car2GlowPercentRaw = Number.isFinite(parseFloat(config.car2_glow_brightness))
+      ? parseFloat(config.car2_glow_brightness)
+      : 50;
+    const car1GlowPercent = car1GlowPercentRaw <= 1 ? car1GlowPercentRaw * 100 : car1GlowPercentRaw;
+    const car2GlowPercent = car2GlowPercentRaw <= 1 ? car2GlowPercentRaw * 100 : car2GlowPercentRaw;
+    const car1Glow = Math.min(Math.max(car1GlowPercent / 100, 0), 1);
+    const car2Glow = Math.min(Math.max(car2GlowPercent / 100, 0), 1);
+
+    elements.forEach((element) => {
+      if (!element || typeof element.getAttribute !== 'function') return;
+      const rawEffect = element.getAttribute('data-car-effect') || element.getAttribute('data-effect-car');
+      const effectValue = rawEffect ? String(rawEffect).trim() : '';
+      if (!effectValue) return;
+      const color = effectValue;
+      const effectKey = effectValue.toLowerCase();
+      const glowColor = effectKey === 'car1' ? '#00F5FF' : (effectKey === 'car2' ? '#FFB000' : 'cyan');
+      let intensity = defaultGlow;
+      if (effectKey === 'car1') intensity = car1Glow;
+      if (effectKey === 'car2') intensity = car2Glow;
+      applyGlowFilter(element, color, `car-effect-${effectValue}`, intensity, glowColor);
+      const isCharging = (effectKey === 'car1' && car1Charging) || (effectKey === 'car2' && car2Charging);
+      if (element.style && !isCharging) {
+        element.style.opacity = String(Math.min(Math.max(Number(intensity) || 0, 0), 1));
+      }
+      if (element.style && element.style.animation) {
+        element.style.animation = '';
+      }
+      if (element.tagName === 'g') {
+        const paths = element.querySelectorAll('path');
+        paths.forEach((path) => {
+          applyGlowFilter(path, color, `car-effect-${effectValue}`, intensity, glowColor);
+          if (path && path.style && !isCharging) {
+            path.style.opacity = String(Math.min(Math.max(Number(intensity) || 0, 0), 1));
+          }
+          if (path && path.style && path.style.animation) {
+            path.style.animation = '';
+          }
+        });
+      }
+    });
   }
 
   _applySvgTextBindings(viewState) {
@@ -7802,6 +7559,16 @@ class AdvancedEnergyCard extends HTMLElement {
           return;
         }
       }
+
+      // Avoid wiping SVG groups or paths that contain child elements.
+      if (tag !== 'text' && node.childElementCount) {
+        const childText = node.querySelector('text');
+        if (childText) {
+          applyTextContent(childText, nextText);
+        }
+        return;
+      }
+
       if (node.textContent !== nextText) {
         node.textContent = nextText;
       }
@@ -7853,87 +7620,6 @@ class AdvancedEnergyCard extends HTMLElement {
           fr: 'Maison :',
           nl: 'Huis:'
         },
-
-        // Battery labels
-        // NOTE: Use battery1-soc-text so the label pairs with battery1-soc and inherits
-        // the Battery SOC styling (including threshold-based color).
-        // 'battery1-soc-text': {
-        //   en: 'B1 SOC:',
-        //   it: 'B1 SOC:',
-        //   de: 'B1 SOC:',
-        //   fr: 'B1 SOC:',
-        //   nl: 'B1 SOC:'
-        // },
-
-        // 'battery2-soc-text': {
-        //   en: 'B2 SOC:',
-        //   it: 'B2 SOC:',
-        //   de: 'B2 SOC:',
-        //   fr: 'B2 SOC:',
-        //   nl: 'B2 SOC:'
-        // },
-
-        // 'battery1-power-text': {
-        //   en: 'B1 Power:',
-        //   it: 'B1 Power:',
-        //   de: 'B1 Power:',
-        //   fr: 'B1 Power:',
-        //   nl: 'B1 Power:',
-        //   // Style-sync from the Battery Power settings (font size + configured color)
-        //   // rather than the per-battery flow color.
-        //   linkTo: 'battery-power'
-        // },
-
-        // 'battery2-power-text': {
-        //   en: 'B2 Power:',
-        //   it: 'B2 Power:',
-        //   de: 'B2 Power:',
-        //   fr: 'B2 Power:',
-        //   nl: 'B2 Power:',
-        //   // Style-sync from the Battery Power settings (font size + configured color)
-        //   // rather than the per-battery flow color.
-        //   linkTo: 'battery-power'
-        // },
-
-         'battery1-soc-text': {
-          en: 'B1 SOC:',
-          it: 'B1 SOC:',
-          de: 'B1 SOC:',
-          fr: 'B1 SOC:',
-          nl: 'B1 SOC:'
-        },
-
-        'battery2-soc-text': {
-          en: 'B2 SOC:',
-          it: 'B2 SOC:',
-          de: 'B2 SOC:',
-          fr: 'B2 SOC:',
-          nl: 'B2 SOC:'
-        },
-
-        'battery1-power-text': {
-          en: 'B1 Power:',
-          it: 'B1 Power:',
-          de: 'B1 Power:',
-          fr: 'B1 Power:',
-          nl: 'B1 Power:',
-          // Style-sync from the Battery Power settings (font size + configured color)
-          // rather than the per-battery flow color.
-          linkTo: 'battery-power'
-        },
-
-        'battery2-power-text': {
-          en: 'B2 Power:',
-          it: 'B2 Power:',
-          de: 'B2 Power:',
-          fr: 'B2 Power:',
-          nl: 'B2 Power:',
-          // Style-sync from the Battery Power settings (font size + configured color)
-          // rather than the per-battery flow color.
-          linkTo: 'battery-power'
-        },
-       
-
         // Appliance labels
         'washing-machine-power-text': {
           en: 'Washer:',
@@ -8477,7 +8163,8 @@ class AdvancedEnergyCard extends HTMLElement {
 
             // Keep the underlying SVG text node styled, even when hidden, so other helpers
             // (notably '*-text' label style inheritance) can read configured values.
-            const applyStyle = shouldApplyConfiguredTextStyle(node, nodeOptions);
+            const applyStyle = shouldApplyConfiguredTextStyle(node, nodeOptions)
+              && (!nodeOptions.onlyWhenConfigStyle || isConfigStyledTextNode(node));
             if (applyStyle) {
               if (typeof nodeOptions.fill === 'string' && nodeOptions.fill) {
                 hostText.setAttribute('fill', nodeOptions.fill);
@@ -8531,7 +8218,8 @@ class AdvancedEnergyCard extends HTMLElement {
             }
           }
         }
-        const applyStyle = shouldApplyConfiguredTextStyle(node, nodeOptions);
+          const applyStyle = shouldApplyConfiguredTextStyle(node, nodeOptions)
+            && (!nodeOptions.onlyWhenConfigStyle || isConfigStyledTextNode(node));
         if (applyStyle) {
           if (typeof nodeOptions.fill === 'string' && nodeOptions.fill) {
             node.setAttribute('fill', nodeOptions.fill);
@@ -9154,83 +8842,24 @@ class AdvancedEnergyCard extends HTMLElement {
       fontSize: viewState.windmillPower ? viewState.windmillPower.fontSize : undefined
     });
 
-    // Battery
-    // Legacy aggregated roles: prefer per-battery #1 values when present.
-    const legacyBatterySoc = (viewState.battery1Soc && viewState.battery1Soc.visible)
-      ? viewState.battery1Soc
-      : viewState.batterySoc;
-    const legacyBatteryPower = (viewState.battery1Power && viewState.battery1Power.visible)
-      ? viewState.battery1Power
-      : viewState.batteryPower;
-    updateRole('battery-soc', legacyBatterySoc ? legacyBatterySoc.text : '', {
-      visible: Boolean(legacyBatterySoc && legacyBatterySoc.visible),
-      fill: legacyBatterySoc ? legacyBatterySoc.fill : undefined,
-      fontSize: legacyBatterySoc ? legacyBatterySoc.fontSize : undefined
-    });
-    updateRole('battery-power', legacyBatteryPower ? legacyBatteryPower.text : '', {
-      visible: Boolean(legacyBatteryPower && legacyBatteryPower.visible),
-      fill: legacyBatteryPower ? legacyBatteryPower.fill : undefined,
-      fontSize: legacyBatteryPower ? legacyBatteryPower.fontSize : undefined
-    });
-
-    // Individual batteries (power)
-    updateRole('battery1', viewState.battery1 ? viewState.battery1.text : '', {
-      visible: Boolean(viewState.battery1 && viewState.battery1.visible),
-      fill: viewState.battery1 ? viewState.battery1.fill : undefined,
-      fontSize: viewState.battery1 ? viewState.battery1.fontSize : undefined
-    });
-    updateRole('battery2', viewState.battery2 ? viewState.battery2.text : '', {
-      visible: Boolean(viewState.battery2 && viewState.battery2.visible),
-      fill: viewState.battery2 ? viewState.battery2.fill : undefined,
-      fontSize: viewState.battery2 ? viewState.battery2.fontSize : undefined
-    });
-    updateRole('battery3', viewState.battery3 ? viewState.battery3.text : '', {
-      visible: Boolean(viewState.battery3 && viewState.battery3.visible),
-      fill: viewState.battery3 ? viewState.battery3.fill : undefined,
-      fontSize: viewState.battery3 ? viewState.battery3.fontSize : undefined
-    });
-
-    // Individual batteries (SVG placeholders)
-    updateRole('battery1-soc', viewState.battery1Soc ? viewState.battery1Soc.text : '', {
-      visible: Boolean(viewState.battery1Soc && viewState.battery1Soc.visible),
-      fill: viewState.battery1Soc ? viewState.battery1Soc.fill : undefined,
-      fontSize: viewState.battery1Soc ? viewState.battery1Soc.fontSize : undefined
-    });
-    updateRole('battery1-power', viewState.battery1Power ? viewState.battery1Power.text : '', {
-      visible: Boolean(viewState.battery1Power && viewState.battery1Power.visible),
-      fill: viewState.battery1Power ? viewState.battery1Power.fill : undefined,
-      fontSize: viewState.battery1Power ? viewState.battery1Power.fontSize : undefined
-    });
-    updateRole('battery2-soc', viewState.battery2Soc ? viewState.battery2Soc.text : '', {
-      visible: Boolean(viewState.battery2Soc && viewState.battery2Soc.visible),
-      fill: viewState.battery2Soc ? viewState.battery2Soc.fill : undefined,
-      fontSize: viewState.battery2Soc ? viewState.battery2Soc.fontSize : undefined
-    });
-    updateRole('battery2-power', viewState.battery2Power ? viewState.battery2Power.text : '', {
-      visible: Boolean(viewState.battery2Power && viewState.battery2Power.visible),
-      fill: viewState.battery2Power ? viewState.battery2Power.fill : undefined,
-      fontSize: viewState.battery2Power ? viewState.battery2Power.fontSize : undefined
-    });
-    updateRole('battery3-soc', viewState.battery3Soc ? viewState.battery3Soc.text : '', {
-      visible: Boolean(viewState.battery3Soc && viewState.battery3Soc.visible),
-      fill: viewState.battery3Soc ? viewState.battery3Soc.fill : undefined,
-      fontSize: viewState.battery3Soc ? viewState.battery3Soc.fontSize : undefined
-    });
-    updateRole('battery3-power', viewState.battery3Power ? viewState.battery3Power.text : '', {
-      visible: Boolean(viewState.battery3Power && viewState.battery3Power.visible),
-      fill: viewState.battery3Power ? viewState.battery3Power.fill : undefined,
-      fontSize: viewState.battery3Power ? viewState.battery3Power.fontSize : undefined
-    });
-    updateRole('battery4-soc', viewState.battery4Soc ? viewState.battery4Soc.text : '', {
-      visible: Boolean(viewState.battery4Soc && viewState.battery4Soc.visible),
-      fill: viewState.battery4Soc ? viewState.battery4Soc.fill : undefined,
-      fontSize: viewState.battery4Soc ? viewState.battery4Soc.fontSize : undefined
-    });
-    updateRole('battery4-power', viewState.battery4Power ? viewState.battery4Power.text : '', {
-      visible: Boolean(viewState.battery4Power && viewState.battery4Power.visible),
-      fill: viewState.battery4Power ? viewState.battery4Power.fill : undefined,
-      fontSize: viewState.battery4Power ? viewState.battery4Power.fontSize : undefined
-    });
+    if (Array.isArray(viewState.batteryText) && viewState.batteryText.length) {
+      viewState.batteryText.forEach((bat) => {
+        const index = bat && Number.isFinite(bat.index) ? bat.index : null;
+        if (!index) return;
+        updateRole(`battery${index}-soc`, bat.socText || '', {
+          visible: Boolean(bat.visible && bat.socText),
+          fill: bat.socColor,
+          fontSize: bat.socFontSize,
+          onlyWhenConfigStyle: true
+        });
+        updateRole(`battery${index}-power`, bat.powerText || '', {
+          visible: Boolean(bat.visible && bat.powerText),
+          fill: bat.powerColor,
+          fontSize: bat.powerFontSize,
+          onlyWhenConfigStyle: true
+        });
+      });
+    }
 
     // Load
     const hasLoadLines = Boolean(viewState.load && Array.isArray(viewState.load.lines) && viewState.load.lines.length);
@@ -9939,9 +9568,6 @@ class AdvancedEnergyCard extends HTMLElement {
         fontSize: viewState.pv.fontSize,
         lines: viewState.pv.lines.map((line) => ({ ...line }))
       },
-      battery: { ...viewState.battery },
-      batterySoc: { ...viewState.batterySoc },
-      batteryPower: { ...viewState.batteryPower },
       load: { ...viewState.load },
       grid: { ...viewState.grid },
       heatPump: { ...viewState.heatPump },
@@ -9969,7 +9595,7 @@ class AdvancedEnergyCard extends HTMLElement {
   }
 
   static get version() {
-    return '1.0.0';
+    return '1.0.9';
   }
 }
 
@@ -10223,6 +9849,8 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           car2_charger_power: { label: 'Car 2 Charger Power', helper: 'Sensor for EV 2 charger power.' },
           car2_label: { label: 'Car 2 Label', helper: 'Text displayed next to the second EV values.' },
           car_headlight_flash: { label: 'Headlight Flash While Charging', helper: 'Enable to flash the EV headlights whenever charging is detected.' },
+          car1_glow_brightness: { label: 'Car Glow Effect', helper: 'Percentage the car flow effects show while not charging.' },
+          car2_glow_brightness: { label: 'Car Glow Effect', helper: 'Percentage the car flow effects show while not charging.' },
           car_pct_color: { label: 'Car SOC Color', helper: 'Hex color for EV SOC text (e.g., #00FFFF).' },
           car2_pct_color: { label: 'Car 2 SOC Color', helper: 'Hex color for second EV SOC text (falls back to Car SOC Color).' },
           car1_name_color: { label: 'Car 1 Name Color', helper: 'Color applied to the Car 1 name label.' },
@@ -10550,6 +10178,8 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           car2_charger_power: { label: 'Potenza Caricabatterie Auto 2', helper: 'Sensore per potenza caricabatterie EV 2.' },
           car2_label: { label: 'Etichetta Auto 2', helper: 'Testo mostrato vicino ai valori della seconda EV.' },
           car_headlight_flash: { label: 'Lampeggio fari durante la ricarica', helper: 'Attiva per far lampeggiare i fari del veicolo mentre e in carica.' },
+          car1_glow_brightness: { label: 'Effetto bagliore auto', helper: 'Percentuale di effetto del flusso auto visibile quando non in carica.' },
+          car2_glow_brightness: { label: 'Effetto bagliore auto', helper: 'Percentuale di effetto del flusso auto visibile quando non in carica.' },
           car_pct_color: { label: 'Colore SOC auto', helper: 'Colore esadecimale per il testo SOC EV (es. #00FFFF).' },
           car2_pct_color: { label: 'Colore SOC Auto 2', helper: 'Colore esadecimale per il testo SOC della seconda EV (usa Car SOC se vuoto).' },
           car1_name_color: { label: 'Colore nome Auto 1', helper: 'Colore applicato all etichetta del nome Auto 1.' },
@@ -10877,6 +10507,8 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           car2_power: { label: 'Fahrzeug 2 Leistung', helper: 'Sensor fÃ¼r EV 2-Lade-/Entladeleistung.' },
           car2_label: { label: 'Bezeichnung Fahrzeug 2', helper: 'Text neben den Werten des zweiten EV.' },
           car_headlight_flash: { label: 'Scheinwerferblitz beim Laden', helper: 'Aktivieren, um die Fahrzeugscheinwerfer waehrend des Ladevorgangs blinken zu lassen.' },
+          car1_glow_brightness: { label: 'Auto-Glow-Effekt', helper: 'Prozentsatz, wie stark der Auto-Fluss-Effekt angezeigt wird, wenn nicht geladen wird.' },
+          car2_glow_brightness: { label: 'Auto-Glow-Effekt', helper: 'Prozentsatz, wie stark der Auto-Fluss-Effekt angezeigt wird, wenn nicht geladen wird.' },
           car_pct_color: { label: 'Farbe fuer SOC', helper: 'Hex Farbe fuer EV SOC Text (z. B. #00FFFF).' },
           car2_pct_color: { label: 'Farbe SOC Auto 2', helper: 'Hex Farbe fuer SOC Text des zweiten Fahrzeugs (faellt auf Car SOC zurueck).' },
           car1_name_color: { label: 'Farbe Name Auto 1', helper: 'Farbe fuer die Bezeichnung von Fahrzeug 1.' },
@@ -11202,6 +10834,8 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           car2_power: { label: 'Puissance VÃ©hicule 2', helper: 'Capteur pour puissance charge/dÃ©charge EV 2.' },
           car2_label: { label: 'LibellÃ© VÃ©hicule 2', helper: 'Texte affichÃ© Ã  cÃ´tÃ© des valeurs du second EV.' },
           car_headlight_flash: { label: 'Clignotement des phares en charge', helper: 'Activer pour faire clignoter les phares du vÃ©hicule pendant la charge.' },
+          car1_glow_brightness: { label: 'Effet glow voiture', helper: 'Pourcentage d\'effet de flux voiture affichÃ© hors charge.' },
+          car2_glow_brightness: { label: 'Effet glow voiture', helper: 'Pourcentage d\'effet de flux voiture affichÃ© hors charge.' },
           car_pct_color: { label: 'Couleur SOC VÃ©hicule', helper: 'Couleur hex pour le texte SOC EV (ex. #00FFFF).' },
           car2_pct_color: { label: 'Couleur SOC VÃ©hicule 2', helper: 'Couleur hex pour le SOC du second EV (retourne sur Car SOC si vide).' },
           car1_name_color: { label: 'Couleur nom VÃ©hicule 1', helper: 'Couleur appliquÃ©e au libellÃ© du nom du VÃ©hicule 1.' },
@@ -11531,6 +11165,8 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           car2_power: { label: 'Voertuig 2 vermogen', helper: 'Sensor voor EV 2 laad/ontlaad vermogen.' },
           car2_label: { label: 'Voertuig 2 label', helper: 'Tekst weergegeven naast de waarden van de tweede EV.' },
           car_headlight_flash: { label: 'Koplampen laten knipperen tijdens laden', helper: 'Inschakelen om de voertuigkoplampen te laten knipperen tijdens het laden.' },
+          car1_glow_brightness: { label: 'Auto glow-effect', helper: 'Percentage van het auto-flow-effect dat zichtbaar is wanneer niet geladen.' },
+          car2_glow_brightness: { label: 'Auto glow-effect', helper: 'Percentage van het auto-flow-effect dat zichtbaar is wanneer niet geladen.' },
           car_pct_color: { label: 'Voertuig SOC kleur', helper: 'Hex kleur voor EV SOC tekst (bijv. #00FFFF).' },
           car2_pct_color: { label: 'Voertuig 2 SOC kleur', helper: 'Hex kleur voor tweede EV SOC (valt terug op Voertuig SOC indien leeg).' },
           car1_name_color: { label: 'Voertuig 1 naam kleur', helper: 'Kleur toegepast op Voertuig 1 naam label.' },
@@ -11930,6 +11566,8 @@ class AdvancedEnergyCardEditor extends HTMLElement {
         { name: 'car1_label', label: fields.car1_label.label, helper: fields.car1_label.helper, selector: { text: { mode: 'blur' } } },
         { name: 'car2_label', label: fields.car2_label.label, helper: fields.car2_label.helper, selector: { text: { mode: 'blur' } } },
         { name: 'car_headlight_flash', label: fields.car_headlight_flash.label, helper: fields.car_headlight_flash.helper, selector: { boolean: {} } },
+        { name: 'car1_glow_brightness', label: fields.car1_glow_brightness.label, helper: fields.car1_glow_brightness.helper, selector: { number: { min: 0, max: 100, step: 1, mode: 'slider', unit_of_measurement: '%' } }, default: 50 },
+        { name: 'car2_glow_brightness', label: fields.car2_glow_brightness.label, helper: fields.car2_glow_brightness.helper, selector: { number: { min: 0, max: 100, step: 1, mode: 'slider', unit_of_measurement: '%' } }, default: 50 },
         { name: 'car_flow_color', label: fields.car_flow_color.label, helper: fields.car_flow_color.helper, selector: { color_picker: {} } },
         { name: 'car_pct_color', label: fields.car_pct_color.label, helper: fields.car_pct_color.helper, selector: { color_picker: {} }, default: '#00FFFF' },
         { name: 'car2_pct_color', label: fields.car2_pct_color.label, helper: fields.car2_pct_color.helper, selector: { color_picker: {} }, default: '#00FFFF' },
@@ -12377,11 +12015,14 @@ class AdvancedEnergyCardEditor extends HTMLElement {
       if (field && field.type === 'divider') {
         container.appendChild(this._createDividerField());
       } else if (field.name === 'day_night_mode') {
-        container.appendChild(this._createDayNightModeField(field, data[field.name] || field.default));
+        const value = (data[field.name] !== undefined && data[field.name] !== null) ? data[field.name] : field.default;
+        container.appendChild(this._createDayNightModeField(field, value));
       } else if (field.selector && field.selector.color_picker) {
-        container.appendChild(this._createColorPickerField(field, data[field.name] || field.default || ''));
+        const value = (data[field.name] !== undefined && data[field.name] !== null) ? data[field.name] : field.default;
+        container.appendChild(this._createColorPickerField(field, value || ''));
       } else {
-        container.appendChild(this._createStandardField(field, data[field.name] || field.default));
+        const value = (data[field.name] !== undefined && data[field.name] !== null) ? data[field.name] : field.default;
+        container.appendChild(this._createStandardField(field, value));
       }
     });
 
