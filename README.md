@@ -7,15 +7,15 @@ Advanced Energy Card repository is [https://github.com/ratava/advanced-energy-ca
 
 [Advanced Energy Card Background](images/advanced-day.png)
 
-Support Brent ratava![Donate Brent Wesley @ratava](https://github.com/user-attachments/assets/b603f494-a142-4bb0-893f-aaafd5d19dfd)
+Support Brent ratava ![Donate Brent Wesley @ratava](https://github.com/user-attachments/assets/b603f494-a142-4bb0-893f-aaafd5d19dfd)
 
 ## Overview (EN)
 
-Advanced Energy Card is a Home Assistant custom Lovelace card that renders animated energy flows, aggregates PV strings and batteries, and surfaces optional EV charging metrics in a cinematic layout. Advanced Energy Card is the heart of what is Lumina Energy Card and is what should have been version 2.0 of Lumina. 
+Advanced Energy Card is a Home Assistant custom Lovelace card that renders animated energy flows, aggregates PV strings and batteries, and surfaces optional EV charging metrics in a cinematic layout. Advanced Energy Card is the heart of what is Lumina Energy Card and is what should have been version 2.0 of Lumina.
 
 ### Key Features (EN)
 
-- New fururistic house with a completely redesigned graphics system, allowing for more functionality  
+- New futuristic house with a completely redesigned graphics system, allowing for more functionality  
 - New guided Initial Configuration
 - Up to six PV sensors with two arrays supported per string or totalized inputs
 - Up to four battery systems with SOC, power, and battery‑level visualization for four batteries. (2 per inverter if using 2 inverters)
@@ -28,7 +28,7 @@ Advanced Energy Card is a Home Assistant custom Lovelace card that renders anima
 - Daily import and export totals
 - Swimming pool power consumption now shown on the main graphic
 - Heat pump/AC power and Hot Water System consumption now shown
-- Washing Mashine, Dryer, Refrigerator, Dishwasher now included in popup
+- Washing Machine, Dryer, Refrigerator, Dishwasher now included in popup
 - Load warning/critical color overrides and a configurable low‑SOC threshold for the battery liquid fill
 - Font selection, font size, and text color available for all displayed entities
 - Update interval slider (0–60 s, default 5 s) with optional real‑time refresh when set to 0
@@ -69,10 +69,266 @@ lovelace:
 3. Fill in the fields using the entity pickers and switches.
 4. Adjust the **Update Interval** slider to control refresh cadence.
 
-## Initial Configuration
+## Initial Configuration (EN)
 
 - Follow the questions in Initial Configuration Menu. It will cover most configurations of the base sensors
-- Many other option have been addded including a fully restructured menu.
+- Many other options have been added including a fully restructured menu.
+
+## Panoramica (IT)
+
+Advanced Energy Card è una scheda Lovelace personalizzata per Home Assistant che visualizza flussi energetici animati, aggrega stringhe FV e batterie e mostra metriche opzionali di ricarica EV in un layout cinematografico. Advanced Energy Card è il cuore di Lumina Energy Card e ciò che avrebbe dovuto essere la versione 2.0 di Lumina.
+
+### Funzionalità principali (IT)
+
+- Nuova casa futuristica con un sistema grafico completamente ridisegnato, per più funzionalità  
+- Nuova configurazione guidata iniziale
+- Fino a sei sensori FV con due array supportati per stringa o totali
+- Fino a quattro batterie con SOC, potenza e visualizzazione del livello (2 per inverter se usi 2 inverter)
+- Informazioni aggiuntive sulle batterie nel popup batterie
+- Visualizzazione dinamica della potenza eolica e fino a due EV con SOC e consumo/restituzione
+- Flussi animati di rete, carico, FV, batterie ed EV con colore dinamico in base a soglie
+- Soglia configurabile della rete (default 100 W) per ridurre il rumore a basso livello
+- Moltiplicatore velocità animazione regolabile (-3× a 3×, 0 pausa, negativi invertiti) e soglie per flussi
+- Badge produzione giornaliera
+- Totali giornalieri import/export
+- Consumo piscina mostrato nella grafica principale
+- Consumo pompa di calore/AC e acqua calda mostrato
+- Lavatrice, asciugatrice, frigorifero, lavastoviglie inclusi nel popup
+- Colori di avviso/critico per il carico e soglia SOC bassa per il riempimento batteria
+- Scelta font, dimensione e colore del testo per tutte le entità
+- Slider intervallo aggiornamento (0–60 s, default 5 s) con aggiornamento reale a 0
+- Popup per Casa, Solare, Batteria, Rete e Inverter
+- Ogni popup ha sei slot con override del nome e colori
+- Le righe del popup sono cliccabili per aprire l’entità HA
+
+### Installazione (IT)
+
+#### HACS (IT)
+
+1. Apri HACS in Home Assistant e scegli **Frontend**.
+2. Menu a tre punti → **Repository personalizzati**.
+3. Inserisci `https://github.com/ratava/advanced-energy-card`, scegli **Dashboard** e fai **Add**.
+4. Trova **Advanced Energy Card** in Frontend e fai **Install**.
+5. Riavvia Home Assistant se richiesto.
+
+#### Installazione manuale (IT)
+
+1. Scarica tutti i file da `dist/` dall’ultima release.
+2. Copia i file in `/config/www/community/advanced-energy-card/`.
+3. Aggiungi la risorsa Lovelace:
+
+```yaml
+lovelace:
+  resources:
+    - url: /local/community/advanced-energy-card/advanced-energy-card.js
+      type: module
+```
+
+1. Riavvia Home Assistant.
+
+### Configurazione (IT)
+
+1. Modifica la dashboard e fai **Add Card**.
+2. Cerca **Advanced Energy Card**.
+3. Compila i campi con i selettori entità e gli switch.
+4. Regola **Update Interval** per la frequenza di aggiornamento.
+
+## Configurazione iniziale (IT)
+
+- Segui le domande nel menu di configurazione iniziale: copre la maggior parte dei sensori base.
+- Sono state aggiunte molte altre opzioni con un menu completamente ristrutturato.
+
+## Überblick (DE)
+
+Advanced Energy Card ist eine benutzerdefinierte Lovelace-Karte für Home Assistant, die animierte Energieflüsse darstellt, PV‑Strings und Batterien aggregiert und optionale EV‑Lademetriken in einem cineastischen Layout zeigt. Advanced Energy Card ist das Herz von Lumina Energy Card und hätte Version 2.0 von Lumina sein sollen.
+
+### Hauptfunktionen (DE)
+
+- Neues futuristisches Haus mit komplett überarbeitetem Grafiksystem für mehr Funktionalität  
+- Neue geführte Erstkonfiguration
+- Bis zu sechs PV‑Sensoren mit zwei Arrays pro String oder Summensensoren
+- Bis zu vier Batteriesysteme mit SOC, Leistung und Füllstand (2 pro Wechselrichter bei 2 Wechselrichtern)
+- Zusätzliche Batterieinformationen im Batterie‑Popup
+- Dynamische Anzeige von Windkraft und bis zu zwei EVs mit SOC und Leistung
+- Animierte Netz‑, Last‑, PV‑, Batterie‑ und EV‑Flüsse mit dynamischen Farben anhand von Schwellen
+- Konfigurierbare Netz‑Schwelle (Standard 100 W) zur Unterdrückung von Kleinstflüssen
+- Einstellbarer Animationsfaktor (-3× bis 3×, 0 Pause, negative Werte rückwärts) und Schwellen pro Fluss
+- Badge für Tagesproduktion
+- Tages‑Import/Export‑Summen
+- Pool‑Verbrauch in der Hauptgrafik
+- Verbrauch von Wärmepumpe/AC und Warmwasser wird angezeigt
+- Waschmaschine, Trockner, Kühlschrank, Geschirrspüler im Popup enthalten
+- Warn-/Kritisch‑Farben für Last und SOC‑Schwelle für niedrigen Batteriefüllstand
+- Schriftart, Schriftgröße und Textfarbe für alle angezeigten Entitäten
+- Update‑Intervall‑Regler (0–60 s, Standard 5 s) mit Echtzeit‑Update bei 0
+- Popups für Haus, Solar, Batterie, Netz und Wechselrichter
+- Jeder Popup‑Bereich mit sechs Slots, Namens‑Overrides und Farben
+- Popup‑Einträge sind anklickbar und öffnen die HA‑Entität
+
+### Installation (DE)
+
+#### HACS (DE)
+
+1. Öffne HACS in Home Assistant und wähle **Frontend**.
+2. Drei‑Punkt‑Menü → **Custom repositories**.
+3. `https://github.com/ratava/advanced-energy-card` eintragen, **Dashboard** wählen, **Add**.
+4. **Advanced Energy Card** unter Frontend finden und **Install**.
+5. Home Assistant ggf. neu starten.
+
+#### Manuelle Installation (DE)
+
+1. Alle Dateien aus `dist/` der neuesten Release herunterladen.
+2. Dateien nach `/config/www/community/advanced-energy-card/` kopieren.
+3. Lovelace‑Ressource hinzufügen:
+
+```yaml
+lovelace:
+  resources:
+    - url: /local/community/advanced-energy-card/advanced-energy-card.js
+      type: module
+```
+
+1. Home Assistant neu starten.
+
+### Konfiguration (DE)
+
+1. Dashboard bearbeiten und **Add Card**.
+2. **Advanced Energy Card** suchen.
+3. Felder mit Entitäts‑Pickern und Schaltern ausfüllen.
+4. **Update Interval** für die Aktualisierung anpassen.
+
+## Erstkonfiguration (DE)
+
+- Beantworte die Fragen im Menü „Initial Configuration“; es deckt die meisten Basissensoren ab.
+- Viele weitere Optionen wurden hinzugefügt, inklusive vollständig überarbeitetem Menü.
+
+## Présentation (FR)
+
+Advanced Energy Card est une carte Lovelace personnalisée pour Home Assistant qui affiche des flux d’énergie animés, agrège les strings PV et les batteries, et expose des métriques EV optionnelles dans une mise en page cinématique. Advanced Energy Card est le cœur de Lumina Energy Card et aurait dû être la version 2.0 de Lumina.
+
+### Points forts (FR)
+
+- Nouvelle maison futuriste avec un système graphique entièrement repensé, offrant plus de fonctionnalités  
+- Nouvelle configuration initiale guidée
+- Jusqu’à six capteurs PV avec deux arrays par string ou totalisés
+- Jusqu’à quatre batteries avec SOC, puissance et niveau (2 par onduleur si 2 onduleurs)
+- Infos batterie supplémentaires dans le popup batterie
+- Affichage dynamique de l’éolienne et jusqu’à deux EV (SOC et puissance)
+- Flux animés réseau, charge, PV, batterie et EV avec couleurs dynamiques selon les seuils
+- Seuil réseau configurable (100 W par défaut) pour éviter le bruit à faible niveau
+- Vitesse d’animation réglable (-3× à 3×, 0 pause, négatifs inversés) et seuils par flux
+- Badge de production quotidienne
+- Totaux import/export journaliers
+- Consommation de piscine affichée sur le graphique principal
+- Consommation PAC/AC et eau chaude affichée
+- Lave‑linge, sèche‑linge, réfrigérateur, lave‑vaisselle inclus dans le popup
+- Couleurs d’alerte/critique pour la charge et seuil SOC bas pour le remplissage batterie
+- Police, taille et couleur de texte pour toutes les entités affichées
+- Curseur d’intervalle (0–60 s, défaut 5 s) avec rafraîchissement temps réel à 0
+- Popups Maison, Solaire, Batterie, Réseau et Onduleur
+- Chaque popup a six emplacements avec noms et couleurs personnalisables
+- Les entrées du popup sont cliquables pour ouvrir l’entité HA
+
+### Installation (FR)
+
+#### HACS (FR)
+
+1. Ouvrez HACS dans Home Assistant et choisissez **Frontend**.
+2. Menu à trois points → **Custom repositories**.
+3. Saisissez `https://github.com/ratava/advanced-energy-card`, choisissez **Dashboard**, puis **Add**.
+4. Trouvez **Advanced Energy Card** sous Frontend et cliquez **Install**.
+5. Redémarrez Home Assistant si demandé.
+
+#### Installation manuelle (FR)
+
+1. Téléchargez tous les fichiers de `dist/` depuis la dernière release.
+2. Copiez les fichiers dans `/config/www/community/advanced-energy-card/`.
+3. Ajoutez la ressource Lovelace :
+
+```yaml
+lovelace:
+  resources:
+    - url: /local/community/advanced-energy-card/advanced-energy-card.js
+      type: module
+```
+
+1. Redémarrez Home Assistant.
+
+### Configuration (FR)
+
+1. Modifiez votre tableau de bord et cliquez **Add Card**.
+2. Recherchez **Advanced Energy Card**.
+3. Remplissez les champs via les sélecteurs d’entités et interrupteurs.
+4. Ajustez **Update Interval** pour la cadence de rafraîchissement.
+
+## Configuration initiale (FR)
+
+- Suivez les questions du menu de configuration initiale ; il couvre l’essentiel des capteurs de base.
+- De nombreuses autres options ont été ajoutées, avec un menu entièrement restructuré.
+
+## Overzicht (NL)
+
+Advanced Energy Card is een aangepaste Lovelace‑kaart voor Home Assistant die geanimeerde energiestromen weergeeft, PV‑strings en batterijen bundelt en optionele EV‑laadstatistieken toont in een cinematografische layout. Advanced Energy Card is het hart van Lumina Energy Card en had versie 2.0 van Lumina moeten zijn.
+
+### Belangrijkste functies (NL)
+
+- Nieuw futuristisch huis met volledig herontworpen graphicsysteem voor meer functionaliteit  
+- Nieuwe begeleide initiële configuratie
+- Tot zes PV‑sensoren met twee arrays per string of totalen
+- Tot vier batterijen met SOC, vermogen en vulling (2 per omvormer bij 2 omvormers)
+- Extra batterij‑informatie in de batterij‑popup
+- Dynamische weergave van windmolenvermogen en tot twee EV’s met SOC en vermogen
+- Geanimeerde net‑, load‑, PV‑, batterij‑ en EV‑stromen met dynamische kleuren op basis van drempels
+- Configureerbare netdrempel (standaard 100 W) om ruis te beperken
+- Instelbare animatiesnelheid (-3× tot 3×, 0 pauze, negatieven omgekeerd) en drempels per flow
+- Dagproductie‑badge
+- Dagelijkse import/export‑totalen
+- Zwembadverbruik zichtbaar in de hoofdgrafiek
+- Verbruik van warmtepomp/AC en warm water zichtbaar
+- Wasmachine, droger, koelkast en vaatwasser opgenomen in de popup
+- Waarschuwing/kritiek‑kleuren voor load en lage SOC‑drempel voor batterijvulling
+- Lettertype, grootte en tekstkleur voor alle weergegeven entiteiten
+- Update‑intervalschuif (0–60 s, standaard 5 s) met realtime update bij 0
+- Popups voor Huis, Zonne‑energie, Batterij, Net en Omvormer
+- Elke popup heeft zes slots met naam‑ en kleur‑overrides
+- Popup‑regels zijn klikbaar om de HA‑entiteit te openen
+
+### Installatie (NL)
+
+#### HACS (NL)
+
+1. Open HACS in Home Assistant en kies **Frontend**.
+2. Drie‑punt‑menu → **Custom repositories**.
+3. Voer `https://github.com/ratava/advanced-energy-card` in, kies **Dashboard**, klik **Add**.
+4. Zoek **Advanced Energy Card** onder Frontend en klik **Install**.
+5. Herstart Home Assistant indien gevraagd.
+
+#### Handmatige installatie (NL)
+
+1. Download alle bestanden uit `dist/` van de nieuwste release.
+2. Kopieer de bestanden naar `/config/www/community/advanced-energy-card/`.
+3. Voeg de Lovelace‑resource toe:
+
+```yaml
+lovelace:
+  resources:
+    - url: /local/community/advanced-energy-card/advanced-energy-card.js
+      type: module
+```
+
+1. Herstart Home Assistant.
+
+### Configuratie (NL)
+
+1. Bewerk je dashboard en klik **Add Card**.
+2. Zoek **Advanced Energy Card**.
+3. Vul de velden in met entiteitskiezers en schakelaars.
+4. Pas **Update Interval** aan voor de update‑cadans.
+
+## Initiële configuratie (NL)
+
+- Volg de vragen in het menu Initial Configuration; dit dekt de meeste basis‑sensoren.
+- Veel andere opties zijn toegevoegd, inclusief een volledig herbouwd menu.
 
 
 | Option                               | Type    | Default                                                           | Notes                                                                                                                                             |
