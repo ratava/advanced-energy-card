@@ -141,7 +141,9 @@ sensor_grid_power: sensor.grid_power
 | `grid_current_odometer_duration` | number | `350` | Duration (ms) for the grid odometer animation (50–2000). |
 | `heat_pump_font_size` | number | `16` | Typography for the heat pump readout (10–28 px). |
 | `pool_font_size` | number | `16` | Typography for the pool readout (10–28 px). |
+| `hot_water_font_size` | number | `8` | Typography for the hot water readout (10–28 px). |
 | `washing_machine_font_size` | number | `16` | Typography for the washer label/power (inherits `heat_pump_font_size` when unset). |
+| `dishwasher_font_size` | number | `8` | Typography for the dish washer label/power (10–28 px). |
 | `dryer_font_size` | number | `16` | Typography for the dryer label/power (inherits `heat_pump_font_size` when unset). |
 | `refrigerator_font_size` | number | `16` | Typography for the refrigerator label/power (inherits `heat_pump_font_size` when unset). |
 | `car_power_font_size` | number | `15` | Typography for Car 1 power (10–28 px). |
@@ -185,8 +187,10 @@ sensor_grid_power: sensor.grid_power
 | `show_daily_grid` | boolean | `false` | Shows the daily import/export totals above the live grid value. |
 | `show_grid_flow_label` | boolean | `true` | Prepends “Importing/Exporting” before the grid value. |
 | `sensor_heat_pump_consumption` | entity | — | Heat pump sensor; unlocks the orange flow and swaps the background. |
+| `sensor_hot_water_consumption` | entity | — | Hot water heating load sensor (drives the hot water label). |
 | `sensor_pool_consumption` | entity | — | Optional pool consumption sensor; enables the pool branch/label when present. |
 | `sensor_washing_machine_consumption` | entity | — | Optional washing machine consumption sensor that drives the washer label. |
+| `sensor_dishwasher_consumption` | entity | — | Optional dish washer consumption sensor. |
 | `sensor_dryer_consumption` | entity | — | Optional dryer consumption sensor. |
 | `sensor_refrigerator_consumption` | entity | — | Optional refrigerator consumption sensor. |
 | `sensor_windmill_total` | entity | — | Optional windmill total generation sensor. |
@@ -224,7 +228,9 @@ sensor_grid_power: sensor.grid_power
 | `heat_pump_text_color` | string | `#FFA500` | Text colour for the heat pump wattage label. |
 | `pool_flow_color` | string | `#0080ff` | Pool flow colour. |
 | `pool_text_color` | string | `#FFFFFF` | Pool text colour. |
+| `hot_water_text_color` | string | `#FFFFFF` | Hot water text colour. |
 | `washing_machine_text_color` | string | `#FFFFFF` | Washer text colour (defaults to the load text colour when unset). |
+| `dishwasher_text_color` | string | `#FFFFFF` | Dish washer text colour (defaults to the load text colour when unset). |
 | `dryer_text_color` | string | `#FFFFFF` | Dryer text colour (defaults to the load text colour when unset). |
 | `refrigerator_text_color` | string | `#FFFFFF` | Refrigerator text colour (defaults to the load text colour when unset). |
 | `windmill_flow_color` | string | `#00FFFF` | Windmill flow colour. |
@@ -279,6 +285,7 @@ a helper to display it.
   - `sensor_popup_house_1_name` .. `sensor_popup_house_6_name`: optional custom names.
   - `sensor_popup_house_1_color` .. `sensor_popup_house_6_color`: per-line colour pickers (default `#80ffff`).
   - `sensor_popup_house_1_font_size` .. `sensor_popup_house_6_font_size`: per-line font-size (px) (default `14`).
+  - When configured, the House popup also auto-includes: Heat Pump/AC, Pool, Washing Machine, Dryer, Dish Washer, and Refrigerator (using the popup slot styling).
   - House clickable area is the House; click to toggle the House popup and click the popup to close.
 
 - Battery Popup
