@@ -1,7 +1,7 @@
 ﻿/**
  * Advanced Energy Card
  * Custom Home Assistant card for energy flow visualization
- * Version: 1.0.9
+ * Version: 1.0.20
  * Tested with Home Assistant 2025.12+
  */
 const BATTERY_GEOMETRY = { X: 260, Y_BASE: 350, WIDTH: 55, MAX_HEIGHT: 84 };
@@ -456,10 +456,66 @@ function applySvgLayerVisibility(svgElement, config) {
   const hasArray2Total = config.sensor_pv_total_secondary;
   const hasArray2 = Boolean(hasArray2PVStrings || hasArray2Total);
 
+  const inverter1Active = Boolean(config.sensor_grid_power)
+    || (Boolean(config.sensor_grid_import) && Boolean(config.sensor_grid_export))
+    || Boolean(config.sensor_windmill_total);
+  const inverter2Active = Boolean(config.sensor_grid2_power)
+    || (Boolean(config.sensor_grid2_import) && Boolean(config.sensor_grid2_export));
+
+  const inverter2Nodes = svgElement.querySelectorAll('[data-role="inverter2"]');
+  inverter2Nodes.forEach((node) => {
+    if (!node || !node.style) {
+      return;
+    }
+    node.style.opacity = inverter2Active ? '1' : '0';
+  });
+
+  const pv1Nodes = svgElement.querySelectorAll('[data-flow-key="pv1"]');
+  const pv2Nodes = svgElement.querySelectorAll('[data-flow-key="pv2"]');
+  const pv1Enabled = hasArray1 || hasArray2;
+  const pv2Enabled = inverter2Active && hasArray2;
+
+  pv1Nodes.forEach((node) => {
+    if (!node || typeof node.setAttribute !== 'function' || typeof node.removeAttribute !== 'function') {
+      return;
+    }
+    if (node.style) {
+      node.style.opacity = pv1Enabled ? '1' : '0';
+    }
+  });
+
+  pv2Nodes.forEach((node) => {
+    if (!node || typeof node.setAttribute !== 'function' || typeof node.removeAttribute !== 'function') {
+      return;
+    }
+    if (node.style) {
+      node.style.opacity = pv2Enabled ? '1' : '0';
+    }
+  });
+
+  const arrayInverter1Nodes = svgElement.querySelectorAll('[data-flow-key="array-inverter1"]');
+  const arrayInverter2Nodes = svgElement.querySelectorAll('[data-flow-key="array-inverter2"]');
+
+  arrayInverter1Nodes.forEach((node) => {
+    if (!node || !node.style) {
+      return;
+    }
+    node.style.opacity = (inverter1Active && !inverter2Active) ? '1' : '0';
+  });
+
+  arrayInverter2Nodes.forEach((node) => {
+    if (!node || !node.style) {
+      return;
+    }
+    node.style.opacity = inverter2Active ? '1' : '0';
+  });
+
   // console.log(`Array 1 configured: ${hasArray1} (PV strings: ${!!hasArray1PVStrings}, Total sensor: ${!!hasArray1Total})`);
   // console.log(`Array 2 configured: ${hasArray2} (PV strings: ${!!hasArray2PVStrings}, Total sensor: ${!!hasArray2Total})`);
   // console.log(`Expected active layers: Base (always) + ${hasArray1 && hasArray2 ? '2Array' : hasArray1 ? '1Array' : 'NoSolar'}`);
   // console.log('=== End Configuration Summary ===');
+
+  // Removed array->inverter flow debugging for deleted flow keys.
 }
 const MAX_PV_LINES = 7;
 const PV_LINE_SPACING = 14;
@@ -505,7 +561,7 @@ const DEFAULT_BATTERY_LOW_THRESHOLD = 25;
 // - battery2-soc               <- viewState.battery2Soc.text
 // - battery2-power             <- viewState.battery2Power.text
 // - battery3-soc               <- viewState.battery3Soc.text
-// - battery3-power             <- viewState.battery3Power.text
+// - battery3-power             <- viewState.bado you have a er.text
 // - battery4-soc               <- viewState.battery4Soc.text
 // - battery4-power             <- viewState.battery4Power.text
 // - battery-soc               <- viewState.batterySoc.text
@@ -820,14 +876,15 @@ class AdvancedEnergyCard extends HTMLElement {
   static getStubConfig() {
     return {
       language: 'en',
+      initial_configuration: true,
       card_title: '',
       title_text_color: '#00FFFF',
       title_bg_color: '#0080ff',
       font_family: 'B612',
       odometer_font_family: 'B612 Mono',
-      background_day: '/local/community/advanced-energy-card/advanced-modern-day.svg',
-      background_night: '/local/community/advanced-energy-card/advanced-modern-night.svg',
-      day_night_mode: 'auto',
+      background_day: '/local/community/advanced-energy-card/tech.svg',
+      background_night: '/local/community/advanced-energy-card/tech.svg',
+      day_night_mode: 'day',
       night_mode: false,
       header_font_size: 16,
       daily_label_font_size: 12,
@@ -841,6 +898,7 @@ class AdvancedEnergyCard extends HTMLElement {
       heat_pump_font_size: 8,
       pool_font_size: 8,
       washing_machine_font_size: 8,
+      dishwasher_font_size: 8,
       dryer_font_size: 8,
       refrigerator_font_size: 8,
       grid_font_size: 8,
@@ -891,8 +949,10 @@ class AdvancedEnergyCard extends HTMLElement {
       sensor_home_load_secondary: '',
       sensor_heat_pump_consumption: '',
       heat_pump_label: 'Heat Pump',
+      sensor_hot_water_consumption: '',
       sensor_pool_consumption: '',
       sensor_washing_machine_consumption: '',
+      sensor_dishwasher_consumption: '',
       sensor_dryer_consumption: '',
       sensor_refrigerator_consumption: '',
       sensor_grid_power: '',
@@ -940,8 +1000,10 @@ class AdvancedEnergyCard extends HTMLElement {
       pool_flow_color: '#0080ff',
       pool_text_color: '#00FFFF',
       washing_machine_text_color: '#00FFFF',
+      dishwasher_text_color: '#00FFFF',
       dryer_text_color: '#00FFFF',
       refrigerator_text_color: '#00FFFF',
+      hot_water_text_color: '#00FFFF',
       windmill_flow_color: '#00FFFF',
       windmill_text_color: '#00FFFF',
       invert_battery: false,
@@ -2023,6 +2085,33 @@ class AdvancedEnergyCard extends HTMLElement {
       }
     })();
     const shouldShow = isActive || isConfigStyled;
+    const isForceHidden = (() => {
+      try {
+        const raw = element.getAttribute && element.getAttribute('data-advanced-force-hidden');
+        return raw === '1' || raw === 'true';
+      } catch (e) {
+        return false;
+      }
+    })();
+    if (isForceHidden) {
+      try {
+        if (typeof element.removeAttribute === 'function') {
+          element.removeAttribute('data-style');
+        }
+      } catch (e) {
+        // ignore
+      }
+      if (element.tagName === 'g') {
+        const paths = element.querySelectorAll('path');
+        paths.forEach(path => path.style.opacity = '0');
+      } else if (element.style) {
+        element.style.opacity = '0';
+      }
+      if (arrowGroup && arrowGroup.style) {
+        arrowGroup.style.opacity = '0';
+      }
+      return;
+    }
     const configuredFlowStrokeWidthPx = (() => {
       const v = Number(this._flowStrokeWidthPx);
       return Number.isFinite(v) ? v : null;
@@ -2934,7 +3023,37 @@ class AdvancedEnergyCard extends HTMLElement {
         }
       } else if (entry.element.tagName === 'g') {
         const paths = entry.element.querySelectorAll('path');
-        paths.forEach(path => path.style.strokeDashoffset = `${offset}`);
+        paths.forEach((path) => {
+          const pathDirectionMultiplier = (() => {
+            try {
+              const raw = (
+                (typeof path.getAttribute === 'function' ? path.getAttribute('data-flow-dir') : null)
+                || (typeof path.getAttribute === 'function' ? path.getAttribute('data-flow-direction') : null)
+                || (typeof path.getAttribute === 'function' ? path.getAttribute('data-flow-reverse') : null)
+                || ''
+              );
+              const v = String(raw).trim().toLowerCase();
+              if (!v) {
+                return 1;
+              }
+              if (v === 'reverse' || v === 'invert' || v === 'true' || v === 'yes' || v === 'on' || v === '-1' || v === 'ccw') {
+                return -1;
+              }
+              if (v === 'forward' || v === 'false' || v === 'no' || v === 'off' || v === '1' || v === 'cw') {
+                return 1;
+              }
+              const n = Number(v);
+              if (Number.isFinite(n) && n !== 0) {
+                return n < 0 ? -1 : 1;
+              }
+            } catch (e) {
+              // ignore
+            }
+            return 1;
+          })();
+          const appliedOffset = pathDirectionMultiplier < 0 ? -offset : offset;
+          path.style.strokeDashoffset = `${appliedOffset}`;
+        });
       } else {
         entry.element.style.strokeDashoffset = `${offset}`;
       }
@@ -3342,6 +3461,12 @@ class AdvancedEnergyCard extends HTMLElement {
     const hasHeatPumpSensor = Boolean(heatPumpSensorId);
     const heat_pump_w = hasHeatPumpSensor ? this.getStateSafe(heatPumpSensorId) : 0;
 
+    const hotWaterSensorId = typeof config.sensor_hot_water_consumption === 'string'
+      ? config.sensor_hot_water_consumption.trim()
+      : (config.sensor_hot_water_consumption || null);
+    const hasHotWaterSensor = Boolean(hotWaterSensorId);
+    const hot_water_w = hasHotWaterSensor ? this.getStateSafe(hotWaterSensorId) : 0;
+
     const poolSensorId = typeof config.sensor_pool_consumption === 'string'
       ? config.sensor_pool_consumption.trim()
       : (config.sensor_pool_consumption || null);
@@ -3353,6 +3478,12 @@ class AdvancedEnergyCard extends HTMLElement {
       : (config.sensor_washing_machine_consumption || null);
     const hasWashingMachineSensor = Boolean(washingMachineSensorId);
     const washing_machine_w = hasWashingMachineSensor ? this.getStateSafe(washingMachineSensorId) : 0;
+
+    const dishwasherSensorId = typeof config.sensor_dishwasher_consumption === 'string'
+      ? config.sensor_dishwasher_consumption.trim()
+      : (config.sensor_dishwasher_consumption || null);
+    const hasDishwasherSensor = Boolean(dishwasherSensorId);
+    const dishwasher_w = hasDishwasherSensor ? this.getStateSafe(dishwasherSensorId) : 0;
 
     const dryerSensorId = typeof config.sensor_dryer_consumption === 'string'
       ? config.sensor_dryer_consumption.trim()
@@ -3793,6 +3924,7 @@ class AdvancedEnergyCard extends HTMLElement {
       load_font_size
     );
     const heat_pump_font_size = clampValue(config.heat_pump_font_size, 4, 28, 16);
+    const hot_water_font_size = clampValue(config.hot_water_font_size, 4, 28, 8);
     const pool_font_size = clampValue(
       config.pool_font_size !== undefined ? config.pool_font_size : config.heat_pump_font_size,
       4,
@@ -3805,6 +3937,7 @@ class AdvancedEnergyCard extends HTMLElement {
       28,
       heat_pump_font_size
     );
+    const dishwasher_font_size = clampValue(config.dishwasher_font_size, 4, 28, 8);
     const dryer_font_size = clampValue(
       config.dryer_font_size !== undefined ? config.dryer_font_size : config.heat_pump_font_size,
       4,
@@ -3943,7 +4076,9 @@ class AdvancedEnergyCard extends HTMLElement {
 
     const poolFlowColor = resolveColor(config.pool_flow_color, effectiveLoadFlowColor);
     const poolTextColor = resolveColor(config.pool_text_color, effectiveLoadTextColor);
+    const hotWaterTextColor = resolveColor(config.hot_water_text_color, effectiveLoadTextColor);
     const washingMachineTextColor = resolveColor(config.washing_machine_text_color, effectiveLoadTextColor);
+    const dishwasherTextColor = resolveColor(config.dishwasher_text_color, effectiveLoadTextColor);
     const dryerTextColor = resolveColor(config.dryer_text_color, effectiveLoadTextColor);
     const refrigeratorTextColor = resolveColor(config.refrigerator_text_color, effectiveLoadTextColor);
     const batteryChargeColor = resolveColor(config.battery_charge_color, C_CYAN);
@@ -4009,7 +4144,7 @@ class AdvancedEnergyCard extends HTMLElement {
     const gridAnimationDirection = -gridDirectionSign;
     const gridImportExportDirection = -gridDirectionSign;
     const gridHouseDirection = gridDirectionSign;
-    const inverter1ImportExportDirection = -grid1Direction;
+    const inverter1ImportExportDirection = grid1Direction;
     const inverter2ImportExportDirection = -grid2Direction;
     const show_double_flow = (pv_primary_w > 10 && pv_secondary_w > 10);
     const pvLinesRaw = [];
@@ -4092,6 +4227,9 @@ class AdvancedEnergyCard extends HTMLElement {
 
     const pvTotalId = resolveEntityId(config.sensor_pv_total);
     const pvTotal2Id = resolveEntityId(config.sensor_pv_total_secondary);
+    const hasPvConfigured = Boolean(pvTotalId || pvTotal2Id)
+      || (Array.isArray(pvStringIds) && pvStringIds.length > 0)
+      || (Array.isArray(pvArray2Ids) && pvArray2Ids.length > 0);
     const hasValidArray1Production = Boolean(pvTotalId && isEntityAvailable(pvTotalId))
       || (Array.isArray(pvStringIds) && pvStringIds.some((sensorId) => {
         const id = resolveEntityId(sensorId);
@@ -4103,6 +4241,8 @@ class AdvancedEnergyCard extends HTMLElement {
         return Boolean(id && isEntityAvailable(id));
       }));
     const hasPrimarySolar = Boolean(hasValidArray1Production || hasValidArray2Production);
+    const inverter2ConfiguredForPv = Boolean(config.sensor_grid2_power)
+      || (Boolean(config.sensor_grid2_import) && Boolean(config.sensor_grid2_export));
     const useHouseGridPath = !hasPrimarySolar;
     const pvUiPreviouslyEnabled = this._pvUiEnabled !== undefined ? this._pvUiEnabled : true;
     const pvUiEnabled = hasPrimarySolar;
@@ -4127,24 +4267,49 @@ class AdvancedEnergyCard extends HTMLElement {
       car2Charging
     });
 
+    const inverter1Configured = Boolean(config.sensor_grid_power)
+      || (Boolean(config.sensor_grid_import) && Boolean(config.sensor_grid_export))
+      || Boolean(config.sensor_windmill_total);
+    const inverter2Configured = Boolean(config.sensor_grid2_power)
+      || (Boolean(config.sensor_grid2_import) && Boolean(config.sensor_grid2_export));
+    const inverter2Active = inverter2Configured;
+
     const batteryFlowStates = batteryStates.map((bat) => {
       const powerValue = Number.isFinite(bat.power) ? bat.power : 0;
       const magnitude = Math.abs(powerValue);
       const direction = powerValue >= 0 ? 1 : -1;
       const color = direction >= 0 ? batteryChargeColor : batteryDischargeColor;
+      const inverter1BatteryAllowed = !(inverter2Active && bat.index >= 3);
       return {
         key: `inverter1-battery${bat.index}`,
         stroke: color,
         glowColor: color,
-        active: Boolean(bat.visible && magnitude > 10),
+        active: Boolean(inverter1BatteryAllowed && bat.visible && magnitude > 10),
         direction
       };
     });
+    const inverter2BatteryFlowStates = batteryStates
+      .filter((bat) => bat.index >= 3)
+      .map((bat) => {
+        const powerValue = Number.isFinite(bat.power) ? bat.power : 0;
+        const magnitude = Math.abs(powerValue);
+        const direction = powerValue >= 0 ? 1 : -1;
+        const color = direction >= 0 ? batteryChargeColor : batteryDischargeColor;
+        return {
+          key: `inverter2-battery${bat.index}`,
+          stroke: color,
+          glowColor: color,
+          active: Boolean(inverter2Active && bat.visible && magnitude > 10),
+          direction
+        };
+      });
 
     const flows = {
       // Keep Array 1 visible even when Array 2 is generating so both flows animate together.
       pv1: { stroke: pvPrimaryColor, glowColor: pvPrimaryColor, active: pv_primary_w > 0 },
-      pv2: { stroke: pvSecondaryColor, glowColor: pvSecondaryColor, active: pv_secondary_w > 0 },
+      pv2: { stroke: pvSecondaryColor, glowColor: pvSecondaryColor, active: inverter2ConfiguredForPv && pv_secondary_w > 0 },
+      'array-inverter1': { stroke: pvPrimaryColor, glowColor: pvPrimaryColor, active: inverter1Configured && !inverter2Active },
+      'array-inverter2': { stroke: pvSecondaryColor, glowColor: pvSecondaryColor, active: inverter2Configured },
       windmill: { stroke: windmillFlowColor, glowColor: windmillFlowColor, active: windmillFlowActive, direction: 1 },
       load: { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: loadMagnitude > 10, direction: 1 },
       'house-load': { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: loadMagnitude > 10, direction: 1 },
@@ -4172,6 +4337,12 @@ class AdvancedEnergyCard extends HTMLElement {
       heatPump: { stroke: heatPumpFlowColor, glowColor: heatPumpFlowColor, active: hasHeatPumpSensor && heat_pump_w > 10, direction: 1 },
       pool: { stroke: poolFlowColor, glowColor: poolFlowColor, active: hasPoolSensor && Math.abs(pool_w) > 10, direction: 1 },
       ...Object.fromEntries(batteryFlowStates.map((state) => [state.key, {
+        stroke: state.stroke,
+        glowColor: state.glowColor,
+        active: state.active,
+        direction: state.direction
+      }])),
+      ...Object.fromEntries(inverter2BatteryFlowStates.map((state) => [state.key, {
         stroke: state.stroke,
         glowColor: state.glowColor,
         active: state.active,
@@ -4284,7 +4455,7 @@ class AdvancedEnergyCard extends HTMLElement {
       pv: { fontSize: pv_font_size, lines: pvLines },
       pv1Total: { text: this.formatPower(pv_primary_w, use_kw), fontSize: pv_font_size, fill: pvTotColor, visible: pvUiEnabled },
       pv2Total: { text: this.formatPower(pv_secondary_w, use_kw), fontSize: pv_font_size, fill: pvTotColor, visible: pv_secondary_w > 10 },
-      pvTotal: { text: this.formatPower(total_pv_w, use_kw), fontSize: pv_font_size, fill: pvTotColor, visible: pvUiEnabled },
+      pvTotal: { text: this.formatPower(total_pv_w, use_kw), fontSize: pv_font_size, fill: pvTotColor, visible: hasPvConfigured },
       windmillPower: { text: windmillTotalAvailable ? this.formatPower(windmillTotalW, use_kw) : '', fontSize: windmill_power_font_size, fill: windmillTextColor, visible: Boolean(windmillTotalId) },
       load: (loadLines && loadLines.length) ? { lines: loadLines, y: loadY, fontSize: load_font_size, fill: effectiveLoadTextColor } : { text: this.formatPower(loadValue, use_kw), fontSize: load_font_size, fill: effectiveLoadTextColor },
       houseLoad: { text: this.formatPower(loadValue, use_kw), fontSize: load_font_size, fill: effectiveLoadFlowColor, visible: true, odometer: grid_current_odometer, odometerDuration: grid_current_odometer_duration },
@@ -4312,6 +4483,12 @@ class AdvancedEnergyCard extends HTMLElement {
         fill: heatPumpTextColor,
         visible: hasHeatPumpSensor
       },
+      hotWater: {
+        text: hasHotWaterSensor ? this.formatPower(hot_water_w, use_kw) : '',
+        fontSize: hot_water_font_size,
+        fill: hotWaterTextColor,
+        visible: hasHotWaterSensor
+      },
       pool: {
         text: hasPoolSensor ? this.formatPower(pool_w, use_kw) : '',
         fontSize: pool_font_size,
@@ -4323,6 +4500,12 @@ class AdvancedEnergyCard extends HTMLElement {
         fontSize: washing_machine_font_size,
         fill: washingMachineTextColor,
         visible: hasWashingMachineSensor
+      },
+      dishwasher: {
+        text: hasDishwasherSensor ? this.formatPower(dishwasher_w, use_kw) : '',
+        fontSize: dishwasher_font_size,
+        fill: dishwasherTextColor,
+        visible: hasDishwasherSensor
       },
       dryer: {
         text: hasDryerSensor ? this.formatPower(dryer_w, use_kw) : '',
@@ -4767,6 +4950,8 @@ class AdvancedEnergyCard extends HTMLElement {
       flows: {
         pv1: root.querySelector('[data-flow-key="pv1"]'),
         pv2: root.querySelector('[data-flow-key="pv2"]'),
+        'array-inverter1': root.querySelector('[data-flow-key="array-inverter1"]'),
+        'array-inverter2': root.querySelector('[data-flow-key="array-inverter2"]'),
         windmill: root.querySelector('[data-flow-key="windmill"]'),
         load: root.querySelector('[data-flow-key="load"]'),
         'house-load': root.querySelector('[data-flow-key="house-load"]'),
@@ -4786,6 +4971,8 @@ class AdvancedEnergyCard extends HTMLElement {
         'inverter1-battery2': root.querySelector('[data-flow-key="inverter1-battery2"]'),
         'inverter1-battery3': root.querySelector('[data-flow-key="inverter1-battery3"]'),
         'inverter1-battery4': root.querySelector('[data-flow-key="inverter1-battery4"]'),
+        'inverter2-battery3': root.querySelector('[data-flow-key="inverter2-battery3"]'),
+        'inverter2-battery4': root.querySelector('[data-flow-key="inverter2-battery4"]'),
         pool: root.querySelector('[data-flow-key="pool"]')
       },
       rotateElements: []
@@ -4810,6 +4997,8 @@ class AdvancedEnergyCard extends HTMLElement {
     this._domRefs.arrows = {
       pv1: root.querySelector('[data-arrow-key="pv1"]'),
       pv2: root.querySelector('[data-arrow-key="pv2"]'),
+      'array-inverter1': root.querySelector('[data-arrow-key="array-inverter1"]'),
+      'array-inverter2': root.querySelector('[data-arrow-key="array-inverter2"]'),
       load: root.querySelector('[data-arrow-key="load"]'),
       'house-load': root.querySelector('[data-arrow-key="house-load"]'),
       grid: root.querySelector('[data-arrow-key="grid"]'),
@@ -4827,11 +5016,15 @@ class AdvancedEnergyCard extends HTMLElement {
       'inverter1-battery1': root.querySelector('[data-arrow-key="inverter1-battery1"]'),
       'inverter1-battery2': root.querySelector('[data-arrow-key="inverter1-battery2"]'),
       'inverter1-battery3': root.querySelector('[data-arrow-key="inverter1-battery3"]'),
-      'inverter1-battery4': root.querySelector('[data-arrow-key="inverter1-battery4"]')
+      'inverter1-battery4': root.querySelector('[data-arrow-key="inverter1-battery4"]'),
+      'inverter2-battery3': root.querySelector('[data-arrow-key="inverter2-battery3"]'),
+      'inverter2-battery4': root.querySelector('[data-arrow-key="inverter2-battery4"]')
     };
     this._domRefs.arrowShapes = {
       pv1: Array.from(root.querySelectorAll('[data-arrow-shape="pv1"]')),
       pv2: Array.from(root.querySelectorAll('[data-arrow-shape="pv2"]')),
+      'array-inverter1': Array.from(root.querySelectorAll('[data-arrow-shape="array-inverter1"]')),
+      'array-inverter2': Array.from(root.querySelectorAll('[data-arrow-shape="array-inverter2"]')),
       load: Array.from(root.querySelectorAll('[data-arrow-shape="load"]')),
       'house-load': Array.from(root.querySelectorAll('[data-arrow-shape="house-load"]')),
       grid: Array.from(root.querySelectorAll('[data-arrow-shape="grid"]')),
@@ -4849,7 +5042,9 @@ class AdvancedEnergyCard extends HTMLElement {
       'inverter1-battery1': Array.from(root.querySelectorAll('[data-arrow-shape="inverter1-battery1"]')),
       'inverter1-battery2': Array.from(root.querySelectorAll('[data-arrow-shape="inverter1-battery2"]')),
       'inverter1-battery3': Array.from(root.querySelectorAll('[data-arrow-shape="inverter1-battery3"]')),
-      'inverter1-battery4': Array.from(root.querySelectorAll('[data-arrow-shape="inverter1-battery4"]'))
+      'inverter1-battery4': Array.from(root.querySelectorAll('[data-arrow-shape="inverter1-battery4"]')),
+      'inverter2-battery3': Array.from(root.querySelectorAll('[data-arrow-shape="inverter2-battery3"]')),
+      'inverter2-battery4': Array.from(root.querySelectorAll('[data-arrow-shape="inverter2-battery4"]'))
     };
     this._domRefs.headlights = {
       car1: Array.from(root.querySelectorAll('[data-feature~="car1-headlights"]')),
@@ -5481,22 +5676,25 @@ class AdvancedEnergyCard extends HTMLElement {
     // Check if popup has any content by checking if any house entities are configured
     const config = this._config || this.config || {};
     if (!config) return;
+    const hasAnyConfig = (keys) => keys.some((key) => {
+      const raw = config[key];
+      return raw !== undefined && raw !== null && String(raw).trim();
+    });
     const hasContent = (config.sensor_popup_house_1 && config.sensor_popup_house_1.trim()) || 
-                      (config.sensor_popup_house_2 && config.sensor_popup_house_2.trim()) || 
-                      (config.sensor_popup_house_3 && config.sensor_popup_house_3.trim()) || 
-                      (config.sensor_popup_house_4 && config.sensor_popup_house_4.trim()) || 
-                      (config.sensor_popup_house_5 && config.sensor_popup_house_5.trim()) || 
-                      (config.sensor_popup_house_6 && config.sensor_popup_house_6.trim());
+              (config.sensor_popup_house_2 && config.sensor_popup_house_2.trim()) || 
+              (config.sensor_popup_house_3 && config.sensor_popup_house_3.trim()) || 
+              (config.sensor_popup_house_4 && config.sensor_popup_house_4.trim()) || 
+              (config.sensor_popup_house_5 && config.sensor_popup_house_5.trim()) || 
+              (config.sensor_popup_house_6 && config.sensor_popup_house_6.trim()) ||
+              hasAnyConfig(['sensor_heat_pump_consumption']) ||
+              hasAnyConfig(['sensor_pool_consumption', 'sensor_pool_power', 'sensor_pool_load']) ||
+              hasAnyConfig(['sensor_washing_machine_consumption', 'sensor_washer_consumption', 'sensor_washing_machine_power', 'sensor_washer_power']) ||
+              hasAnyConfig(['sensor_dryer_consumption', 'sensor_dryer_power']) ||
+              hasAnyConfig(['sensor_dishwasher_consumption', 'sensor_dishwasher_power', 'sensor_dish_washer_consumption', 'sensor_dishwasher_load']) ||
+              hasAnyConfig(['sensor_refrigerator_consumption', 'sensor_refrigerator_power', 'sensor_fridge_consumption', 'sensor_fridge_power']);
     if (!hasContent) return;
-    
-    const popup = this._domRefs.housePopup;
-    const isVisible = popup.style.display !== 'none';
-    if (isVisible) {
-      this._hideHousePopup();
-    } else {
-      this._closeOtherPopups('house');
-      this._showHousePopup();
-    }
+
+    this._togglePopupOverlay('house');
   }
 
   async _showHousePopup() {
@@ -5506,36 +5704,85 @@ class AdvancedEnergyCard extends HTMLElement {
     // Get house popup data
     const config = this._config || this.config || {};
     if (!config) return;
-    const popupHouseSensorIds = [
-      config.sensor_popup_house_1,
-      config.sensor_popup_house_2,
-      config.sensor_popup_house_3,
-      config.sensor_popup_house_4,
-      config.sensor_popup_house_5,
-      config.sensor_popup_house_6
+    const lineData = [];
+    const usedEntityIds = new Set();
+    const pushLine = (entry) => {
+      if (!entry) return;
+      lineData.push(entry);
+      if (entry.entityId) usedEntityIds.add(entry.entityId);
+    };
+    const resolveFontSize = (value, fallback) => {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+    };
+    const resolveColor = (value, fallback) => {
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+      return fallback;
+    };
+    const heatPumpLabel = (typeof config.heat_pump_label === 'string' && config.heat_pump_label.trim())
+      ? config.heat_pump_label.trim()
+      : 'Heat Pump/AC';
+    const autoEntries = [
+      { key: 'sensor_heat_pump_consumption', label: heatPumpLabel, fontKey: 'heat_pump_font_size', colorKey: 'heat_pump_text_color' },
+      { key: 'sensor_pool_consumption', label: 'Pool', fontKey: 'pool_font_size', colorKey: 'pool_text_color' },
+      { key: 'sensor_washing_machine_consumption', label: 'Washing Machine', fontKey: 'washing_machine_font_size', colorKey: 'washing_machine_text_color' },
+      { key: 'sensor_dryer_consumption', label: 'Dryer', fontKey: 'dryer_font_size', colorKey: 'dryer_text_color' },
+      { key: 'sensor_dishwasher_consumption', label: 'Dish Washer', fontKey: 'dishwasher_font_size', colorKey: 'dishwasher_text_color' },
+      { key: 'sensor_refrigerator_consumption', label: 'Refrigerator', fontKey: 'refrigerator_font_size', colorKey: 'refrigerator_text_color' }
     ];
-    const popupHouseValues = popupHouseSensorIds.map((sensorId) => this.formatPopupValue(null, sensorId));
-    
-    const popupHouseNames = [
-      config.sensor_popup_house_1_name && config.sensor_popup_house_1_name.trim() ? config.sensor_popup_house_1_name.trim() : this.getEntityName(config.sensor_popup_house_1),
-      config.sensor_popup_house_2_name && config.sensor_popup_house_2_name.trim() ? config.sensor_popup_house_2_name.trim() : this.getEntityName(config.sensor_popup_house_2),
-      config.sensor_popup_house_3_name && config.sensor_popup_house_3_name.trim() ? config.sensor_popup_house_3_name.trim() : this.getEntityName(config.sensor_popup_house_3),
-      config.sensor_popup_house_4_name && config.sensor_popup_house_4_name.trim() ? config.sensor_popup_house_4_name.trim() : this.getEntityName(config.sensor_popup_house_4),
-      config.sensor_popup_house_5_name && config.sensor_popup_house_5_name.trim() ? config.sensor_popup_house_5_name.trim() : this.getEntityName(config.sensor_popup_house_5),
-      config.sensor_popup_house_6_name && config.sensor_popup_house_6_name.trim() ? config.sensor_popup_house_6_name.trim() : this.getEntityName(config.sensor_popup_house_6)
-    ];
-    
-    const lines = popupHouseValues
-      .map((valueText, i) => (valueText ? `${popupHouseNames[i]}: ${valueText}` : ''))
-      .filter((line) => line);
+    autoEntries.forEach((entry) => {
+      const entityIdRaw = config[entry.key];
+      const entityId = typeof entityIdRaw === 'string' ? entityIdRaw.trim() : entityIdRaw;
+      if (!entityId || usedEntityIds.has(entityId)) {
+        return;
+      }
+      const valueText = this.formatPopupValue(null, entityId);
+      if (!valueText) {
+        return;
+      }
+      pushLine({
+        text: `${entry.label}: ${valueText}`,
+        fontSize: resolveFontSize(config[entry.fontKey], 16),
+        color: resolveColor(config[entry.colorKey], '#80ffff'),
+        entityId
+      });
+    });
+
+    for (let i = 1; i <= 6; i++) {
+      const entityKey = `sensor_popup_house_${i}`;
+      const nameKey = `${entityKey}_name`;
+      const fontKey = `${entityKey}_font_size`;
+      const colorKey = `${entityKey}_color`;
+
+      const entityIdRaw = config[entityKey];
+      const entityId = typeof entityIdRaw === 'string' ? entityIdRaw.trim() : entityIdRaw;
+      if (!entityId || usedEntityIds.has(entityId)) {
+        continue;
+      }
+      const valueText = this.formatPopupValue(null, entityId);
+      if (!valueText) {
+        continue;
+      }
+      const nameOverride = config[nameKey];
+      const name = (typeof nameOverride === 'string' && nameOverride.trim())
+        ? nameOverride.trim()
+        : this.getEntityName(entityId);
+      pushLine({
+        text: `${name}: ${valueText}`,
+        fontSize: resolveFontSize(config[fontKey], 16),
+        color: resolveColor(config[colorKey], '#80ffff'),
+        entityId
+      });
+    }
+
+    const lines = lineData.map((line) => line.text).filter((line) => line);
     if (!lines.length) return;
     
     // Calculate popup dimensions based on content
     // Find the maximum font size used in the popup for width and height calculation
-    const maxFontSize = Math.max(...lines.map((_, index) => {
-      const fontSizeKey = `sensor_popup_house_${index + 1}_font_size`;
-      return config[fontSizeKey] || 16;
-    }));
+    const maxFontSize = Math.max(...lineData.map((line) => line.fontSize || 16));
     
     // Calculate line height based on font size (font-size + 1px padding for readability)
     const lineHeight = maxFontSize + 1;
@@ -5578,30 +5825,22 @@ class AdvancedEnergyCard extends HTMLElement {
     
     // Update text positions and styling
     const lineElements = this._domRefs.housePopupLines || [];
-    lines.forEach((line, index) => {
+    lineData.forEach((line, index) => {
       const element = lineElements[index];
-      if (element && line) {
+      if (element && line && line.text) {
         element.setAttribute('x', popupX + popupWidth / 2);
         element.setAttribute('y', popupY + topPadding + (index * lineHeight) + (lineHeight / 2));
-        element.textContent = line;
+        element.textContent = line.text;
         element.style.display = 'inline';
-        
-        // Apply font size
-        const fontSizeKey = `sensor_popup_house_${index + 1}_font_size`;
-        const fontSize = config[fontSizeKey] || 16;
-        element.setAttribute('font-size', fontSize);
-        
-        // Apply color
-        const colorKey = `sensor_popup_house_${index + 1}_color`;
-        const color = config[colorKey] || '#80ffff';
-        element.setAttribute('fill', color);
+        element.setAttribute('font-size', line.fontSize || 16);
+        element.setAttribute('fill', line.color || '#80ffff');
       } else if (element) {
         element.style.display = 'none';
       }
     });
     
     // Hide unused lines
-    for (let i = lines.length; i < lineElements.length; i++) {
+    for (let i = lineData.length; i < lineElements.length; i++) {
       const element = lineElements[i];
       if (element) {
         element.style.display = 'none';
@@ -7629,6 +7868,10 @@ class AdvancedEnergyCard extends HTMLElement {
           nl: 'Wasmachine:',
           linkTo: 'washing-machine-power'
         },
+        'dishwasher-power-text': {
+          en: 'Dishwasher:',
+          linkTo: 'dishwasher-power'
+        },
         // Back-compat / common typo: user may provide washing-machine-power="Washer:" expecting the label.
         // The translation system only targets roles ending in -text, so we alias it.
         'washing-machine-power': {
@@ -7662,6 +7905,10 @@ class AdvancedEnergyCard extends HTMLElement {
           fr: 'PAC/Clim :',
           nl: 'Warmtepomp/AC:',
           linkTo: 'heat-pump-power'
+        },
+        'hot-water-power-text': {
+          en: 'Hot Water:',
+          linkTo: 'hot-water-power'
         },
         'pool-power-text': {
           en: 'Pool:',
@@ -7726,37 +7973,6 @@ class AdvancedEnergyCard extends HTMLElement {
             // Some base roles start with opacity:0 for animation, but the corresponding '*-text' label must stay visible.
             const labelDataStyle = ((node.getAttribute && node.getAttribute('data-style')) ? node.getAttribute('data-style') : '') || '';
             if (String(labelDataStyle).trim().toLowerCase() === 'config') {
-              // Alignment convention for easier authoring:
-              // - labels (*-text) are right-aligned
-              // - values (base roles) are left-aligned
-              try {
-                if (labelTarget && typeof labelTarget.setAttribute === 'function') {
-                  labelTarget.setAttribute('text-anchor', 'end');
-                }
-                if (labelTarget && labelTarget.style) {
-                  labelTarget.style.textAnchor = 'end';
-                  if (typeof labelTarget.style.setProperty === 'function') {
-                    labelTarget.style.setProperty('text-anchor', 'end');
-                  }
-                }
-              } catch (e) {
-                // ignore
-              }
-
-              try {
-                if (baseTarget && typeof baseTarget.setAttribute === 'function') {
-                  baseTarget.setAttribute('text-anchor', 'start');
-                }
-                if (baseTarget && baseTarget.style) {
-                  baseTarget.style.textAnchor = 'start';
-                  if (typeof baseTarget.style.setProperty === 'function') {
-                    baseTarget.style.setProperty('text-anchor', 'start');
-                  }
-                }
-              } catch (e) {
-                // ignore
-              }
-
               if (labelTarget && typeof labelTarget.getAttribute === 'function' && labelTarget.getAttribute('opacity') === '0') {
                 labelTarget.removeAttribute('opacity');
               }
@@ -7905,18 +8121,7 @@ class AdvancedEnergyCard extends HTMLElement {
             const baseRole = (typeof explicitLinkTo === 'string' && explicitLinkTo.trim())
               ? explicitLinkTo.trim()
               : role.endsWith('-text') ? role.slice(0, -5) : '';
-
             const labelTarget = getVisibilityTarget(node) || node;
-            if (labelTarget && typeof labelTarget.setAttribute === 'function') {
-              labelTarget.setAttribute('text-anchor', 'end');
-            }
-            if (labelTarget && labelTarget.style) {
-              labelTarget.style.textAnchor = 'end';
-              if (typeof labelTarget.style.setProperty === 'function') {
-                labelTarget.style.setProperty('text-anchor', 'end');
-              }
-            }
-
             // Labels are non-animated: always use the normal configured font, not the odometer font.
             if (typeof globalFontFamily === 'string' && globalFontFamily) {
               if (labelTarget && typeof labelTarget.setAttribute === 'function') {
@@ -7924,22 +8129,6 @@ class AdvancedEnergyCard extends HTMLElement {
               }
               if (labelTarget && labelTarget.style) {
                 labelTarget.style.fontFamily = globalFontFamily;
-              }
-            }
-
-            if (baseRole) {
-              const baseNode = svgRoot.querySelector(`[data-role="${baseRole}"]`);
-              if (baseNode) {
-                const baseTarget = getVisibilityTarget(baseNode) || baseNode;
-                if (baseTarget && typeof baseTarget.setAttribute === 'function') {
-                  baseTarget.setAttribute('text-anchor', 'start');
-                }
-                if (baseTarget && baseTarget.style) {
-                  baseTarget.style.textAnchor = 'start';
-                  if (typeof baseTarget.style.setProperty === 'function') {
-                    baseTarget.style.setProperty('text-anchor', 'start');
-                  }
-                }
               }
             }
           }
@@ -8941,6 +9130,15 @@ class AdvancedEnergyCard extends HTMLElement {
       fontSize: viewState.heatPump ? viewState.heatPump.fontSize : undefined
     });
 
+    // Hot water
+    const hotWaterVisible = Boolean(viewState.hotWater && viewState.hotWater.visible);
+    updateRole('hot-water-power', viewState.hotWater ? viewState.hotWater.text : '', {
+      visible: hotWaterVisible,
+      fill: viewState.hotWater ? viewState.hotWater.fill : undefined,
+      fontSize: viewState.hotWater ? viewState.hotWater.fontSize : undefined
+    });
+    setRoleVisibilityOnly('hot-water-power-text', hotWaterVisible);
+
     // Pool
     const poolVisible = Boolean(viewState.pool && viewState.pool.visible);
     updateRole('pool-power', viewState.pool ? viewState.pool.text : '', {
@@ -8958,6 +9156,13 @@ class AdvancedEnergyCard extends HTMLElement {
       fontSize: viewState.washingMachine ? viewState.washingMachine.fontSize : undefined
     });
     setRoleVisibilityOnly('washing-machine-power-text', washingMachineVisible);
+    const dishwasherVisible = Boolean(viewState.dishwasher && viewState.dishwasher.visible);
+    updateRole('dishwasher-power', viewState.dishwasher ? viewState.dishwasher.text : '', {
+      visible: dishwasherVisible,
+      fill: viewState.dishwasher ? viewState.dishwasher.fill : undefined,
+      fontSize: viewState.dishwasher ? viewState.dishwasher.fontSize : undefined
+    });
+    setRoleVisibilityOnly('dishwasher-power-text', dishwasherVisible);
     const dryerVisible = Boolean(viewState.dryer && viewState.dryer.visible);
     updateRole('dryer-power', viewState.dryer ? viewState.dryer.text : '', {
       visible: dryerVisible,
@@ -9278,10 +9483,13 @@ class AdvancedEnergyCard extends HTMLElement {
         return;
       }
       const trimmed = action.trim();
-      if (!trimmed.toLowerCase().startsWith('popup:')) {
-        return;
+      const normalized = trimmed.toLowerCase();
+      let type = '';
+      if (normalized.startsWith('popup:')) {
+        type = trimmed.slice(6).trim().toLowerCase();
+      } else if (normalized.startsWith('popup-')) {
+        type = trimmed.slice(6).trim().toLowerCase();
       }
-      const type = trimmed.slice(6).trim().toLowerCase();
       if (!type) {
         return;
       }
@@ -9408,6 +9616,67 @@ class AdvancedEnergyCard extends HTMLElement {
     }
 
     const lineData = [];
+    const usedEntityIds = new Set();
+    const pushLine = (entry) => {
+      if (!entry) {
+        return;
+      }
+      lineData.push(entry);
+      if (entry.entityId) {
+        usedEntityIds.add(entry.entityId);
+      }
+    };
+
+    if (type === 'house') {
+      const resolveEntityId = (keys) => {
+        for (const key of keys) {
+          const raw = config[key];
+          const candidate = typeof raw === 'string' ? raw.trim() : raw;
+          if (candidate) {
+            return candidate;
+          }
+        }
+        return '';
+      };
+      const basePopupFontSize = (() => {
+        const parsed = Number(config.sensor_popup_house_1_font_size);
+        return Number.isFinite(parsed) && parsed > 0 ? parsed : 16;
+      })();
+      const basePopupColor = (typeof config.sensor_popup_house_1_color === 'string' && config.sensor_popup_house_1_color.trim())
+        ? config.sensor_popup_house_1_color.trim()
+        : '#80ffff';
+      const heatPumpLabel = (typeof config.heat_pump_label === 'string' && config.heat_pump_label.trim())
+        ? config.heat_pump_label.trim()
+        : 'Heat Pump/AC';
+
+      const autoEntries = [
+        { keys: ['sensor_heat_pump_consumption'], label: heatPumpLabel, fontKey: 'heat_pump_font_size', colorKey: 'heat_pump_text_color' },
+        { keys: ['sensor_pool_consumption', 'sensor_pool_power', 'sensor_pool_load'], label: 'Pool', fontKey: 'pool_font_size', colorKey: 'pool_text_color' },
+        { keys: ['sensor_washing_machine_consumption', 'sensor_washer_consumption', 'sensor_washing_machine_power', 'sensor_washer_power'], label: 'Washing Machine', fontKey: 'washing_machine_font_size', colorKey: 'washing_machine_text_color' },
+        { keys: ['sensor_dryer_consumption', 'sensor_dryer_power'], label: 'Dryer', fontKey: 'dryer_font_size', colorKey: 'dryer_text_color' },
+        { keys: ['sensor_dishwasher_consumption', 'sensor_dishwasher_power', 'sensor_dish_washer_consumption', 'sensor_dishwasher_load'], label: 'Dish Washer', fontKey: 'dishwasher_font_size', colorKey: 'dishwasher_text_color' },
+        { keys: ['sensor_refrigerator_consumption', 'sensor_refrigerator_power', 'sensor_fridge_consumption', 'sensor_fridge_power'], label: 'Refrigerator', fontKey: 'refrigerator_font_size', colorKey: 'refrigerator_text_color' }
+      ];
+      autoEntries.forEach((entry) => {
+        const entityId = resolveEntityId(entry.keys || []);
+        if (!entityId) {
+          return;
+        }
+        const valueText = this.formatPopupValue(null, entityId);
+        if (!valueText) {
+          return;
+        }
+        const fontSize = basePopupFontSize;
+        const color = basePopupColor;
+        lineData.push({
+          text: `${entry.label}: ${valueText}`,
+          fontSize,
+          color,
+          entityId
+        });
+      });
+    }
+
     for (let i = 1; i <= 6; i++) {
       const entityKey = `${prefix}${i}`;
       const nameKey = `${entityKey}_name`;
@@ -9416,7 +9685,7 @@ class AdvancedEnergyCard extends HTMLElement {
 
       const entityIdRaw = config[entityKey];
       const entityId = typeof entityIdRaw === 'string' ? entityIdRaw.trim() : entityIdRaw;
-      if (!entityId) {
+      if (!entityId || usedEntityIds.has(entityId)) {
         continue;
       }
       const valueText = this.formatPopupValue(null, entityId);
@@ -9432,7 +9701,7 @@ class AdvancedEnergyCard extends HTMLElement {
       const fontSize = Number(config[fontKey]) || 16;
       const color = (typeof config[colorKey] === 'string' && config[colorKey]) ? config[colorKey] : '#80ffff';
 
-      lineData.push({
+      pushLine({
         text: `${name}: ${valueText}`,
         fontSize,
         color,
@@ -9595,7 +9864,7 @@ class AdvancedEnergyCard extends HTMLElement {
   }
 
   static get version() {
-    return '1.0.9';
+    return '1.0.20';
   }
 }
 
@@ -9701,6 +9970,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
       en: {
         sections: {
           general: { title: 'General Settings', helper: 'Card metadata, background, language, and update cadence.' },
+          initialConfig: { title: 'Initial Configuration', helper: 'First-time setup checklist and starter options.' },
           pvCommon: { title: 'Solar/PV Common', helper: 'Common Solar/PV settings shared across arrays.' },
           array1: { title: 'Solar/PV Array 1', helper: 'Choose the PV, battery, grid, load, and EV entities used by the card. Either the PV total sensor or your PV string arrays need to be specified as a minimum.' },
           array2: { title: 'Solar/PV Array 2', helper: 'If PV Total Sensor (Inverter 2) is set or the PV String values are provided, Array 2 will become active and enable the second inverter. You must also enable Daily Production Sensor (Array 2) and Home Load (Inverter 2).' },
@@ -9730,6 +10000,23 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           language: { label: 'Language', helper: 'Choose the editor language.' },
           display_unit: { label: 'Display Unit', helper: 'Unit used when formatting power values.' },
           update_interval: { label: 'Update Interval', helper: 'Refresh cadence for card updates (0 disables throttling).' },
+          initial_configuration: { label: 'Initial Configuration', helper: 'Show the Initial Configuration section in the editor.' },
+          initial_has_pv: { label: 'Do you have Solar/PV Power?', helper: 'Select Yes if you have solar production to configure.' },
+          initial_inverters: { label: 'How many inverters do you have?', helper: 'Shown only when Solar/PV is enabled.' },
+          initial_has_battery: { label: 'Do you have Battery storage?', helper: '' },
+          initial_battery_count: { label: 'How many Batteries do you have? Maximum 4', helper: '' },
+          initial_has_grid: { label: 'Do you have Grid supplied electricity?', helper: '' },
+          initial_can_export: { label: 'Can you export excess electricity to the grid?', helper: '' },
+          initial_has_windmill: { label: 'Do you have a Windmill?', helper: '' },
+          initial_has_ev: { label: "Do you have Electric Vehicles/EV's?", helper: '' },
+          initial_ev_count: { label: 'How many do you have?', helper: '' },
+          initial_battery_dual_inverter_helper: { label: 'Omdat je 2 omvormers hebt geselecteerd, zijn minimaal 2 batterijen vereist. Batterijen 1 en 2 worden toegewezen aan Omvormer 1 en batterijen 3 en 4 aan Omvormer 2.', helper: '' },
+          initial_config_items_title: { label: 'Required configuration items', helper: '' },
+          initial_config_items_helper: { label: 'These items become relevant based on your answers above.', helper: '' },
+          initial_config_items_empty: { label: 'No items to show yet.', helper: '' },
+          initial_config_complete_helper: { label: 'This completes the last required minimum configuration. Once clicking on the Complete button, please review all menus to check for additional items and popup configurations. This initial configuration can be re-enabled in the General menu.', helper: '' },
+          initial_config_complete_button: { label: 'Complete', helper: '' },
+          array_helper_text: { label: 'Each Array must have at minimum a combined Solar/PV total sensor which is the total power output of that Array or individual string values which are added together to get the total power output of the array. Daily production can be supplied and can be shown in a Daily production card.', helper: '' },
           animation_speed_factor: { label: 'Animation Speed Factor', helper: 'Adjust animation speed multiplier (-3x to 3x). Set 0 to pause; negatives reverse direction.' },
           animation_style: { label: 'Day Animation Style', helper: 'Flow animation style used when the card is in Day mode.' },
           night_animation_style: { label: 'Night Animation Style', helper: 'Flow animation style used when the card is in Night mode. Leave blank to use the Day style.' },
@@ -9754,7 +10041,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           sensor_pv_array2_4: { label: 'PV String 4 (Array 2)', helper: 'Array 2 solar production sensor.' },
           sensor_pv_array2_5: { label: 'PV String 5 (Array 2)', helper: 'Array 2 solar production sensor.' },
           sensor_pv_array2_6: { label: 'PV String 6 (Array 2)', helper: 'Array 2 solar production sensor.' },
-          sensor_daily: { label: 'Daily Production Sensor (Required)', helper: 'Sensor reporting daily production totals. Either the PV total sensor or your PV string arrays need to be specified as a minimum.' },
+          sensor_daily: { label: 'Daily Production Sensor', helper: 'Sensor reporting daily production totals. Either the PV total sensor or your PV string arrays need to be specified as a minimum.' },
           sensor_daily_array2: { label: 'Daily Production Sensor (Array 2)', helper: 'Sensor reporting daily production totals for Array 2.' },
           sensor_bat1_soc: { label: 'Battery 1 SOC' },
           sensor_bat1_power: { label: 'Battery 1 Power', helper: 'Provide this combined power sensor or both charge/discharge sensors so Battery 1 becomes active.' },
@@ -9775,10 +10062,16 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           sensor_home_load: { label: 'Home Load/Consumption (Required)', helper: 'Total household consumption sensor.' },
           sensor_home_load_secondary: { label: 'Home Load (Inverter 2)', helper: 'Optional house load sensor for the second inverter.' },
           sensor_heat_pump_consumption: { label: 'Heat Pump Consumption', helper: 'Sensor for heat pump energy consumption.' },
+          sensor_hot_water_consumption: { label: 'Water Heating', helper: 'Sensor for Hot Water Heating Load.' },
           sensor_pool_consumption: { label: 'Pool', helper: 'Sensor for pool power/consumption.' },
           sensor_washing_machine_consumption: { label: 'Washing Machine', helper: 'Sensor for washing machine power/consumption.' },
+          sensor_dishwasher_consumption: { label: 'Dish Washer', helper: 'Sensor for Dish Washer Load.' },
           sensor_dryer_consumption: { label: 'Dryer', helper: 'Sensor for dryer power/consumption.' },
           sensor_refrigerator_consumption: { label: 'Refrigerator', helper: 'Sensor for refrigerator power/consumption.' },
+          hot_water_text_color: { label: 'Water Heating Text Color', helper: 'Color applied to the hot water power text.' },
+          dishwasher_text_color: { label: 'Dish Washer Text Color', helper: 'Color applied to the dish washer power text.' },
+          hot_water_font_size: { label: 'Water Heating Font Size (px)', helper: 'Default 8' },
+          dishwasher_font_size: { label: 'Dish Washer Font Size (px)', helper: 'Default 8' },
           sensor_grid_power: { label: 'Grid Inverter 1 Power', helper: 'Positive/negative grid flow sensor for inverter 1. Specify either this sensor or both Grid Inverter 1 Import Sensor and Grid Inverter 1 Export Sensor.' },
           sensor_grid_import: { label: 'Grid Inverter 1 Import Sensor', helper: 'Optional entity reporting inverter 1 grid import (positive) power.' },
           sensor_grid_export: { label: 'Grid Inverter 1 Export Sensor', helper: 'Optional entity reporting inverter 1 grid export (positive) power.' },
@@ -10027,7 +10320,17 @@ class AdvancedEnergyCardEditor extends HTMLElement {
             { value: 'fluid_flow', label: 'Fluid Flow' },
             { value: 'dots', label: 'Dots' },
             { value: 'arrows', label: 'Arrows' }
-          ]
+          ],
+          initial_yes: 'Yes',
+          initial_no: 'No',
+          initial_inverters_1: '1',
+          initial_inverters_2: '2',
+          initial_batteries_1: '1',
+          initial_batteries_2: '2',
+          initial_batteries_3: '3',
+          initial_batteries_4: '4',
+          initial_evs_1: '1',
+          initial_evs_2: '2'
         }
       ,
       view: {
@@ -10042,6 +10345,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
       it: {
         sections: {
           general: { title: 'Impostazioni generali', helper: 'Titolo scheda, sfondo, lingua e frequenza di aggiornamento.' },
+          initialConfig: { title: 'Configurazione iniziale', helper: 'Domande guidate per la prima configurazione.' },
           pvCommon: { title: 'Solare/PV Comune', helper: 'Impostazioni Solare/PV condivise tra gli array.' },
           array1: { title: 'Solare/PV Array 1', helper: 'Configura le entita dell Array PV 1.' },
           array2: { title: 'Solare/PV Array 2', helper: 'If PV Total Sensor (Inverter 2) is set or the PV String values are provided, Array 2 will become active and enable the second inverter. You must also enable Daily Production Sensor (Array 2) and Home Load (Inverter 2).' },
@@ -10065,6 +10369,23 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           language: { label: 'Lingua', helper: 'Seleziona la lingua dell editor.' },
           display_unit: { label: 'Unita di visualizzazione', helper: 'Unita usata per i valori di potenza.' },
           update_interval: { label: 'Intervallo di aggiornamento', helper: 'Frequenza di aggiornamento della scheda (0 disattiva il limite).' },
+          initial_configuration: { label: 'Configurazione iniziale', helper: 'Mostra la sezione Configurazione iniziale nell editor.' },
+          initial_has_pv: { label: 'Hai energia Solare/PV?', helper: 'Seleziona Sì se hai produzione solare da configurare.' },
+          initial_inverters: { label: 'Quanti inverter hai?', helper: 'Mostrato solo quando il solare/PV è abilitato.' },
+          initial_has_battery: { label: 'Hai accumulo batterie?', helper: '' },
+          initial_battery_count: { label: 'Quante batterie hai? Massimo 4', helper: '' },
+          initial_has_grid: { label: 'Hai elettricità dalla rete?', helper: '' },
+          initial_can_export: { label: 'Puoi esportare l\'elettricità in eccesso alla rete?', helper: '' },
+          initial_has_windmill: { label: 'Hai una turbina eolica?', helper: '' },
+          initial_has_ev: { label: 'Hai veicoli elettrici/EV?', helper: '' },
+          initial_ev_count: { label: 'Quanti ne hai?', helper: '' },
+          initial_battery_dual_inverter_helper: { label: 'Da Sie 2 Wechselrichter ausgewÃ¤hlt haben, sind mindestens 2 Batterien erforderlich. Batterien 1 und 2 werden Wechselrichter 1 zugeordnet und Batterien 3 und 4 Wechselrichter 2.', helper: '' },
+          initial_config_items_title: { label: 'Elementi di configurazione richiesti', helper: '' },
+          initial_config_items_helper: { label: 'Questi elementi dipendono dalle risposte sopra.', helper: '' },
+          initial_config_items_empty: { label: 'Nessun elemento da mostrare.', helper: '' },
+          initial_config_complete_helper: { label: 'Questo completa la configurazione minima richiesta. Dopo aver fatto clic sul pulsante Completa, controlla tutti i menu per eventuali elementi aggiuntivi e configurazioni dei popup. Questa configurazione iniziale puÃ² essere riabilitata nel menu Generale.', helper: '' },
+          initial_config_complete_button: { label: 'Completa', helper: '' },
+          array_helper_text: { label: 'Ogni array deve avere almeno un sensore PV totale combinato che rappresenta la potenza totale di quell\'array oppure valori delle stringhe individuali che vengono sommati per ottenere la potenza totale dell\'array. La produzione giornaliera puÃ² essere fornita e puÃ² essere mostrata in una scheda di produzione giornaliera.', helper: '' },
           animation_speed_factor: { label: 'Fattore velocita animazioni', helper: 'Regola il moltiplicatore (-3x a 3x). Usa 0 per mettere in pausa; valori negativi invertono il flusso.' },
           animation_style: { label: 'Stile animazione (Giorno)', helper: 'Stile dei flussi usato in modalita Giorno.' },
           night_animation_style: { label: 'Stile animazione (Notte)', helper: 'Stile dei flussi usato in modalita Notte. Lascia vuoto per usare lo stile Giorno.' },
@@ -10356,7 +10677,17 @@ class AdvancedEnergyCardEditor extends HTMLElement {
             { value: 'fluid_flow', label: 'Flusso fluido' },
             { value: 'dots', label: 'Punti' },
             { value: 'arrows', label: 'Frecce' }
-          ]
+          ],
+          initial_yes: 'Sì',
+          initial_no: 'No',
+          initial_inverters_1: '1',
+          initial_inverters_2: '2',
+          initial_batteries_1: '1',
+          initial_batteries_2: '2',
+          initial_batteries_3: '3',
+          initial_batteries_4: '4',
+          initial_evs_1: '1',
+          initial_evs_2: '2'
         }
       ,
       view: {
@@ -10371,6 +10702,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
       de: {
         sections: {
           general: { title: 'Allgemeine Einstellungen', helper: 'Kartentitel, Hintergrund, Sprache und Aktualisierungsintervall.' },
+          initialConfig: { title: 'Erstkonfiguration', helper: 'Geführte Fragen für die Ersteinrichtung.' },
           pvCommon: { title: 'Solar/PV Allgemein', helper: 'Gemeinsame Solar/PV Einstellungen fuer beide Arrays.' },
           array1: { title: 'Solar/PV Array 1', helper: 'PV Array 1 Entitaeten konfigurieren.' },
           array2: { title: 'Solar/PV Array 2', helper: 'If PV Total Sensor (Inverter 2) is set or the PV String values are provided, Array 2 will become active and enable the second inverter. You must also enable Daily Production Sensor (Array 2) and Home Load (Inverter 2).' },
@@ -10394,6 +10726,23 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           language: { label: 'Sprache', helper: 'Editor-Sprache waehlen.' },
           display_unit: { label: 'Anzeigeeinheit', helper: 'Einheit fuer Leistungswerte.' },
           update_interval: { label: 'Aktualisierungsintervall', helper: 'Aktualisierungsfrequenz der Karte (0 deaktiviert das Limit).' },
+          initial_configuration: { label: 'Erstkonfiguration', helper: 'Zeigt den Abschnitt „Erstkonfiguration“ im Editor an.' },
+          initial_has_pv: { label: 'Haben Sie Solar/PV-Leistung?', helper: 'Wählen Sie Ja, wenn Sie Solarerzeugung konfigurieren.' },
+          initial_inverters: { label: 'Wie viele Wechselrichter haben Sie?', helper: 'Nur sichtbar, wenn Solar/PV aktiviert ist.' },
+          initial_has_battery: { label: 'Haben Sie Batteriespeicher?', helper: '' },
+          initial_battery_count: { label: 'Wie viele Batterien haben Sie? Maximal 4', helper: '' },
+          initial_has_grid: { label: 'Haben Sie Netzstrom?', helper: '' },
+          initial_can_export: { label: 'Können Sie überschüssigen Strom ins Netz einspeisen?', helper: '' },
+          initial_has_windmill: { label: 'Haben Sie ein Windrad?', helper: '' },
+          initial_has_ev: { label: 'Haben Sie Elektrofahrzeuge/EVs?', helper: '' },
+          initial_ev_count: { label: 'Wie viele haben Sie?', helper: '' },
+          initial_battery_dual_inverter_helper: { label: 'Comme vous avez sÃ©lectionnÃ© 2 onduleurs, un minimum de 2 batteries est requis. Les batteries 1 et 2 seront affectÃ©es Ã  l\'onduleur 1 et les batteries 3 et 4 Ã  l\'onduleur 2.', helper: '' },
+          initial_config_items_title: { label: 'Erforderliche Konfigurationselemente', helper: '' },
+          initial_config_items_helper: { label: 'Diese Elemente werden basierend auf Ihren Antworten sichtbar.', helper: '' },
+          initial_config_items_empty: { label: 'Noch keine Elemente anzuzeigen.', helper: '' },
+          initial_config_complete_helper: { label: 'Dies schlieÃt die erforderliche Mindestkonfiguration ab. Klicken Sie auf die SchaltflÃ¤che Fertig und prÃ¼fen Sie anschlieÃend alle MenÃ¼s auf weitere Elemente und Popup-Konfigurationen. Diese Erstkonfiguration kann im MenÃ¼ Allgemein wieder aktiviert werden.', helper: '' },
+          initial_config_complete_button: { label: 'Fertig', helper: '' },
+          array_helper_text: { label: 'Jedes Array muss mindestens einen kombinierten Solar/PV-Gesamtsensor haben, der die Gesamtleistung dieses Arrays darstellt, oder einzelne String-Werte, die zur Gesamtleistung des Arrays summiert werden. Die Tagesproduktion kann angegeben werden und in einer Tagesproduktionskarte angezeigt werden.', helper: '' },
           animation_speed_factor: { label: 'Animationsgeschwindigkeit', helper: 'Animationsfaktor zwischen -3x und 3x. 0 pausiert, negative Werte kehren den Fluss um.' },
           animation_style: { label: 'Animationsstil (Tag)', helper: 'Fluss-Animationsstil fuer Tag-Modus.' },
           night_animation_style: { label: 'Animationsstil (Nacht)', helper: 'Fluss-Animationsstil fuer Nacht-Modus. Leer lassen fuer Tag-Stil.' },
@@ -10681,7 +11030,17 @@ class AdvancedEnergyCardEditor extends HTMLElement {
             { value: 'fluid_flow', label: 'Fluessiger Fluss' },
             { value: 'dots', label: 'Punkte' },
             { value: 'arrows', label: 'Pfeile' }
-          ]
+          ],
+          initial_yes: 'Ja',
+          initial_no: 'Nein',
+          initial_inverters_1: '1',
+          initial_inverters_2: '2',
+          initial_batteries_1: '1',
+          initial_batteries_2: '2',
+          initial_batteries_3: '3',
+          initial_batteries_4: '4',
+          initial_evs_1: '1',
+          initial_evs_2: '2'
         }
       ,
       view: {
@@ -10696,6 +11055,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
       fr: {
         sections: {
           general: { title: 'ParamÃ¨tres gÃ©nÃ©raux', helper: 'MÃ©tadonnÃ©es de la carte, arriÃ¨re-plan, langue et frÃ©quence de mise Ã  jour.' },
+          initialConfig: { title: 'Configuration initiale', helper: 'Questions guidÃ©es pour la premiÃ¨re configuration.' },
           pvCommon: { title: 'Solaire/PV Commun', helper: 'ParamÃ¨tres Solaire/PV partagÃ©s entre les arrays.' },
           array1: { title: 'Solaire/PV Array 1', helper: 'Configurer les entitÃ©s de l Array PV 1.' },
           array2: { title: 'Solaire/PV Array 2', helper: 'If PV Total Sensor (Inverter 2) is set or the PV String values are provided, Array 2 will become active and enable the second inverter. You must also enable Daily Production Sensor (Array 2) and Home Load (Inverter 2).' },
@@ -10719,6 +11079,23 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           language: { label: 'Langue', helper: 'Choisissez la langue de l Ã©diteur.' },
           display_unit: { label: 'UnitÃ© d affichage', helper: 'UnitÃ© utilisÃ©e pour formater les valeurs de puissance.' },
           update_interval: { label: 'Intervalle de mise Ã  jour', helper: 'FrÃ©quence de rafraÃ®chissement des mises Ã  jour de la carte (0 dÃ©sactive le throttling).' },
+          initial_configuration: { label: 'Configuration initiale', helper: 'Afficher la section Configuration initiale dans l Ã©diteur.' },
+          initial_has_pv: { label: 'Avez-vous de l Ã©nergie solaire/PV ?', helper: 'SÃ©lectionnez Oui si vous avez une production solaire Ã  configurer.' },
+          initial_inverters: { label: 'Combien d onduleurs avez-vous ?', helper: 'AffichÃ© uniquement si le solaire/PV est activÃ©.' },
+          initial_has_battery: { label: 'Avez-vous un stockage de batteries ?', helper: '' },
+          initial_battery_count: { label: 'Combien de batteries avez-vous ? Maximum 4', helper: '' },
+          initial_has_grid: { label: 'Avez-vous de l\'électricité du réseau ?', helper: '' },
+          initial_can_export: { label: 'Pouvez-vous exporter l\'électricité excédentaire vers le réseau ?', helper: '' },
+          initial_has_windmill: { label: 'Avez-vous une éolienne ?', helper: '' },
+          initial_has_ev: { label: 'Avez-vous des véhicules électriques/EV ?', helper: '' },
+          initial_ev_count: { label: 'Combien en avez-vous ?', helper: '' },
+          initial_battery_dual_inverter_helper: { label: 'Omdat je 2 omvormers hebt geselecteerd, zijn minimaal 2 batterijen vereist. Batterijen 1 en 2 worden toegewezen aan Omvormer 1 en batterijen 3 en 4 aan Omvormer 2.', helper: '' },
+          initial_config_items_title: { label: 'Ã‰lÃ©ments de configuration requis', helper: '' },
+          initial_config_items_helper: { label: 'Ces Ã©lÃ©ments dÃ©pendent de vos rÃ©ponses ci-dessus.', helper: '' },
+          initial_config_items_empty: { label: 'Aucun Ã©lÃ©ment Ã  afficher pour le moment.', helper: '' },
+          initial_config_complete_helper: { label: 'Ceci termine la configuration minimale requise. AprÃ¨s avoir cliquÃ© sur le bouton Terminer, veuillez consulter tous les menus pour d\'autres Ã©lÃ©ments et les configurations de popup. Cette configuration initiale peut Ãªtre rÃ©activÃ©e dans le menu GÃ©nÃ©ral.', helper: '' },
+          initial_config_complete_button: { label: 'Terminer', helper: '' },
+          array_helper_text: { label: 'Chaque array doit avoir au minimum un capteur Solar/PV total combinÃ© reprÃ©sentant la puissance totale de cet array, ou des valeurs de chaÃ®nes individuelles additionnÃ©es pour obtenir la puissance totale de l\'array. La production journaliÃ¨re peut Ãªtre fournie et affichÃ©e dans une carte de production journaliÃ¨re.', helper: '' },
           animation_speed_factor: { label: 'Facteur de vitesse d animation', helper: 'Ajuste le multiplicateur de vitesse d animation (-3x Ã  3x). Mettre 0 pour pause; les nÃ©gatifs inversent la direction.' },
           animation_style: { label: 'Style d animation (Jour)', helper: 'Style des flux utilisÃ© en mode Jour.' },
           night_animation_style: { label: 'Style d animation (Nuit)', helper: 'Style des flux utilisÃ© en mode Nuit. Laisser vide pour utiliser le style Jour.' },
@@ -11012,7 +11389,17 @@ class AdvancedEnergyCardEditor extends HTMLElement {
             { value: 'fluid_flow', label: 'Flux fluide' },
             { value: 'dots', label: 'Points' },
             { value: 'arrows', label: 'FlÃ¨ches' }
-          ]
+          ],
+          initial_yes: 'Oui',
+          initial_no: 'Non',
+          initial_inverters_1: '1',
+          initial_inverters_2: '2',
+          initial_batteries_1: '1',
+          initial_batteries_2: '2',
+          initial_batteries_3: '3',
+          initial_batteries_4: '4',
+          initial_evs_1: '1',
+          initial_evs_2: '2'
         }
       ,
       view: {
@@ -11027,6 +11414,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
       nl: {
         sections: {
           general: { title: 'Algemene instellingen', helper: 'Metadata van de kaart, achtergrond, taal en update frequentie.' },
+          initialConfig: { title: 'InitiÃ«le configuratie', helper: 'Geleide vragen voor de eerste configuratie.' },
           pvCommon: { title: 'Solar/PV Algemeen', helper: 'Gedeelde Solar/PV instellingen voor beide arrays.' },
           array1: { title: 'Solar/PV Array 1', helper: 'Configureer PV Array 1 entiteiten.' },
           array2: { title: 'Solar/PV Array 2', helper: 'If PV Total Sensor (Inverter 2) is set or the PV String values are provided, Array 2 will become active and enable the second inverter. You must also enable Daily Production Sensor (Array 2) and Home Load (Inverter 2).' },
@@ -11050,6 +11438,23 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           language: { label: 'Taal', helper: 'Kies de taal van de editor.' },
           display_unit: { label: 'Weergave eenheid', helper: 'Eenheid gebruikt om kracht waarden te formatteren.' },
           update_interval: { label: 'Update interval', helper: 'Frequentie van kaart updates verversen (0 schakelt throttling uit).' },
+          initial_configuration: { label: 'InitiÃ«le configuratie', helper: 'Toon de sectie InitiÃ«le configuratie in de editor.' },
+          initial_has_pv: { label: 'Heb je Solar/PV-vermogen?', helper: 'Kies Ja als je zonneproductie wilt configureren.' },
+          initial_inverters: { label: 'Hoeveel omvormers heb je?', helper: 'Alleen zichtbaar als Solar/PV is ingeschakeld.' },
+          initial_has_battery: { label: 'Heb je batterijopslag?', helper: '' },
+          initial_battery_count: { label: 'Hoeveel batterijen heb je? Maximaal 4', helper: '' },
+          initial_has_grid: { label: 'Heb je stroom van het net?', helper: '' },
+          initial_can_export: { label: 'Kun je overtollige elektriciteit terugleveren aan het net?', helper: '' },
+          initial_has_windmill: { label: 'Heb je een windmolen?', helper: '' },
+          initial_has_ev: { label: 'Heb je elektrische voertuigen/EVs?', helper: '' },
+          initial_ev_count: { label: 'Hoeveel heb je er?', helper: '' },
+          initial_battery_dual_inverter_helper: { label: 'As you have 2 Inverters selected, a minimum of 2 batteries is required. Batteries 1 and 2 will be allocated to Inverter 1 and Batteries 3 and 4 will be allocated to Inverter 2', helper: '' },
+          initial_config_items_title: { label: 'Vereiste configuratie-items', helper: '' },
+          initial_config_items_helper: { label: 'Deze items zijn afhankelijk van je antwoorden hierboven.', helper: '' },
+          initial_config_items_empty: { label: 'Nog geen items om te tonen.', helper: '' },
+          initial_config_complete_helper: { label: 'Dit voltooit de minimale vereiste configuratie. Klik op de knop Voltooien en controleer daarna alle menu\'s voor extra items en popup-configuraties. Deze initiÃ«le configuratie kan opnieuw worden ingeschakeld in het menu Algemeen.', helper: '' },
+          initial_config_complete_button: { label: 'Voltooien', helper: '' },
+          array_helper_text: { label: 'Elke array moet minimaal een gecombineerde Solar/PV-totaalsensor hebben die het totale vermogen van die array weergeeft, of individuele stringwaarden die worden opgeteld om het totale arrayvermogen te krijgen. Dagproductie kan worden opgegeven en kan worden getoond in een dagproductiekaart.', helper: '' },
           animation_speed_factor: { label: 'Animatie snelheid factor', helper: 'Pas de animatie snelheid multiplier aan (-3x tot 3x). Stel in op 0 voor pauze; negatieven keren richting om.' },
           animation_style: { label: 'Animatie stijl (Dag)', helper: 'Flow-animatie stijl gebruikt in Dag-modus.' },
           night_animation_style: { label: 'Animatie stijl (Nacht)', helper: 'Flow-animatie stijl gebruikt in Nacht-modus. Laat leeg om Dag-stijl te gebruiken.' },
@@ -11343,7 +11748,17 @@ class AdvancedEnergyCardEditor extends HTMLElement {
             { value: 'fluid_flow', label: 'Vloeiende stroom' },
             { value: 'dots', label: 'Stippen' },
             { value: 'arrows', label: 'Pijlen' }
-          ]
+          ],
+          initial_yes: 'Ja',
+          initial_no: 'Nee',
+          initial_inverters_1: '1',
+          initial_inverters_2: '2',
+          initial_batteries_1: '1',
+          initial_batteries_2: '2',
+          initial_batteries_3: '3',
+          initial_batteries_4: '4',
+          initial_evs_1: '1',
+          initial_evs_2: '2'
         },
         view: {
           daily: 'DAGOPBRENGST',
@@ -11445,6 +11860,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
         { name: 'language', label: fields.language.label, helper: fields.language.helper, selector: { select: { options: optionDefs.language } } },
         { name: 'display_unit', label: fields.display_unit.label, helper: fields.display_unit.helper, selector: { select: { options: optionDefs.display_unit } } },
         { name: 'update_interval', label: fields.update_interval.label, helper: fields.update_interval.helper, selector: { number: { min: 0, max: 60, step: 5, mode: 'slider', unit_of_measurement: 's' } } },
+        { name: 'initial_configuration', label: fields.initial_configuration.label, helper: fields.initial_configuration.helper, selector: { boolean: {} }, default: true },
         { name: 'enable_echo_alive', label: (fields.enable_echo_alive && fields.enable_echo_alive.label) || 'Enable Echo Alive', helper: (fields.enable_echo_alive && fields.enable_echo_alive.helper) || 'Enables an invisible iframe to keep the Silk browser open on Echo Show.', selector: { boolean: {} }, default: false },
         { name: 'animation_speed_factor', label: fields.animation_speed_factor.label, helper: fields.animation_speed_factor.helper, selector: { number: { min: -3, max: 3, step: 0.25, mode: 'slider', unit_of_measurement: 'x' } } },
         { name: 'animation_style', label: fields.animation_style.label, helper: fields.animation_style.helper, selector: { select: { options: optionDefs.animation_style } } },
@@ -11454,6 +11870,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
         { name: 'fluid_flow_stroke_width', label: fields.fluid_flow_stroke_width.label, helper: fields.fluid_flow_stroke_width.helper, selector: { number: { min: 0.5, max: 30, step: 0.5, mode: 'slider', unit_of_measurement: 'px' } }, default: 4 },
         
       ]),
+      initialConfig: define([]),
       pvCommon: define([
         { name: 'pv_tot_color', label: fields.pv_tot_color.label, helper: fields.pv_tot_color.helper, selector: { color_picker: {} }, default: '#00FFFF' },        
         { name: 'pv_font_size', label: fields.pv_font_size.label, helper: fields.pv_font_size.helper, selector: { text: { mode: 'blur' } } },
@@ -11587,16 +12004,20 @@ class AdvancedEnergyCardEditor extends HTMLElement {
         { name: 'sensor_home_load', label: fields.sensor_home_load.label, helper: fields.sensor_home_load.helper, selector: entitySelector },
         { name: 'sensor_home_load_secondary', label: fields.sensor_home_load_secondary.label, helper: fields.sensor_home_load_secondary.helper, selector: entitySelector },        
         { name: 'sensor_heat_pump_consumption', label: fields.sensor_heat_pump_consumption.label, helper: fields.sensor_heat_pump_consumption.helper, selector: entitySelector },
+        { name: 'sensor_hot_water_consumption', label: fields.sensor_hot_water_consumption.label, helper: fields.sensor_hot_water_consumption.helper, selector: entitySelector },
         { name: 'heat_pump_label', label: (fields.heat_pump_label && fields.heat_pump_label.label) || 'Heat Pump/AC Label', helper: (fields.heat_pump_label && fields.heat_pump_label.helper) || 'Optional. Overrides the static label shown next to the heat pump value (data-role="heat-pump-power-text"). If empty, built-in translations are used.', selector: { text: { mode: 'blur' } }, default: '' },
         { name: 'sensor_pool_consumption', label: fields.sensor_pool_consumption.label, helper: fields.sensor_pool_consumption.helper, selector: entitySelector },
         { name: 'sensor_washing_machine_consumption', label: fields.sensor_washing_machine_consumption.label, helper: fields.sensor_washing_machine_consumption.helper, selector: entitySelector },
+        { name: 'sensor_dishwasher_consumption', label: fields.sensor_dishwasher_consumption.label, helper: fields.sensor_dishwasher_consumption.helper, selector: entitySelector },
         { name: 'sensor_dryer_consumption', label: fields.sensor_dryer_consumption.label, helper: fields.sensor_dryer_consumption.helper, selector: entitySelector },
         { name: 'sensor_refrigerator_consumption', label: fields.sensor_refrigerator_consumption.label, helper: fields.sensor_refrigerator_consumption.helper, selector: entitySelector },
         { name: 'heat_pump_flow_color', label: fields.heat_pump_flow_color.label, helper: fields.heat_pump_flow_color.helper, selector: { color_picker: {} }, default: '#FFA500' },
         { name: 'heat_pump_text_color', label: fields.heat_pump_text_color.label, helper: fields.heat_pump_text_color.helper, selector: { color_picker: {} }, default: '#FFA500' },
         { name: 'pool_flow_color', label: fields.pool_flow_color.label, helper: fields.pool_flow_color.helper, selector: { color_picker: {} }, default: '#0080ff' },
         { name: 'pool_text_color', label: fields.pool_text_color.label, helper: fields.pool_text_color.helper, selector: { color_picker: {} }, default: '#FFFFFF' },
+        { name: 'hot_water_text_color', label: fields.hot_water_text_color.label, helper: fields.hot_water_text_color.helper, selector: { color_picker: {} }, default: '#FFFFFF' },
         { name: 'washing_machine_text_color', label: fields.washing_machine_text_color.label, helper: fields.washing_machine_text_color.helper, selector: { color_picker: {} }, default: '#FFFFFF' },
+        { name: 'dishwasher_text_color', label: fields.dishwasher_text_color.label, helper: fields.dishwasher_text_color.helper, selector: { color_picker: {} }, default: '#FFFFFF' },
         { name: 'dryer_text_color', label: fields.dryer_text_color.label, helper: fields.dryer_text_color.helper, selector: { color_picker: {} }, default: '#FFFFFF' },
         { name: 'refrigerator_text_color', label: fields.refrigerator_text_color.label, helper: fields.refrigerator_text_color.helper, selector: { color_picker: {} }, default: '#FFFFFF' },
         { name: 'load_flow_color', label: fields.load_flow_color.label, helper: fields.load_flow_color.helper, selector: { color_picker: {} } },
@@ -11608,7 +12029,9 @@ class AdvancedEnergyCardEditor extends HTMLElement {
         { name: 'load_critical_color', label: fields.load_critical_color.label, helper: fields.load_critical_color.helper, selector: { color_picker: {} } },      
         { name: 'heat_pump_font_size', label: fields.heat_pump_font_size.label, helper: fields.heat_pump_font_size.helper, selector: { text: { mode: 'blur' } } },
         { name: 'pool_font_size', label: fields.pool_font_size.label, helper: fields.pool_font_size.helper, selector: { text: { mode: 'blur' } } },
+        { name: 'hot_water_font_size', label: fields.hot_water_font_size.label, helper: fields.hot_water_font_size.helper, selector: { text: { mode: 'blur' } } },
         { name: 'washing_machine_font_size', label: fields.washing_machine_font_size.label, helper: fields.washing_machine_font_size.helper, selector: { text: { mode: 'blur' } } },
+        { name: 'dishwasher_font_size', label: fields.dishwasher_font_size.label, helper: fields.dishwasher_font_size.helper, selector: { text: { mode: 'blur' } } },
         { name: 'dryer_font_size', label: fields.dryer_font_size.label, helper: fields.dryer_font_size.helper, selector: { text: { mode: 'blur' } } },
         { name: 'refrigerator_font_size', label: fields.refrigerator_font_size.label, helper: fields.refrigerator_font_size.helper, selector: { text: { mode: 'blur' } } },
         { name: 'load_font_size', label: fields.load_font_size.label, helper: fields.load_font_size.helper, selector: { text: { mode: 'blur' } } },
@@ -11759,6 +12182,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
   _createSectionDefs(localeStrings, schemaDefs) {
     const sections = localeStrings.sections;
     return [
+      { id: 'initialConfig', title: sections.initialConfig.title, helper: sections.initialConfig.helper, schema: null, defaultOpen: true, renderContent: () => this._createInitialConfigContent(localeStrings, schemaDefs) },
       { id: 'pvCommon', title: sections.pvCommon.title, helper: sections.pvCommon.helper, schema: schemaDefs.pvCommon, defaultOpen: false },
       { id: 'array1', title: sections.array1.title, helper: sections.array1.helper, schema: schemaDefs.array1, defaultOpen: false },
       { id: 'array2', title: sections.array2.title, helper: sections.array2.helper, renderContent: () => {
@@ -12154,6 +12578,461 @@ class AdvancedEnergyCardEditor extends HTMLElement {
     return wrapper;
   }
 
+  _createRadioGroupField(field, value, options) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'standard-field-wrapper';
+
+    const label = document.createElement('label');
+    label.textContent = field.label || field.name;
+    wrapper.appendChild(label);
+
+    if (field.helper) {
+      const helper = document.createElement('div');
+      helper.className = 'field-helper';
+      helper.textContent = field.helper;
+      wrapper.appendChild(helper);
+    }
+
+    const current = value !== undefined && value !== null ? String(value) : '';
+    const group = document.createElement('div');
+    group.className = 'radio-group';
+    const groupName = `advanced_${field.name}`;
+
+    (options || []).forEach((opt) => {
+      const optionLabel = document.createElement('label');
+      optionLabel.className = 'radio-option';
+
+      const input = document.createElement('input');
+      input.type = 'radio';
+      input.name = groupName;
+      input.value = opt.value;
+      input.checked = String(opt.value) === current;
+
+      const text = document.createElement('span');
+      text.textContent = opt.label;
+
+      input.addEventListener('change', () => {
+        if (!input.checked) return;
+        this._updateFieldValue(field.name, input.value, true);
+      });
+
+      optionLabel.appendChild(input);
+      optionLabel.appendChild(text);
+      group.appendChild(optionLabel);
+    });
+
+    wrapper.appendChild(group);
+    return wrapper;
+  }
+
+  _createInitialConfigContent(localeStrings, schemaDefs) {
+    const container = document.createElement('div');
+    container.className = 'custom-form';
+
+    const fields = (localeStrings && localeStrings.fields) || {};
+    const options = (localeStrings && localeStrings.options) || {};
+    const data = this._configWithDefaults();
+
+    const languageField = this._findFieldSchema(schemaDefs, 'language');
+    if (languageField) {
+      const value = data[languageField.name] !== undefined && data[languageField.name] !== null
+        ? data[languageField.name]
+        : languageField.default;
+      container.appendChild(this._createStandardField(languageField, value));
+    }
+
+    const yesLabel = options.initial_yes || 'Yes';
+    const noLabel = options.initial_no || 'No';
+    const inverter1Label = options.initial_inverters_1 || '1';
+    const inverter2Label = options.initial_inverters_2 || '2';
+    const ev1Label = options.initial_evs_1 || '1';
+    const ev2Label = options.initial_evs_2 || '2';
+
+    const hasPvField = {
+      name: 'initial_has_pv',
+      label: (fields.initial_has_pv && fields.initial_has_pv.label) || 'Do you have Solar/PV Power?',
+      helper: (fields.initial_has_pv && fields.initial_has_pv.helper) || ''
+    };
+    const hasPvValue = data.initial_has_pv !== undefined && data.initial_has_pv !== null ? String(data.initial_has_pv) : '';
+    const hasBatteryValue = data.initial_has_battery !== undefined && data.initial_has_battery !== null
+      ? String(data.initial_has_battery)
+      : '';
+    const batteryCountValue = data.initial_battery_count !== undefined && data.initial_battery_count !== null
+      ? String(data.initial_battery_count)
+      : '';
+    container.appendChild(this._createRadioGroupField(hasPvField, hasPvValue, [
+      { value: 'yes', label: yesLabel },
+      { value: 'no', label: noLabel }
+    ]));
+
+    if (hasPvValue === 'yes') {
+      const inverterField = {
+        name: 'initial_inverters',
+        label: (fields.initial_inverters && fields.initial_inverters.label) || 'How many inverters do you have?',
+        helper: (fields.initial_inverters && fields.initial_inverters.helper) || ''
+      };
+      const inverterValue = data.initial_inverters !== undefined && data.initial_inverters !== null ? String(data.initial_inverters) : '';
+      container.appendChild(this._createRadioGroupField(inverterField, inverterValue, [
+        { value: '1', label: inverter1Label },
+        { value: '2', label: inverter2Label }
+      ]));
+
+      const hasBatteryField = {
+        name: 'initial_has_battery',
+        label: (fields.initial_has_battery && fields.initial_has_battery.label) || 'Do you have Battery storage?',
+        helper: (fields.initial_has_battery && fields.initial_has_battery.helper) || ''
+      };
+      container.appendChild(this._createRadioGroupField(hasBatteryField, hasBatteryValue, [
+        { value: 'yes', label: yesLabel },
+        { value: 'no', label: noLabel }
+      ]));
+
+      if (hasBatteryValue === 'yes') {
+        const dualInverterHelper = (fields.initial_battery_dual_inverter_helper && fields.initial_battery_dual_inverter_helper.label)
+          || 'As you have 2 Inverters selected, a minimum of 2 batteries is required. Batteries 1 and 2 will be allocated to Inverter 1 and Batteries 3 and 4 will be allocated to Inverter 2';
+        const baseBatteryHelper = (fields.initial_battery_count && fields.initial_battery_count.helper) || '';
+        const batteryHelper = inverterValue === '2'
+          ? [baseBatteryHelper, dualInverterHelper].filter(Boolean).join(' ')
+          : baseBatteryHelper;
+
+        const batteryCountField = {
+          name: 'initial_battery_count',
+          label: (fields.initial_battery_count && fields.initial_battery_count.label) || 'How many Batteries do you have? Maximum 4',
+          helper: batteryHelper
+        };
+        container.appendChild(this._createRadioGroupField(batteryCountField, batteryCountValue, [
+          { value: '1', label: options.initial_batteries_1 || '1' },
+          { value: '2', label: options.initial_batteries_2 || '2' },
+          { value: '3', label: options.initial_batteries_3 || '3' },
+          { value: '4', label: options.initial_batteries_4 || '4' }
+        ]));
+      }
+    }
+
+    const hasGridField = {
+      name: 'initial_has_grid',
+      label: (fields.initial_has_grid && fields.initial_has_grid.label) || 'Do you have Grid supplied electricity?',
+      helper: (fields.initial_has_grid && fields.initial_has_grid.helper) || ''
+    };
+    const hasGridValue = data.initial_has_grid !== undefined && data.initial_has_grid !== null
+      ? String(data.initial_has_grid)
+      : '';
+    let canExportValue = '';
+    container.appendChild(this._createRadioGroupField(hasGridField, hasGridValue, [
+      { value: 'yes', label: yesLabel },
+      { value: 'no', label: noLabel }
+    ]));
+
+    if (hasGridValue === 'yes') {
+      const canExportField = {
+        name: 'initial_can_export',
+        label: (fields.initial_can_export && fields.initial_can_export.label) || 'Can you export excess electricity to the grid?',
+        helper: (fields.initial_can_export && fields.initial_can_export.helper) || ''
+      };
+      canExportValue = data.initial_can_export !== undefined && data.initial_can_export !== null
+        ? String(data.initial_can_export)
+        : '';
+      container.appendChild(this._createRadioGroupField(canExportField, canExportValue, [
+        { value: 'yes', label: yesLabel },
+        { value: 'no', label: noLabel }
+      ]));
+    }
+
+    const hasWindmillField = {
+      name: 'initial_has_windmill',
+      label: (fields.initial_has_windmill && fields.initial_has_windmill.label) || 'Do you have a Windmill?',
+      helper: (fields.initial_has_windmill && fields.initial_has_windmill.helper) || ''
+    };
+    const hasWindmillValue = data.initial_has_windmill !== undefined && data.initial_has_windmill !== null
+      ? String(data.initial_has_windmill)
+      : '';
+    container.appendChild(this._createRadioGroupField(hasWindmillField, hasWindmillValue, [
+      { value: 'yes', label: yesLabel },
+      { value: 'no', label: noLabel }
+    ]));
+
+    const hasEvField = {
+      name: 'initial_has_ev',
+      label: (fields.initial_has_ev && fields.initial_has_ev.label) || "Do you have Electric Vehicles/EV's?",
+      helper: (fields.initial_has_ev && fields.initial_has_ev.helper) || ''
+    };
+    const hasEvValue = data.initial_has_ev !== undefined && data.initial_has_ev !== null
+      ? String(data.initial_has_ev)
+      : '';
+    const evCountValue = data.initial_ev_count !== undefined && data.initial_ev_count !== null
+      ? String(data.initial_ev_count)
+      : '';
+    container.appendChild(this._createRadioGroupField(hasEvField, hasEvValue, [
+      { value: 'yes', label: yesLabel },
+      { value: 'no', label: noLabel }
+    ]));
+
+    if (hasEvValue === 'yes') {
+      const evCountField = {
+        name: 'initial_ev_count',
+        label: (fields.initial_ev_count && fields.initial_ev_count.label) || 'How many do you have?',
+        helper: (fields.initial_ev_count && fields.initial_ev_count.helper) || ''
+      };
+      container.appendChild(this._createRadioGroupField(evCountField, evCountValue, [
+        { value: '1', label: ev1Label },
+        { value: '2', label: ev2Label }
+      ]));
+    }
+
+    const inverterValue = data.initial_inverters !== undefined && data.initial_inverters !== null ? String(data.initial_inverters) : '';
+    const itemsTitle = (fields.initial_config_items_title && fields.initial_config_items_title.label) || 'Required configuration items';
+    const itemsHelper = (fields.initial_config_items_helper && fields.initial_config_items_helper.helper) || 'These items become relevant based on your answers above.';
+    const emptyLabel = (fields.initial_config_items_empty && fields.initial_config_items_empty.label) || 'No items to show yet.';
+
+    const itemsWrapper = document.createElement('div');
+    itemsWrapper.className = 'standard-field-wrapper';
+
+    const itemsLabel = document.createElement('label');
+    itemsLabel.textContent = itemsTitle;
+    itemsWrapper.appendChild(itemsLabel);
+
+    if (itemsHelper) {
+      const helper = document.createElement('div');
+      helper.className = 'field-helper';
+      helper.textContent = itemsHelper;
+      itemsWrapper.appendChild(helper);
+    }
+
+    const itemsList = document.createElement('div');
+    itemsList.className = 'initial-config-items';
+
+    const items = this._getInitialConfigItems(localeStrings).filter((item) => {
+      if (!item || typeof item.when !== 'function') {
+        return true;
+      }
+      return item.when({ hasPvValue, inverterValue, hasBatteryValue, batteryCountValue, hasGridValue, canExportValue, hasWindmillValue, hasEvValue, evCountValue });
+    });
+
+    if (items.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'initial-config-item empty';
+      empty.textContent = emptyLabel;
+      itemsList.appendChild(empty);
+    } else {
+      items.forEach((item) => {
+        if (item && item.type === 'helper') {
+          const row = document.createElement('div');
+          row.className = 'initial-config-item helper';
+          row.textContent = item.label || item.id || '';
+          itemsList.appendChild(row);
+          return;
+        }
+
+        const fieldSchema = this._findFieldSchema(schemaDefs, item && item.id ? item.id : '');
+        if (fieldSchema) {
+          const value = data[fieldSchema.name] !== undefined && data[fieldSchema.name] !== null
+            ? data[fieldSchema.name]
+            : fieldSchema.default;
+          itemsList.appendChild(this._createStandardField(fieldSchema, value));
+        } else {
+          const row = document.createElement('div');
+          row.className = 'initial-config-item';
+          row.textContent = item.label || item.id || '';
+          itemsList.appendChild(row);
+        }
+      });
+    }
+
+    itemsWrapper.appendChild(itemsList);
+
+    const completionHelperText = (fields.initial_config_complete_helper && fields.initial_config_complete_helper.label)
+      || 'This completes the last required minimum configuration. Once clicking on the Complete button, please review all menus to check for additional items and popup configurations. This initial configuration can be re-enabled in the General menu.';
+    const completionButtonLabel = (fields.initial_config_complete_button && fields.initial_config_complete_button.label)
+      || 'Complete';
+
+    if (completionHelperText) {
+      const completionHelper = document.createElement('div');
+      completionHelper.className = 'field-helper';
+      completionHelper.textContent = completionHelperText;
+      itemsWrapper.appendChild(completionHelper);
+    }
+
+    const completeButton = document.createElement('button');
+    completeButton.type = 'button';
+    completeButton.className = 'initial-config-complete-button';
+    completeButton.textContent = completionButtonLabel;
+    completeButton.addEventListener('click', () => {
+      this._updateFieldValue('initial_configuration', false, true);
+    });
+    itemsWrapper.appendChild(completeButton);
+    container.appendChild(itemsWrapper);
+
+    return container;
+  }
+
+  _findFieldSchema(schemaDefs, fieldName) {
+    if (!schemaDefs || !fieldName) {
+      return null;
+    }
+    const groups = Object.values(schemaDefs).filter((group) => Array.isArray(group));
+    for (let i = 0; i < groups.length; i += 1) {
+      const match = groups[i].find((field) => field && field.name === fieldName);
+      if (match) {
+        return match;
+      }
+    }
+    return null;
+  }
+
+  _getInitialConfigItems(localeStrings) {
+    const fields = (localeStrings && localeStrings.fields) || {};
+
+    const helperText = (fields.array_helper_text && fields.array_helper_text.label) || 'Each Array must have at minimum a combined Solar/PV total sensor which is the total power output of that Array or individual string values which are added together to get the total power output of the array. Daily production can be supplied and can be shown in a Daily production card.';
+
+    const array1Items = [
+      { id: 'array1_helper', type: 'helper', label: helperText },
+      { id: 'sensor_pv_total', label: (fields.sensor_pv_total && fields.sensor_pv_total.label) || 'PV Total Sensor' },
+      { id: 'sensor_pv1', label: (fields.sensor_pv1 && fields.sensor_pv1.label) || 'PV String 1 (Array 1)' },
+      { id: 'sensor_pv2', label: (fields.sensor_pv2 && fields.sensor_pv2.label) || 'PV String 2 (Array 1)' },
+      { id: 'sensor_pv3', label: (fields.sensor_pv3 && fields.sensor_pv3.label) || 'PV String 3 (Array 1)' },
+      { id: 'sensor_pv4', label: (fields.sensor_pv4 && fields.sensor_pv4.label) || 'PV String 4 (Array 1)' },
+      { id: 'sensor_pv5', label: (fields.sensor_pv5 && fields.sensor_pv5.label) || 'PV String 5 (Array 1)' },
+      { id: 'sensor_pv6', label: (fields.sensor_pv6 && fields.sensor_pv6.label) || 'PV String 6 (Array 1)' },
+      { id: 'sensor_daily', label: (fields.sensor_daily && fields.sensor_daily.label) || 'Daily Production Sensor' }
+    ];
+
+    const array2Items = [
+      { id: 'array2_helper', type: 'helper', label: helperText },
+      { id: 'sensor_pv_total_secondary', label: (fields.sensor_pv_total_secondary && fields.sensor_pv_total_secondary.label) || 'PV Total Sensor (Inverter 2)' },
+      { id: 'sensor_pv_array2_1', label: (fields.sensor_pv_array2_1 && fields.sensor_pv_array2_1.label) || 'PV String 1 (Array 2)' },
+      { id: 'sensor_pv_array2_2', label: (fields.sensor_pv_array2_2 && fields.sensor_pv_array2_2.label) || 'PV String 2 (Array 2)' },
+      { id: 'sensor_pv_array2_3', label: (fields.sensor_pv_array2_3 && fields.sensor_pv_array2_3.label) || 'PV String 3 (Array 2)' },
+      { id: 'sensor_pv_array2_4', label: (fields.sensor_pv_array2_4 && fields.sensor_pv_array2_4.label) || 'PV String 4 (Array 2)' },
+      { id: 'sensor_pv_array2_5', label: (fields.sensor_pv_array2_5 && fields.sensor_pv_array2_5.label) || 'PV String 5 (Array 2)' },
+      { id: 'sensor_pv_array2_6', label: (fields.sensor_pv_array2_6 && fields.sensor_pv_array2_6.label) || 'PV String 6 (Array 2)' },
+      { id: 'sensor_daily_array2', label: (fields.sensor_daily_array2 && fields.sensor_daily_array2.label) || 'Daily Production Sensor (Array 2)' }
+    ];
+
+    const batteryItems = [
+      { id: 'sensor_bat1_soc', label: (fields.sensor_bat1_soc && fields.sensor_bat1_soc.label) || 'Battery 1 SOC' },
+      { id: 'sensor_bat1_power', label: (fields.sensor_bat1_power && fields.sensor_bat1_power.label) || 'Battery 1 Power' },
+      { id: 'sensor_bat1_charge_power', label: (fields.sensor_bat1_charge_power && fields.sensor_bat1_charge_power.label) || 'Battery 1 Charge Power' },
+      { id: 'sensor_bat1_discharge_power', label: (fields.sensor_bat1_discharge_power && fields.sensor_bat1_discharge_power.label) || 'Battery 1 Discharge Power' },
+      { id: 'sensor_bat2_soc', label: (fields.sensor_bat2_soc && fields.sensor_bat2_soc.label) || 'Battery 2 SOC' },
+      { id: 'sensor_bat2_power', label: (fields.sensor_bat2_power && fields.sensor_bat2_power.label) || 'Battery 2 Power' },
+      { id: 'sensor_bat2_charge_power', label: (fields.sensor_bat2_charge_power && fields.sensor_bat2_charge_power.label) || 'Battery 2 Charge Power' },
+      { id: 'sensor_bat2_discharge_power', label: (fields.sensor_bat2_discharge_power && fields.sensor_bat2_discharge_power.label) || 'Battery 2 Discharge Power' },
+      { id: 'sensor_bat3_soc', label: (fields.sensor_bat3_soc && fields.sensor_bat3_soc.label) || 'Battery 3 SOC' },
+      { id: 'sensor_bat3_power', label: (fields.sensor_bat3_power && fields.sensor_bat3_power.label) || 'Battery 3 Power' },
+      { id: 'sensor_bat3_charge_power', label: (fields.sensor_bat3_charge_power && fields.sensor_bat3_charge_power.label) || 'Battery 3 Charge Power' },
+      { id: 'sensor_bat3_discharge_power', label: (fields.sensor_bat3_discharge_power && fields.sensor_bat3_discharge_power.label) || 'Battery 3 Discharge Power' },
+      { id: 'sensor_bat4_soc', label: (fields.sensor_bat4_soc && fields.sensor_bat4_soc.label) || 'Battery 4 SOC' },
+      { id: 'sensor_bat4_power', label: (fields.sensor_bat4_power && fields.sensor_bat4_power.label) || 'Battery 4 Power' },
+      { id: 'sensor_bat4_charge_power', label: (fields.sensor_bat4_charge_power && fields.sensor_bat4_charge_power.label) || 'Battery 4 Charge Power' },
+      { id: 'sensor_bat4_discharge_power', label: (fields.sensor_bat4_discharge_power && fields.sensor_bat4_discharge_power.label) || 'Battery 4 Discharge Power' }
+    ];
+
+    const gridItems = [
+      { id: 'sensor_grid_power', label: (fields.sensor_grid_power && fields.sensor_grid_power.label) || 'Grid Inverter 1 Power' },
+      { id: 'sensor_grid_import', label: (fields.sensor_grid_import && fields.sensor_grid_import.label) || 'Grid Inverter 1 Import Sensor' },
+      { id: 'sensor_grid_export', label: (fields.sensor_grid_export && fields.sensor_grid_export.label) || 'Grid Inverter 1 Export Sensor' },
+      { id: 'sensor_grid_import_daily', label: (fields.sensor_grid_import_daily && fields.sensor_grid_import_daily.label) || 'Daily Grid Inverter 1 Import Sensor' },
+      { id: 'sensor_grid_export_daily', label: (fields.sensor_grid_export_daily && fields.sensor_grid_export_daily.label) || 'Daily Grid Inverter 1 Export Sensor' }
+    ];
+
+    const grid2Items = [
+      { id: 'sensor_grid2_power', label: (fields.sensor_grid2_power && fields.sensor_grid2_power.label) || 'Grid Inverter 2 Power' },
+      { id: 'sensor_grid2_import', label: (fields.sensor_grid2_import && fields.sensor_grid2_import.label) || 'Grid Inverter 2 Import Sensor' },
+      { id: 'sensor_grid2_export', label: (fields.sensor_grid2_export && fields.sensor_grid2_export.label) || 'Grid Inverter 2 Export Sensor' },
+      { id: 'sensor_grid2_import_daily', label: (fields.sensor_grid2_import_daily && fields.sensor_grid2_import_daily.label) || 'Daily Grid Inverter 2 Import Sensor' },
+      { id: 'sensor_grid2_export_daily', label: (fields.sensor_grid2_export_daily && fields.sensor_grid2_export_daily.label) || 'Daily Grid Inverter 2 Export Sensor' }
+    ];
+
+    const windmillItems = [
+      { id: 'sensor_windmill_total', label: (fields.sensor_windmill_total && fields.sensor_windmill_total.label) || 'Windmill Total' },
+      { id: 'sensor_windmill_daily', label: (fields.sensor_windmill_daily && fields.sensor_windmill_daily.label) || 'Daily Windmill Production' }
+    ];
+
+    const evItems = [
+      { id: 'sensor_car_power', label: (fields.sensor_car_power && fields.sensor_car_power.label) || 'Car 1 Power' },
+      { id: 'sensor_car_soc', label: (fields.sensor_car_soc && fields.sensor_car_soc.label) || 'Car 1 SOC' },
+      { id: 'car1_label', label: (fields.car1_label && fields.car1_label.label) || 'Car 1 Label' },
+      { id: 'sensor_car2_power', label: (fields.sensor_car2_power && fields.sensor_car2_power.label) || 'Car 2 Power' },
+      { id: 'sensor_car2_soc', label: (fields.sensor_car2_soc && fields.sensor_car2_soc.label) || 'Car 2 SOC' },
+      { id: 'car2_label', label: (fields.car2_label && fields.car2_label.label) || 'Car 2 Label' }
+    ];
+
+    const homeLoadItems = [
+      { id: 'sensor_home_load', label: (fields.sensor_home_load && fields.sensor_home_load.label) || 'Home Load/Consumption (Required)' },
+      { id: 'sensor_home_load_secondary', label: (fields.sensor_home_load_secondary && fields.sensor_home_load_secondary.label) || 'Home Load (Inverter 2)' }
+    ];
+
+    const batteryWhen = (minCount) => ({ hasBatteryValue, batteryCountValue }) => {
+      if (hasBatteryValue !== 'yes') return false;
+      const count = Number(batteryCountValue || 0);
+      return Number.isFinite(count) && count >= minCount;
+    };
+
+    return [
+      ...array1Items.map((item) => ({
+        ...item,
+        when: ({ hasPvValue, inverterValue }) => hasPvValue === 'yes' && (inverterValue === '1' || inverterValue === '2')
+      })),
+      ...array2Items.map((item) => ({
+        ...item,
+        when: ({ hasPvValue, inverterValue }) => hasPvValue === 'yes' && inverterValue === '2'
+      })),
+      ...batteryItems.map((item) => {
+        let minCount = 1;
+        if (item.id && item.id.startsWith('sensor_bat2_')) minCount = 2;
+        if (item.id && item.id.startsWith('sensor_bat3_')) minCount = 3;
+        if (item.id && item.id.startsWith('sensor_bat4_')) minCount = 4;
+        return {
+          ...item,
+          when: batteryWhen(minCount)
+        };
+      }),
+      ...gridItems.map((item) => ({
+        ...item,
+        when: ({ hasGridValue, inverterValue, canExportValue }) => {
+          if (hasGridValue !== 'yes') return false;
+          if (!(inverterValue === '1' || inverterValue === '2')) return false;
+          if (item.id && item.id.includes('export') && canExportValue === 'no') return false;
+          return true;
+        }
+      })),
+      ...grid2Items.map((item) => ({
+        ...item,
+        when: ({ hasGridValue, inverterValue, canExportValue }) => {
+          if (hasGridValue !== 'yes') return false;
+          if (inverterValue !== '2') return false;
+          if (item.id && item.id.includes('export') && canExportValue === 'no') return false;
+          return true;
+        }
+      })),
+      ...windmillItems.map((item) => ({
+        ...item,
+        when: ({ hasWindmillValue }) => hasWindmillValue === 'yes'
+      })),
+      ...evItems.map((item) => {
+        let minCount = 1;
+        if (item.id && (item.id.includes('car2') || item.id.startsWith('sensor_car2_'))) {
+          minCount = 2;
+        }
+        return {
+          ...item,
+          when: ({ hasEvValue, evCountValue }) => {
+            if (hasEvValue !== 'yes') return false;
+            const count = Number(evCountValue || 0);
+            return Number.isFinite(count) && count >= minCount;
+          }
+        };
+      }),
+      ...homeLoadItems.map((item) => ({
+        ...item,
+        when: ({ inverterValue }) => {
+          if (item.id === 'sensor_home_load') return true;
+          return inverterValue === '2';
+        }
+      }))
+    ];
+  }
+
   _createStandardField(field, value) {
     const wrapper = document.createElement('div');
     wrapper.className = 'standard-field-wrapper';
@@ -12252,7 +13131,22 @@ class AdvancedEnergyCardEditor extends HTMLElement {
     } else {
       newConfig[fieldName] = value;
     }
+    if (fieldName === 'initial_has_pv' && String(value) !== 'yes') {
+      delete newConfig.initial_inverters;
+    }
+    if (fieldName === 'initial_has_battery' && String(value) !== 'yes') {
+      delete newConfig.initial_battery_count;
+    }
+    if (fieldName === 'initial_has_grid' && String(value) !== 'yes') {
+      delete newConfig.initial_can_export;
+    }
+    if (fieldName === 'initial_has_ev' && String(value) !== 'yes') {
+      delete newConfig.initial_ev_count;
+    }
     this._config = newConfig;
+    if (fieldName === 'initial_configuration' || fieldName === 'initial_has_pv' || fieldName === 'initial_inverters' || fieldName === 'initial_has_battery' || fieldName === 'initial_battery_count' || fieldName === 'initial_has_grid' || fieldName === 'initial_has_windmill' || fieldName === 'initial_has_ev' || fieldName === 'initial_ev_count' || fieldName === 'language') {
+      this.render();
+    }
     this._debouncedConfigChanged(newConfig, Boolean(immediate));
   }
 
@@ -12384,7 +13278,10 @@ class AdvancedEnergyCardEditor extends HTMLElement {
     const localeStrings = this._getLocaleStrings();
     const optionDefs = this._createOptionDefs(localeStrings);
     const schemaDefs = this._createSchemaDefs(localeStrings, optionDefs);
-    const sections = this._createSectionDefs(localeStrings, schemaDefs);
+    const configWithDefaults = this._configWithDefaults();
+    const showInitialConfig = configWithDefaults.initial_configuration !== false;
+    const sections = this._createSectionDefs(localeStrings, schemaDefs)
+      .filter((section) => section.id !== 'initialConfig' || showInitialConfig);
 
     sections.forEach((section) => {
       container.appendChild(this._createSection(section));
@@ -12473,6 +13370,34 @@ class AdvancedEnergyCardEditor extends HTMLElement {
       .field-helper {
         font-size: 0.85em;
         color: var(--secondary-text-color);
+      }
+      .initial-config-items {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin-top: 6px;
+      }
+      .initial-config-item {
+        padding: 6px 10px;
+        border: 1px solid var(--divider-color);
+        border-radius: 6px;
+        background: var(--card-background-color);
+        font-size: 0.95em;
+      }
+      .initial-config-item.helper {
+        border-style: dashed;
+        background: transparent;
+        color: var(--secondary-text-color);
+        font-style: italic;
+      }
+      .initial-config-item.empty {
+        color: var(--secondary-text-color);
+        font-style: italic;
+      }
+      .initial-config-complete-button {
+        font-size: 2em;
+        padding-top: 1em;
+        padding-bottom: 1em;
       }
       .radio-group {
         display: flex;
