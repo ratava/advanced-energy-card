@@ -1,7 +1,7 @@
 # Advanced Energy Card
 
 ![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)  
-![Version](https://img.shields.io/badge/version-1.0.20-blue.svg)
+![Version](https://img.shields.io/badge/version-1.0.21-blue.svg)
 
 Advanced Energy Card repository is [https://github.com/ratava/advanced-energy-card](https://github.com/ratava/advanced-energy-card).
 
@@ -26,7 +26,7 @@ Advanced Energy Card is a Home Assistant custom Lovelace card that renders anima
 - Adjustable animation speed multiplier (-3× to 3×, default 1×, pause/reverse supported) and per‑flow visibility thresholds
 - Daily energy production badge
 - Daily import and export totals
-- Swimming pool power consumption now shown on the main graphic
+- Swimming pool power consumption now shown on the main graphic and can now be hidden if not in use
 - Heat pump/AC power and Hot Water System consumption now shown
 - Washing Machine, Dryer, Refrigerator, Dishwasher now included in popup
 - Load warning/critical color overrides and a configurable low‑SOC threshold for the battery liquid fill
@@ -468,6 +468,7 @@ lovelace:
 | `battery_fill_low_threshold`         | number  | `25`                                                              | SOC percentage that flips to the low fill colour.                                                                                                 |
 | `battery_fill_opacity`               | number  | `1`                                                               | Opacity for the battery liquid fill (0–1).                                                                                                        |
 | `grid_activity_threshold`            | number  | `100`                                                             | Minimum absolute grid power (W) before flows animate.                                                                                             |
+| `grid_power_only`                    | boolean | `false`                                                           | Forces a direct grid→house flow (hides inverter/battery flows).                                                                                   |
 | `grid_threshold_warning`             | number  | —                                                                 | Trigger warning colour when grid magnitude meets this value.                                                                                      |
 | `grid_warning_color`                 | string  | `#ff8000`                                                         | Grid warning colour.                                                                                                                              |
 | `grid_threshold_critical`            | number  | —                                                                 | Trigger critical colour when magnitude meets this value.                                                                                          |
@@ -491,6 +492,7 @@ The card now selects the grid animation path automatically:
 
 - When a PV total (`sensor_pv_total`) or at least one Array 1 string sensor exists, imports and exports animate along the inverter conduit just like before.
 - If `sensor_pv_total` and all Array 1 string slots are left blank, the card assumes you're running directly from the grid: the animation shifts to the house branch, the grid arrow points at the home, and PV-only UI (Daily Yield badge + PV popup) stays hidden.
+- When `grid_power_only` is enabled, the card always uses the direct grid→house path and hides inverter/battery flows, even if PV sensors are configured.
 
 The legacy grid→house toggle has been removed, so delete any `grid_flow_mode` entries from your YAML. Detection now happens every render and `grid_activity_threshold` still governs when the animation starts.
 

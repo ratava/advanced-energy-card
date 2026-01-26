@@ -1,7 +1,7 @@
 ﻿/**
  * Advanced Energy Card
  * Custom Home Assistant card for energy flow visualization
- * Version: 1.0.20
+ * Version: 1.0.21
  * Tested with Home Assistant 2025.12+
  */
 const BATTERY_GEOMETRY = { X: 260, Y_BASE: 350, WIDTH: 55, MAX_HEIGHT: 84 };
@@ -456,11 +456,20 @@ function applySvgLayerVisibility(svgElement, config) {
   const hasArray2Total = config.sensor_pv_total_secondary;
   const hasArray2 = Boolean(hasArray2PVStrings || hasArray2Total);
 
-  const inverter1Active = Boolean(config.sensor_grid_power)
+  const gridPowerOnly = Boolean(config.grid_power_only);
+  const inverter1Active = !gridPowerOnly && (Boolean(config.sensor_grid_power)
     || (Boolean(config.sensor_grid_import) && Boolean(config.sensor_grid_export))
-    || Boolean(config.sensor_windmill_total);
-  const inverter2Active = Boolean(config.sensor_grid2_power)
-    || (Boolean(config.sensor_grid2_import) && Boolean(config.sensor_grid2_export));
+    || Boolean(config.sensor_windmill_total));
+  const inverter2Active = !gridPowerOnly && (Boolean(config.sensor_grid2_power)
+    || (Boolean(config.sensor_grid2_import) && Boolean(config.sensor_grid2_export)));
+
+  const inverter1Nodes = svgElement.querySelectorAll('[data-role="inverter1"]');
+  inverter1Nodes.forEach((node) => {
+    if (!node || !node.style) {
+      return;
+    }
+    node.style.opacity = inverter1Active ? '1' : '0';
+  });
 
   const inverter2Nodes = svgElement.querySelectorAll('[data-role="inverter2"]');
   inverter2Nodes.forEach((node) => {
@@ -538,6 +547,7 @@ const FLOW_STYLE_PATTERNS = {
 const FLOW_BASE_LOOP_RATE = 0.0025;
 const FLOW_MIN_GLOW_SCALE = 0.2;
 const DEFAULT_GRID_ACTIVITY_THRESHOLD = 100;
+const GRID_CURRENT_HIDE_DAILY_OFFSET = 18;
 const DEFAULT_BATTERY_FILL_HIGH_COLOR = '#00ffff';
 const DEFAULT_BATTERY_FILL_LOW_COLOR = '#ff0000';
 const DEFAULT_BATTERY_LOW_THRESHOLD = 25;
@@ -803,7 +813,6 @@ class AdvancedEnergyCard extends HTMLElement {
     this.config = { ...defaults, ...normalized };
     this._forceRender = true;
     this._prevViewState = null;
-
   }
 
   set hass(hass) {
@@ -903,8 +912,8 @@ class AdvancedEnergyCard extends HTMLElement {
       refrigerator_font_size: 8,
       grid_font_size: 8,
       grid_daily_font_size: '8',
-      grid_current_odometer: false,
-      grid_current_odometer_duration: 350,
+      grid_current_odometer: true,
+      grid_current_odometer_duration: 950,
       car_power_font_size: 10,
       car_soc_font_size: 10,
       car2_power_font_size: 10,
@@ -1013,6 +1022,7 @@ class AdvancedEnergyCard extends HTMLElement {
       battery_fill_low_threshold: DEFAULT_BATTERY_LOW_THRESHOLD,
       battery_fill_opacity: 0.6,
       grid_activity_threshold: DEFAULT_GRID_ACTIVITY_THRESHOLD,
+      grid_power_only: false,
       grid_threshold_warning: null,
       grid_warning_color: '#ff8000',
       grid_threshold_critical: null,
@@ -3515,6 +3525,7 @@ class AdvancedEnergyCard extends HTMLElement {
       const num = Number(raw);
       return Number.isFinite(num) ? num : null;
     };
+    const gridPowerOnly = Boolean(config.grid_power_only);
     const buildBatteryState = (index, socId, powerId, chargeId, dischargeId, invertFlag) => {
       const soc = getNumericState(socId);
       const combinedPower = getNumericState(powerId);
@@ -3535,7 +3546,7 @@ class AdvancedEnergyCard extends HTMLElement {
       if (power !== null && invertFlag) {
         power = power * -1;
       }
-      const active = hasSoc && power !== null;
+      const active = hasSoc && power !== null && !gridPowerOnly;
       return {
         index,
         role: `battery${index}`,
@@ -4243,7 +4254,7 @@ class AdvancedEnergyCard extends HTMLElement {
     const hasPrimarySolar = Boolean(hasValidArray1Production || hasValidArray2Production);
     const inverter2ConfiguredForPv = Boolean(config.sensor_grid2_power)
       || (Boolean(config.sensor_grid2_import) && Boolean(config.sensor_grid2_export));
-    const useHouseGridPath = !hasPrimarySolar;
+    const useHouseGridPath = gridPowerOnly || !hasPrimarySolar;
     const pvUiPreviouslyEnabled = this._pvUiEnabled !== undefined ? this._pvUiEnabled : true;
     const pvUiEnabled = hasPrimarySolar;
     if (pvUiPreviouslyEnabled && !pvUiEnabled) {
@@ -4251,7 +4262,7 @@ class AdvancedEnergyCard extends HTMLElement {
     }
     this._pvUiEnabled = pvUiEnabled;
     const gridActiveForGrid = !useHouseGridPath && gridActive;
-    const gridActiveForHouse = useHouseGridPath && gridActive;
+    const gridActiveForHouse = useHouseGridPath && (gridPowerOnly ? true : gridActive);
     const inverterGridFlowsEnabled = !useHouseGridPath;
 
     const car1Direction = car1PowerValue > 0 ? 1 : (car1PowerValue < 0 ? -1 : 1);
@@ -4267,11 +4278,11 @@ class AdvancedEnergyCard extends HTMLElement {
       car2Charging
     });
 
-    const inverter1Configured = Boolean(config.sensor_grid_power)
+    const inverter1Configured = !gridPowerOnly && (Boolean(config.sensor_grid_power)
       || (Boolean(config.sensor_grid_import) && Boolean(config.sensor_grid_export))
-      || Boolean(config.sensor_windmill_total);
-    const inverter2Configured = Boolean(config.sensor_grid2_power)
-      || (Boolean(config.sensor_grid2_import) && Boolean(config.sensor_grid2_export));
+      || Boolean(config.sensor_windmill_total));
+    const inverter2Configured = !gridPowerOnly && (Boolean(config.sensor_grid2_power)
+      || (Boolean(config.sensor_grid2_import) && Boolean(config.sensor_grid2_export)));
     const inverter2Active = inverter2Configured;
 
     const batteryFlowStates = batteryStates.map((bat) => {
@@ -4312,17 +4323,17 @@ class AdvancedEnergyCard extends HTMLElement {
       'array-inverter2': { stroke: pvSecondaryColor, glowColor: pvSecondaryColor, active: inverter2Configured },
       windmill: { stroke: windmillFlowColor, glowColor: windmillFlowColor, active: windmillFlowActive, direction: 1 },
       load: { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: loadMagnitude > 10, direction: 1 },
-      'house-load': { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: loadMagnitude > 10, direction: 1 },
+      'house-load': { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: !gridPowerOnly && loadMagnitude > 10, direction: 1 },
       grid: { stroke: effectiveGridColor, glowColor: effectiveGridColor, active: gridActiveForGrid, direction: gridAnimationDirection },
       // House-only grid flow when no PV entities exist. Uses load thresholds/colors.
-      grid_house: { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: gridActiveForHouse && loadMagnitude > 10, direction: gridHouseDirection },
-      'grid-house': { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: gridActiveForHouse && loadMagnitude > 10, direction: gridHouseDirection },
+      grid_house: { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: gridActiveForHouse && (gridPowerOnly ? true : loadMagnitude > 10), direction: gridHouseDirection },
+      'grid-house': { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: gridActiveForHouse && (gridPowerOnly ? true : loadMagnitude > 10), direction: gridHouseDirection },
 
       // New optional alias flow key used by some SVGs.
       // Mirrors grid-house when running in grid-only mode, otherwise mirrors inverter1-grid.
       'gird-feed': inverterGridFlowsEnabled
         ? { stroke: effectiveGrid1Color, glowColor: effectiveGrid1Color, active: inverterGridFlowsEnabled && grid1Active, direction: gridHouseDirection }
-        : { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: gridActiveForHouse && loadMagnitude > 10, direction: gridHouseDirection },
+        : { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: gridActiveForHouse && (gridPowerOnly ? true : loadMagnitude > 10), direction: gridHouseDirection },
 
       // New per-inverter bidirectional grid flows.
       'inverter1-import-export': { stroke: effectiveGrid1Color, glowColor: effectiveGrid1Color, active: inverterGridFlowsEnabled && grid1Active, direction: inverter1ImportExportDirection },
@@ -4527,6 +4538,7 @@ class AdvancedEnergyCard extends HTMLElement {
       },
       batteries: batteryStates,
       pvUiEnabled,
+      gridPowerOnly,
       showDailyGrid,
       flows,
       flowDurations,
@@ -4621,13 +4633,13 @@ class AdvancedEnergyCard extends HTMLElement {
         /* Editor helpers */
         .editor-divider {
           display: block;
-          width: calc(100% + 32px);
-          margin: 20px -16px 10px;
-          border: none;
-          border-top: 1px dashed #ccc;
-          height: 2px;
-          border-radius: 999px;
-          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.25), transparent);
+          width: 100%;
+          min-width: 100%;
+          background-color: var(--divider-color, #ccc) !important;
+          height: 2px !important;
+          margin: 1em 0;
+          box-shadow: none;
+          align-self: stretch;
         }
         /* Visual header for Array 2: use a dedicated class so no styles are inherited */
         .array2-header { display: block; }
@@ -8191,6 +8203,29 @@ class AdvancedEnergyCard extends HTMLElement {
       });
     };
 
+    const setRoleOpacityOnly = (role, opacityValue) => {
+      if (!svgRoot) {
+        return;
+      }
+      const nodes = svgRoot.querySelectorAll(`[data-role="${role.replace(/"/g, '\"')}"]`);
+      if (!nodes || !nodes.length) {
+        return;
+      }
+      const normalizedOpacity = Number.isFinite(opacityValue) ? opacityValue : 0;
+      nodes.forEach((node) => {
+        const target = getVisibilityTarget(node) || node;
+        if (!target) {
+          return;
+        }
+        if (target.style) {
+          target.style.opacity = String(normalizedOpacity);
+        }
+        if (typeof target.setAttribute === 'function') {
+          target.setAttribute('opacity', String(normalizedOpacity));
+        }
+      });
+    };
+
     const getBaseYForNode = (node) => {
       if (!node) {
         return Number.NaN;
@@ -9112,6 +9147,7 @@ class AdvancedEnergyCard extends HTMLElement {
     setRoleVisibilityOnly('grid-daily-export-text', showDailyGridConfig);
     setRoleVisibilityOnly('grid-daily-import', gridDailyImportVisible);
     setRoleVisibilityOnly('grid-daily-export', gridDailyExportVisible);
+    setRoleVisibilityOnly('inverter1', !(viewState && viewState.gridPowerOnly));
 
     // Heat pump
     const heatPumpVisible = Boolean(viewState.heatPump && viewState.heatPump.visible);
@@ -9147,6 +9183,8 @@ class AdvancedEnergyCard extends HTMLElement {
       fontSize: viewState.pool ? viewState.pool.fontSize : undefined
     });
     setRoleVisibilityOnly('pool-power-text', poolVisible);
+    setRoleOpacityOnly('base', poolVisible ? 1 : 0);
+    setRoleOpacityOnly('base-nopool', poolVisible ? 0 : 1);
 
     // Home appliances
     const washingMachineVisible = Boolean(viewState.washingMachine && viewState.washingMachine.visible);
@@ -9864,7 +9902,7 @@ class AdvancedEnergyCard extends HTMLElement {
   }
 
   static get version() {
-    return '1.0.20';
+    return '1.0.21';
   }
 }
 
@@ -10094,8 +10132,8 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           load_flow_color: { label: 'Load Flow Color', helper: 'Colour applied to the home load animation line.' },
           load_text_color: { label: 'Load Text Color', helper: 'Colour applied to the home load text when thresholds are inactive.' },
           house_total_color: { label: 'House Total Color', helper: 'Colour applied to the HOUSE TOT text/flow.' },
-          inv1_color: { label: 'INV 1 Color', helper: 'Colour applied to the INV 1 text/flow.' },
-          inv2_color: { label: 'INV 2 Color', helper: 'Colour applied to the INV 2 text/flow.' },
+          inv1_color: { label: 'Inverter 1 to House Color', helper: 'Color applied to the flow from Inverter 1 to the house.' },
+          inv2_color: { label: 'Inverter 2 to House Color', helper: 'Color applied to the flow from Inverter 2 to the house.' },
           load_threshold_warning: { label: 'Load Warning Threshold', helper: 'Change load color when magnitude equals or exceeds this value. Uses the selected display unit.' },
           load_warning_color: { label: 'Load Warning Color', helper: 'Hex or CSS color applied at the load warning threshold.' },
           load_threshold_critical: { label: 'Load Critical Threshold', helper: 'Change load color when magnitude equals or exceeds this value. Uses the selected display unit.' },
@@ -10113,6 +10151,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           battery_fill_low_threshold: { label: 'Battery Low Fill Threshold (%)', helper: 'Use the low fill colour when SOC is at or below this percentage.' },
           battery_fill_opacity: { label: 'Battery Fill Opacity', helper: 'Opacity for the battery fill level (0-1).' },
           grid_activity_threshold: { label: 'Grid Animation Threshold (W)', helper: 'Ignore grid flows whose absolute value is below this wattage before animating.' },
+          grid_power_only: { label: 'Grid Power Only', helper: 'Hide inverter/battery flows and show a direct grid-to-house flow.' },
           grid_threshold_warning: { label: 'Inverter 1 Grid Warning Threshold', helper: 'Change inverter 1 grid color when magnitude equals or exceeds this value. Uses the selected display unit.' },
           grid_warning_color: { label: 'Inverter 1 Grid Warning Color', helper: 'Hex or CSS color applied at the inverter 1 warning threshold.' },
           grid_threshold_critical: { label: 'Inverter 1 Grid Critical Threshold', helper: 'Change inverter 1 grid color when magnitude equals or exceeds this value. Uses the selected display unit.' },
@@ -10451,8 +10490,8 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           load_flow_color: { label: 'Colore flusso carico', helper: 'Colore applicato all animazione del carico della casa.' },
           load_text_color: { label: 'Colore testo carico', helper: 'Colore applicato al testo del carico di casa quando le soglie non sono attive.' },
           house_total_color: { label: 'Colore HOUSE TOT', helper: 'Colore applicato al testo/flusso HOUSE TOT.' },
-          inv1_color: { label: 'Colore INV 1', helper: 'Colore applicato al testo/flusso INV 1.' },
-          inv2_color: { label: 'Colore INV 2', helper: 'Colore applicato al testo/flusso INV 2.' },
+          inv1_color: { label: 'Colore da Inverter 1 a Casa', helper: 'Colore applicato al flusso da Inverter 1 verso la casa.' },
+          inv2_color: { label: 'Colore da Inverter 2 a Casa', helper: 'Colore applicato al flusso da Inverter 2 verso la casa.' },
           load_threshold_warning: { label: 'Soglia avviso carico', helper: 'Cambia colore quando il carico raggiunge questa soglia. Usa l unita di visualizzazione selezionata.' },
           load_warning_color: { label: 'Colore avviso carico', helper: 'Colore applicato alla soglia di avviso del carico.' },
           load_threshold_critical: { label: 'Soglia critica carico', helper: 'Cambia colore quando il carico raggiunge questa soglia critica. Usa l unita di visualizzazione selezionata.' },
@@ -10470,6 +10509,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           battery_fill_low_threshold: { label: 'Soglia SOC bassa batteria (%)', helper: 'Usa il colore di riempimento basso quando la SOC Ã¨ uguale o inferiore a questa percentuale.' },
           battery_fill_opacity: { label: 'OpacitÃ  riempimento batteria', helper: 'OpacitÃ  del livello di riempimento batteria (0-1).' },
           grid_activity_threshold: { label: 'Soglia animazione rete (W)', helper: 'Ignora i flussi rete con magnitudine inferiore a questo valore prima di animarli.' },
+          grid_power_only: { label: 'Solo potenza rete', helper: 'Nasconde i flussi di inverter/batterie e mostra un flusso diretto rete-casa.' },
           grid_threshold_warning: { label: 'Soglia avviso rete (Inverter 1)', helper: 'Cambia colore quando la magnitudine di Inverter 1 raggiunge questa soglia. Usa l unita di visualizzazione selezionata.' },
           grid_warning_color: { label: 'Colore avviso rete (Inverter 1)', helper: 'Colore applicato alla soglia di avviso per Inverter 1.' },
           grid_threshold_critical: { label: 'Soglia critica rete (Inverter 1)', helper: 'Cambia colore quando la magnitudine di Inverter 1 raggiunge questa soglia. Usa l unita di visualizzazione selezionata.' },
@@ -10808,8 +10848,8 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           load_flow_color: { label: 'Lastflussfarbe', helper: 'Farbe fuer die Hausverbrauch-Animationslinie.' },
           load_text_color: { label: 'Last Textfarbe', helper: 'Farbe fuer den Hausverbrauchstext, wenn keine Schwellen aktiv sind.' },
           house_total_color: { label: 'House Total Farbe', helper: 'Farbe fuer HOUSE TOT Text/Fluss.' },
-          inv1_color: { label: 'INV 1 Farbe', helper: 'Farbe fuer INV 1 Text/Fluss.' },
-          inv2_color: { label: 'INV 2 Farbe', helper: 'Farbe fuer INV 2 Text/Fluss.' },
+          inv1_color: { label: 'Wechselrichter 1 zu Haus Farbe', helper: 'Farbe auf den Fluss von Wechselrichter 1 zum Haus angewendet.' },
+          inv2_color: { label: 'Wechselrichter 2 zu Haus Farbe', helper: 'Farbe auf den Fluss von Wechselrichter 2 zum Haus angewendet.' },
           load_threshold_warning: { label: 'Last Warnschwelle', helper: 'Farbe wechseln, wenn der Verbrauch diese Magnitude erreicht. Verwendet die ausgewaehlte Anzeigeeinheit.' },
           load_warning_color: { label: 'Last Warnfarbe', helper: 'Farbe bei Erreichen der Warnschwelle des Hausverbrauchs.' },
           load_threshold_critical: { label: 'Last Kritische Schwelle', helper: 'Farbe wechseln, wenn der Verbrauch diese kritische Magnitude erreicht. Verwendet die ausgewaehlte Anzeigeeinheit.' },
@@ -10827,6 +10867,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           battery_fill_low_threshold: { label: 'Niedriger SOC-Schwellenwert (%)', helper: 'Verwende die niedrige Fuellfarbe, wenn die Batterie-SOC diesen Prozentsatz erreicht oder unterschreitet.' },
           battery_fill_opacity: { label: 'Batterie Fuellstand Deckkraft', helper: 'Deckkraft fuer den Batterie-Fuellstand (0-1).' },
           grid_activity_threshold: { label: 'Netz Animationsschwelle (W)', helper: 'Ignoriere Netzfluesse mit geringerer Absolutleistung, bevor animiert wird.' },
+          grid_power_only: { label: 'Nur Netzleistung', helper: 'Blendt Wechselrichter-/Batteriefluesse aus und zeigt einen direkten Netz-zu-Haus-Flow.' },
           grid_threshold_warning: { label: 'Netz Warnschwelle (WR 1)', helper: 'Farbe wechseln, wenn diese Magnitude fuer WR 1 erreicht wird. Verwendet die ausgewaehlte Anzeigeeinheit.' },
           grid_warning_color: { label: 'Netz Warnfarbe (WR 1)', helper: 'Farbe bei Erreichen der Warnschwelle fuer WR 1.' },
           grid_threshold_critical: { label: 'Netz Kritische Schwelle (WR 1)', helper: 'Farbe wechseln, wenn diese Magnitude fuer WR 1 erreicht wird. Verwendet die ausgewaehlte Anzeigeeinheit.' },
@@ -11172,8 +11213,8 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           load_flow_color: { label: 'Couleur flux charge', helper: 'Couleur appliquÃ©e Ã  la ligne d animation de la charge domestique.' },
           load_text_color: { label: 'Couleur texte charge', helper: 'Couleur appliquÃ©e au texte de charge lorsque aucun seuil n est actif.' },
           house_total_color: { label: 'Couleur HOUSE TOT', helper: 'Couleur appliquÃ©e au texte/flux HOUSE TOT.' },
-          inv1_color: { label: 'Couleur INV 1', helper: 'Couleur appliquÃ©e au texte/flux INV 1.' },
-          inv2_color: { label: 'Couleur INV 2', helper: 'Couleur appliquÃ©e au texte/flux INV 2.' },
+          inv1_color: { label: 'Couleur onduleur 1 vers maison', helper: 'Couleur appliquÃ©e au flux de l onduleur 1 vers la maison.' },
+          inv2_color: { label: 'Couleur onduleur 2 vers maison', helper: 'Couleur appliquÃ©e au flux de l onduleur 2 vers la maison.' },
           load_threshold_warning: { label: 'Seuil avertissement charge', helper: 'Changer la couleur du chargeur lorsque la magnitude atteint ou dÃ©passe cette valeur. Utilise l unitÃ© d affichage sÃ©lectionnÃ©e.' },
           load_warning_color: { label: 'Couleur avertissement charge', helper: 'Couleur hex ou CSS appliquÃ©e au seuil d avertissement de charge.' },
           load_threshold_critical: { label: 'Seuil critique charge', helper: 'Changer la couleur lorsque la magnitude atteint ou dÃ©passe cette valeur. Utilise l unitÃ© d affichage sÃ©lectionnÃ©e.' },
@@ -11186,6 +11227,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           battery_fill_low_threshold: { label: 'Seuil remplissage batterie bas (%)', helper: 'Utiliser la couleur basse lorsque le SOC est Ã©gal ou infÃ©rieur Ã  ce pourcentage.' },
           battery_fill_opacity: { label: 'OpacitÃ© remplissage batterie', helper: 'OpacitÃ© du niveau de remplissage batterie (0-1).' },
           grid_activity_threshold: { label: 'Seuil animation rÃ©seau (W)', helper: 'Ignorer les flux rÃ©seau dont la valeur absolue est infÃ©rieure Ã  cette puissance avant d animer.' },
+          grid_power_only: { label: 'RÃ©seau uniquement', helper: 'Masque les flux onduleur/batterie et affiche un flux direct rÃ©seau-maison.' },
           grid_threshold_warning: { label: 'Seuil avertissement rÃ©seau', helper: 'Changer la couleur rÃ©seau lorsque la magnitude atteint cette valeur. Utilise l unitÃ© d affichage sÃ©lectionnÃ©e.' },
           grid_warning_color: { label: 'Couleur avertissement rÃ©seau', helper: 'Couleur hex appliquÃ©e au seuil d avertissement.' },
           grid_threshold_critical: { label: 'Seuil critique rÃ©seau', helper: 'Changer la couleur rÃ©seau lorsque la magnitude atteint cette valeur. Utilise l unitÃ© d affichage sÃ©lectionnÃ©e.' },
@@ -11531,8 +11573,8 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           load_flow_color: { label: 'Belasting flow kleur', helper: 'Kleur toegepast op de huisbelasting animatie lijn.' },
           load_text_color: { label: 'Belasting tekstkleur', helper: 'Kleur toegepast op de tekst van het huisverbruik wanneer geen drempel actief is.' },
           house_total_color: { label: 'HOUSE TOT kleur', helper: 'Kleur toegepast op HOUSE TOT tekst/flow.' },
-          inv1_color: { label: 'INV 1 kleur', helper: 'Kleur toegepast op INV 1 tekst/flow.' },
-          inv2_color: { label: 'INV 2 kleur', helper: 'Kleur toegepast op INV 2 tekst/flow.' },
+          inv1_color: { label: 'Omvormer 1 naar huis kleur', helper: 'Kleur toegepast op de flow van omvormer 1 naar het huis.' },
+          inv2_color: { label: 'Omvormer 2 naar huis kleur', helper: 'Kleur toegepast op de flow van omvormer 2 naar het huis.' },
           load_threshold_warning: { label: 'Belasting waarschuwingsdrempel', helper: 'Verander kleur van lader wanneer magnitude deze waarde bereikt of overschrijdt. Gebruikt geselecteerde weergave eenheid.' },
           load_warning_color: { label: 'Belasting waarschuwingskleur', helper: 'Hex of CSS kleur toegepast op belasting waarschuwingsdrempel.' },
           load_threshold_critical: { label: 'Belasting kritieke drempel', helper: 'Verander kleur wanneer magnitude deze waarde bereikt of overschrijdt. Gebruikt geselecteerde weergave eenheid.' },
@@ -11545,6 +11587,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           battery_fill_low_threshold: { label: 'Lage batterij vulling drempel (%)', helper: 'Gebruik lage kleur wanneer SOC gelijk aan of lager dan dit percentage.' },
           battery_fill_opacity: { label: 'Batterij vulling dekking', helper: 'Dekking voor batterij vulling niveau (0-1).' },
           grid_activity_threshold: { label: 'Grid animatie drempel (W)', helper: 'Negeer grid flows waarvan absolute waarde lager is dan deze kracht voordat animeren.' },
+          grid_power_only: { label: 'Alleen netstroom', helper: 'Verbergt omvormer/batterijflows en toont een directe net-naar-huis flow.' },
           grid_threshold_warning: { label: 'Grid waarschuwingsdrempel', helper: 'Verander grid kleur wanneer magnitude deze waarde bereikt. Gebruikt geselecteerde weergave eenheid.' },
           grid_warning_color: { label: 'Grid waarschuwingskleur', helper: 'Hex kleur toegepast op waarschuwingsdrempel.' },
           grid_threshold_critical: { label: 'Grid kritieke drempel', helper: 'Verander grid kleur wanneer magnitude deze waarde bereikt. Gebruikt geselecteerde weergave eenheid.' },
@@ -11847,6 +11890,8 @@ class AdvancedEnergyCardEditor extends HTMLElement {
         { name: 'title_bg_color', label: (fields.title_bg_color && fields.title_bg_color.label) || 'Title Background Color', helper: (fields.title_bg_color && fields.title_bg_color.helper) || '', selector: { color_picker: {} }, default: '' },
         { name: 'font_family', label: (fields.font_family && fields.font_family.label) || 'Font Family', helper: (fields.font_family && fields.font_family.helper) || '', selector: { text: { mode: 'blur' } }, default: 'sans-serif' },
         { name: 'odometer_font_family', label: (fields.odometer_font_family && fields.odometer_font_family.label) || 'Odometer Font Family (Monospace)', helper: (fields.odometer_font_family && fields.odometer_font_family.helper) || '', selector: { text: { mode: 'blur' } }, default: '' },
+        { name: 'grid_current_odometer', label: fields.grid_current_odometer.label, helper: fields.grid_current_odometer.helper, selector: { boolean: {} }, default: false },
+        { name: 'grid_current_odometer_duration', label: fields.grid_current_odometer_duration.label, helper: fields.grid_current_odometer_duration.helper, selector: { number: { min: 50, max: 2000, step: 50, mode: 'slider', unit_of_measurement: 'ms' } }, default: 350 },
         { name: 'header_font_size', label: fields.header_font_size.label, helper: fields.header_font_size.helper, selector: { text: { mode: 'blur' } } },
         { name: 'daily_label_font_size', label: fields.daily_label_font_size.label, helper: fields.daily_label_font_size.helper, selector: { text: { mode: 'blur' } } },
         { name: 'daily_value_font_size', label: fields.daily_value_font_size.label, helper: fields.daily_value_font_size.helper, selector: { text: { mode: 'blur' } } },       
@@ -11926,6 +11971,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
         { name: 'sensor_bat4_power', label: fields.sensor_bat4_power.label, helper: fields.sensor_bat4_power.helper, selector: entitySelector },
         { name: 'sensor_bat4_charge_power', label: fields.sensor_bat4_charge_power.label, helper: fields.sensor_bat4_charge_power.helper, selector: entitySelector },
         { name: 'sensor_bat4_discharge_power', label: fields.sensor_bat4_discharge_power.label, helper: fields.sensor_bat4_discharge_power.helper, selector: entitySelector },
+        { type: 'divider' },
         { name: 'invert_battery', label: fields.invert_battery.label, helper: fields.invert_battery.helper, selector: { boolean: {} } },
         { name: 'battery_soc_color', label: fields.battery_soc_color.label, helper: fields.battery_soc_color.helper, selector: { color_picker: {} } },
         { name: 'battery_charge_color', label: fields.battery_charge_color.label, helper: fields.battery_charge_color.helper, selector: { color_picker: {} } },
@@ -11944,36 +11990,36 @@ class AdvancedEnergyCardEditor extends HTMLElement {
         { name: 'sensor_grid_export', label: fields.sensor_grid_export.label, helper: fields.sensor_grid_export.helper, selector: entitySelector },
         { name: 'sensor_grid_import_daily', label: fields.sensor_grid_import_daily.label, helper: fields.sensor_grid_import_daily.helper, selector: entitySelector },
         { name: 'sensor_grid_export_daily', label: fields.sensor_grid_export_daily.label, helper: fields.sensor_grid_export_daily.helper, selector: entitySelector },
+        { name: 'grid_import_color', label: fields.grid_import_color.label, helper: fields.grid_import_color.helper, selector: { color_picker: {} } },
+        { name: 'grid_export_color', label: fields.grid_export_color.label, helper: fields.grid_export_color.helper, selector: { color_picker: {} } },
+        { name: 'grid_activity_threshold', label: fields.grid_activity_threshold.label, helper: fields.grid_activity_threshold.helper, selector: { number: { min: 0, max: 100000, step: 10 } }, default: DEFAULT_GRID_ACTIVITY_THRESHOLD },
+        { name: 'grid_power_only', label: fields.grid_power_only.label, helper: fields.grid_power_only.helper, selector: { boolean: {} }, default: false },
+        { name: 'grid_threshold_warning', label: fields.grid_threshold_warning.label, helper: fields.grid_threshold_warning.helper, selector: buildThresholdSelector(), default: null },
+        { name: 'grid_warning_color', label: fields.grid_warning_color.label, helper: fields.grid_warning_color.helper, selector: { color_picker: {} } },
+        { name: 'grid_threshold_critical', label: fields.grid_threshold_critical.label, helper: fields.grid_threshold_critical.helper, selector: buildThresholdSelector(), default: null },
+        { name: 'grid_critical_color', label: fields.grid_critical_color.label, helper: fields.grid_critical_color.helper, selector: { color_picker: {} } },
+        { name: 'inv1_color', label: fields.inv1_color.label, helper: fields.inv1_color.helper, selector: { color_picker: {} }, default: '#0080ff' },
+        { type: 'divider' },
         { name: 'sensor_grid2_power', label: fields.sensor_grid2_power.label, helper: fields.sensor_grid2_power.helper, selector: entitySelector },
         { name: 'sensor_grid2_import', label: fields.sensor_grid2_import.label, helper: fields.sensor_grid2_import.helper, selector: entitySelector },
         { name: 'sensor_grid2_export', label: fields.sensor_grid2_export.label, helper: fields.sensor_grid2_export.helper, selector: entitySelector },
         { name: 'sensor_grid2_import_daily', label: fields.sensor_grid2_import_daily.label, helper: fields.sensor_grid2_import_daily.helper, selector: entitySelector },
         { name: 'sensor_grid2_export_daily', label: fields.sensor_grid2_export_daily.label, helper: fields.sensor_grid2_export_daily.helper, selector: entitySelector },
-        { name: 'show_daily_grid', label: fields.show_daily_grid.label, helper: fields.show_daily_grid.helper, selector: { boolean: {} } },
-        { name: 'grid_daily_font_size', label: fields.grid_daily_font_size.label, helper: fields.grid_daily_font_size.helper, selector: { text: { mode: 'blur' } } },
-        { name: 'grid_current_odometer', label: fields.grid_current_odometer.label, helper: fields.grid_current_odometer.helper, selector: { boolean: {} }, default: false },
-        { name: 'grid_current_odometer_duration', label: fields.grid_current_odometer_duration.label, helper: fields.grid_current_odometer_duration.helper, selector: { number: { min: 50, max: 2000, step: 50, mode: 'slider', unit_of_measurement: 'ms' } }, default: 350 },
-        { name: 'show_grid_flow_label', label: fields.show_grid_flow_label.label, helper: fields.show_grid_flow_label.helper, selector: { boolean: {} } },
-        { name: 'invert_grid', label: fields.invert_grid.label, helper: fields.invert_grid.helper, selector: { boolean: {} } },
-        { name: 'inv1_color', label: fields.inv1_color.label, helper: fields.inv1_color.helper, selector: { color_picker: {} }, default: '#0080ff' },
-        { name: 'inv2_color', label: fields.inv2_color.label, helper: fields.inv2_color.helper, selector: { color_picker: {} }, default: '#0080ff' },
-        { name: 'grid_import_color', label: fields.grid_import_color.label, helper: fields.grid_import_color.helper, selector: { color_picker: {} } },
-        { name: 'grid_export_color', label: fields.grid_export_color.label, helper: fields.grid_export_color.helper, selector: { color_picker: {} } },
         { name: 'grid2_import_color', label: fields.grid2_import_color.label, helper: fields.grid2_import_color.helper, selector: { color_picker: {} } },
         { name: 'grid2_export_color', label: fields.grid2_export_color.label, helper: fields.grid2_export_color.helper, selector: { color_picker: {} } },
-        { name: 'grid_activity_threshold', label: fields.grid_activity_threshold.label, helper: fields.grid_activity_threshold.helper, selector: { number: { min: 0, max: 100000, step: 10 } }, default: DEFAULT_GRID_ACTIVITY_THRESHOLD },
-        { name: 'grid_threshold_warning', label: fields.grid_threshold_warning.label, helper: fields.grid_threshold_warning.helper, selector: buildThresholdSelector(), default: null },
-        { name: 'grid_warning_color', label: fields.grid_warning_color.label, helper: fields.grid_warning_color.helper, selector: { color_picker: {} } },
-        { name: 'grid_threshold_critical', label: fields.grid_threshold_critical.label, helper: fields.grid_threshold_critical.helper, selector: buildThresholdSelector(), default: null },
-        { name: 'grid_critical_color', label: fields.grid_critical_color.label, helper: fields.grid_critical_color.helper, selector: { color_picker: {} } },
         { name: 'grid2_threshold_warning', label: fields.grid2_threshold_warning.label, helper: fields.grid2_threshold_warning.helper, selector: buildThresholdSelector(), default: null },
         { name: 'grid2_warning_color', label: fields.grid2_warning_color.label, helper: fields.grid2_warning_color.helper, selector: { color_picker: {} } },
         { name: 'grid2_threshold_critical', label: fields.grid2_threshold_critical.label, helper: fields.grid2_threshold_critical.helper, selector: buildThresholdSelector(), default: null },
         { name: 'grid2_critical_color', label: fields.grid2_critical_color.label, helper: fields.grid2_critical_color.helper, selector: { color_picker: {} } },
+        { name: 'inv2_color', label: fields.inv2_color.label, helper: fields.inv2_color.helper, selector: { color_picker: {} }, default: '#0080ff' },
+        { type: 'divider' },
+        { name: 'show_daily_grid', label: fields.show_daily_grid.label, helper: fields.show_daily_grid.helper, selector: { boolean: {} } },
         { name: 'grid_font_size', label: fields.grid_font_size.label, helper: fields.grid_font_size.helper, selector: { text: { mode: 'blur' } } },
-        { name: 'inv1_power_font_size', label: fields.inv1_power_font_size.label, helper: fields.inv1_power_font_size.helper, selector: { text: { mode: 'blur' } } },
-        { name: 'inv2_power_font_size', label: fields.inv2_power_font_size.label, helper: fields.inv2_power_font_size.helper, selector: { text: { mode: 'blur' } } },        
-        
+        { name: 'grid_daily_font_size', label: fields.grid_daily_font_size.label, helper: fields.grid_daily_font_size.helper, selector: { text: { mode: 'blur' } } },
+        { name: 'show_grid_flow_label', label: fields.show_grid_flow_label.label, helper: fields.show_grid_flow_label.helper, selector: { boolean: {} } },
+        { name: 'invert_grid', label: fields.invert_grid.label, helper: fields.invert_grid.helper, selector: { boolean: {} } },
+        { name: 'inv2_color', label: fields.inv2_color.label, helper: fields.inv2_color.helper, selector: { color_picker: {} }, default: '#0080ff' },
+      
       ]),
       car: define([
         { name: 'sensor_car_power', label: fields.sensor_car_power.label, helper: fields.sensor_car_power.helper, selector: entitySelector },
@@ -12454,12 +12500,20 @@ class AdvancedEnergyCardEditor extends HTMLElement {
   }
 
   _createDividerField() {
-    const divider = document.createElement('hr');
-    divider.className = 'editor-divider';
+    const divider = document.createElement('div');
     divider.setAttribute('role', 'separator');
+    divider.style.display = 'block';
+    divider.style.width = '100%';
+    divider.style.minWidth = '100%';
+    divider.style.borderTop = '2px solid var(--divider-color, #ccc)';
+    divider.style.height = '0';
+    divider.style.margin = '1em 0';
+    divider.style.boxShadow = 'none';
+    divider.style.alignSelf = 'stretch';
     return divider;
   }
 
+  
   _createColorPickerField(field, value) {
     const wrapper = document.createElement('div');
     wrapper.className = 'color-field-wrapper';
