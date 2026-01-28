@@ -1,17 +1,31 @@
 ﻿/**
  * Advanced Energy Card
  * Custom Home Assistant card for energy flow visualization
- * Version: 1.0.22
+ * Version: 1.0.23
  * Tested with Home Assistant 2025.12+
  */
-const BATTERY_GEOMETRY = { X: 260, Y_BASE: 350, WIDTH: 55, MAX_HEIGHT: 84 };
-const TEXT_POSITIONS = {
-  solar: { x: 170, y: 310, rotate: -16, skewX: -20, skewY: 0 },
-  battery: { x: 245, y: 375, rotate: -25, skewX: -25, skewY: 5 },
-  home: { x: 460, y: 245, rotate: 0, skewX: 0, skewY: 0 },
-  grid: { x: 580, y: 90, rotate: -8, skewX: -10, skewY: 0 },
-  heatPump: { x: 315, y: 225, rotate: -20, skewX: -20, skewY: 33 }
+
+// ============================================================
+// SECTION 1: CONSTANTS & CONFIGURATION
+// ============================================================
+
+// Organized constants for geometry, animation, defaults, and debug settings
+const GEOMETRY = {
+  BATTERY: { X: 260, Y_BASE: 350, WIDTH: 55, MAX_HEIGHT: 84 },
+  SVG: { width: 800, height: 450 },
+  TEXT_POSITIONS: {
+    solar: { x: 170, y: 310, rotate: -16, skewX: -20, skewY: 0 },
+    battery: { x: 245, y: 375, rotate: -25, skewX: -25, skewY: 5 },
+    home: { x: 460, y: 245, rotate: 0, skewX: 0, skewY: 0 },
+    grid: { x: 580, y: 90, rotate: -8, skewX: -10, skewY: 0 },
+    heatPump: { x: 315, y: 225, rotate: -20, skewX: -20, skewY: 33 }
+  }
 };
+
+// Legacy constants for backward compatibility
+const BATTERY_GEOMETRY = GEOMETRY.BATTERY;
+const SVG_DIMENSIONS = GEOMETRY.SVG;
+const TEXT_POSITIONS = GEOMETRY.TEXT_POSITIONS;
 
 const buildTextTransform = ({ x, y, rotate, skewX, skewY }) =>
   `translate(${x}, ${y}) rotate(${rotate}) skewX(${skewX}) skewY(${skewY}) translate(-${x}, -${y})`;
@@ -24,7 +38,7 @@ const TEXT_TRANSFORMS = {
   heatPump: buildTextTransform(TEXT_POSITIONS.heatPump)
 };
 
-const SVG_DIMENSIONS = { width: 800, height: 450 };
+// Debug Grid Configuration
 const DEBUG_GRID_SPACING = 25;
 const DEBUG_GRID_MAJOR_SPACING = 100;
 const DEBUG_GRID_MINOR_COLOR = 'rgba(255, 255, 255, 0.25)';
@@ -70,21 +84,56 @@ const DEBUG_GRID_CONTENT = (() => {
   return segments.join('\n');
 })();
 
-// Enable/disable debug grid overlay for development (set true to show grid)
-const DEBUG_GRID_ENABLED = false;
+// Debug and default configuration constants
+const DEBUG = {
+  GRID_ENABLED: false,
+  LAYER_NOSOLAR_ENABLED: false,
+  LAYER_1ARRAY_ENABLED: false,
+  LAYER_2ARRAY_ENABLED: false,
+  HEADLIGHT_LOGGING_ENABLED: false
+};
 
-// Layer visibility toggles for development/testing (set true to force show layers)
-const DEBUG_LAYER_NOSOLAR_ENABLED = false;
-const DEBUG_LAYER_1ARRAY_ENABLED = false;
-const DEBUG_LAYER_2ARRAY_ENABLED = false;
-const HEADLIGHT_DEBUG_LOGGING_ENABLED = false;
-const HEADLIGHT_FILTERS_ENABLED = true;
-const HEADLIGHT_BLUR_RADIUS_PX = 12;
-const HEADLIGHT_SVG_FILTER_ID = 'advanced-headlight-glow';
-const HEADLIGHT_SVG_FILTER_URL = `url(#${HEADLIGHT_SVG_FILTER_ID})`;
-const HEADLIGHT_SVG_FILTER_STD_DEV = Math.max(0.1, HEADLIGHT_BLUR_RADIUS_PX);
-// Test flag: disable battery fill clipping entirely.
-const DISABLE_BATTERY_CLIP = true;
+// Legacy debug constants for backward compatibility
+const DEBUG_GRID_ENABLED = DEBUG.GRID_ENABLED;
+const DEBUG_LAYER_NOSOLAR_ENABLED = DEBUG.LAYER_NOSOLAR_ENABLED;
+const DEBUG_LAYER_1ARRAY_ENABLED = DEBUG.LAYER_1ARRAY_ENABLED;
+const DEBUG_LAYER_2ARRAY_ENABLED = DEBUG.LAYER_2ARRAY_ENABLED;
+const HEADLIGHT_DEBUG_LOGGING_ENABLED = DEBUG.HEADLIGHT_LOGGING_ENABLED;
+
+const DEFAULTS = {
+  BATTERY: {
+    FILL_HIGH_COLOR: '#00ffff',
+    FILL_LOW_COLOR: '#ff0000',
+    LOW_THRESHOLD: 25,
+    DISABLE_CLIP: true
+  },
+  GRID: {
+    ACTIVITY_THRESHOLD: 100,
+    CURRENT_HIDE_DAILY_OFFSET: 18
+  },
+  HEADLIGHT: {
+    FILTERS_ENABLED: true,
+    BLUR_RADIUS_PX: 12,
+    SVG_FILTER_ID: 'advanced-headlight-glow'
+  }
+};
+
+// Legacy default constants for backward compatibility
+const DISABLE_BATTERY_CLIP = DEFAULTS.BATTERY.DISABLE_CLIP;
+const DEFAULT_BATTERY_FILL_HIGH_COLOR = DEFAULTS.BATTERY.FILL_HIGH_COLOR;
+const DEFAULT_BATTERY_FILL_LOW_COLOR = DEFAULTS.BATTERY.FILL_LOW_COLOR;
+const DEFAULT_BATTERY_LOW_THRESHOLD = DEFAULTS.BATTERY.LOW_THRESHOLD;
+const HEADLIGHT_FILTERS_ENABLED = DEFAULTS.HEADLIGHT.FILTERS_ENABLED;
+const HEADLIGHT_BLUR_RADIUS_PX = DEFAULTS.HEADLIGHT.BLUR_RADIUS_PX;
+const HEADLIGHT_SVG_FILTER_ID = DEFAULTS.HEADLIGHT.SVG_FILTER_ID;
+const HEADLIGHT_SVG_FILTER_URL = `url(#${DEFAULTS.HEADLIGHT.SVG_FILTER_ID})`;
+const HEADLIGHT_SVG_FILTER_STD_DEV = Math.max(0.1, DEFAULTS.HEADLIGHT.BLUR_RADIUS_PX);
+const DEFAULT_GRID_ACTIVITY_THRESHOLD = DEFAULTS.GRID.ACTIVITY_THRESHOLD;
+const GRID_CURRENT_HIDE_DAILY_OFFSET = DEFAULTS.GRID.CURRENT_HIDE_DAILY_OFFSET;
+
+// ============================================================
+// SECTION 2: POLYFILLS & BROWSER COMPATIBILITY
+// ============================================================
 
 // Polyfill CSS.escape for older browsers / HA webviews.
 // (Used by existing filter/clip-path code and the odometer feature.)
@@ -116,6 +165,10 @@ const DISABLE_BATTERY_CLIP = true;
   }
 })();
 
+// ============================================================
+// SECTION 3: CAR & VEHICLE CONFIGURATION
+// ============================================================
+
 const CAR_TEXT_BASE = { x: 590, rotate: 16, skewX: 20, skewY: 0 };
 const CAR_LAYOUTS = {
   single: {
@@ -143,9 +196,41 @@ const buildCarTextTransforms = (entry) => {
 const BATTERY_TRANSFORM = `translate(${BATTERY_GEOMETRY.X}, ${BATTERY_GEOMETRY.Y_BASE}) rotate(-6) skewX(-4) skewY(30) translate(-${BATTERY_GEOMETRY.X}, -${BATTERY_GEOMETRY.Y_BASE})`;
 const BATTERY_OFFSET_BASE = BATTERY_GEOMETRY.Y_BASE - BATTERY_GEOMETRY.MAX_HEIGHT;
 
-const TXT_STYLE = 'font-weight:bold; font-family: sans-serif; text-anchor:middle; text-shadow: 0 0 5px black;';
-const FLOW_ARROW_COUNT = 10;
+// ============================================================
+// SECTION 4: STYLING & DISPLAY CONSTANTS
+// ============================================================
 
+const TEXT_STYLE = {
+  DEFAULT: 'font-weight:bold; font-family: sans-serif; text-anchor:middle; text-shadow: 0 0 5px black;'
+};
+
+// Legacy constant for backward compatibility
+const TXT_STYLE = TEXT_STYLE.DEFAULT;
+
+const ANIMATION = {
+  FLOW_ARROW_COUNT: 10,
+  MAX_PV_LINES: 7,
+  PV_LINE_SPACING: 14,
+  FLOW_BASE_LOOP_RATE: 0.0025,
+  FLOW_MIN_GLOW_SCALE: 0.2,
+  FLOW_STYLE_DEFAULT: 'dashes',
+  FLOW_STYLE_PATTERNS: {
+    dashes: { dasharray: '10 10', cycle: 20 },
+    dashes_glow: { dasharray: '10 10', cycle: 20 },
+    fluid_flow: { dasharray: '30 80', cycle: 130 },
+    dots: { dasharray: '2 18', cycle: 20 },
+    arrows: { dasharray: null, cycle: 1 }
+  }
+};
+
+// Legacy constants for backward compatibility
+const FLOW_ARROW_COUNT = ANIMATION.FLOW_ARROW_COUNT;
+
+// ============================================================
+// SECTION 5: UTILITY FUNCTIONS
+// ============================================================
+
+// Legacy Configuration Migration
 const LEGACY_CAR_VISIBILITY_KEYS = ['show_car', 'show_car2', 'show_car_2', 'show_car_soc', 'show_car_soc2'];
 const stripLegacyCarVisibility = (config) => {
   if (!config || typeof config !== 'object') {
@@ -169,7 +254,9 @@ const getConfiguredCarCount = (config) => {
   return (hasCar1 ? 1 : 0) + (hasCar2 ? 1 : 0);
 };
 
+// ============================================================
 // SVG Layer Visibility Configuration
+// ============================================================
 // Maps configuration options to SVG elements that should be shown/hidden
 const SVG_LAYER_CONFIG = [
   // Base layer - always visible
@@ -526,32 +613,22 @@ function applySvgLayerVisibility(svgElement, config) {
 
   // Removed array->inverter flow debugging for deleted flow keys.
 }
-const MAX_PV_LINES = 7;
-const PV_LINE_SPACING = 14;
-const FLOW_STYLE_DEFAULT = 'dashes';
-const FLOW_STYLE_PATTERNS = {
-  dashes: { dasharray: '10 10', cycle: 20 },
-  dashes_glow: { dasharray: '10 10', cycle: 20 },
-  // fluid_flow uses a dash pattern for a moving "highlight" overlay.
-  // Use a real "window + gap" so the pulse is visible.
-  // We'll add a second, phase-shifted window inside the mask to reduce perceived gaps.
-  // The cycle matches dasharray sum for predictable motion.
-  // NOTE: This is used by the mask. We create two phase-shifted windows.
-  // The gaps must be large enough that blur doesn't fill them in, otherwise
-  // the mask becomes nearly solid and motion is hard/impossible to perceive.
-  fluid_flow: { dasharray: '30 80', cycle: 130 },
-  dots: { dasharray: '2 18', cycle: 20 },
-  arrows: { dasharray: null, cycle: 1 }
-};
 
-const FLOW_BASE_LOOP_RATE = 0.0025;
-const FLOW_MIN_GLOW_SCALE = 0.2;
-const DEFAULT_GRID_ACTIVITY_THRESHOLD = 100;
-const GRID_CURRENT_HIDE_DAILY_OFFSET = 18;
-const DEFAULT_BATTERY_FILL_HIGH_COLOR = '#00ffff';
-const DEFAULT_BATTERY_FILL_LOW_COLOR = '#ff0000';
-const DEFAULT_BATTERY_LOW_THRESHOLD = 25;
+// ============================================================
+// SECTION 6: FLOW ANIMATION CONFIGURATION (MOVED TO ANIMATION OBJECT ABOVE)
+// ============================================================
 
+// Legacy constants for backward compatibility
+const MAX_PV_LINES = ANIMATION.MAX_PV_LINES;
+const PV_LINE_SPACING = ANIMATION.PV_LINE_SPACING;
+const FLOW_STYLE_DEFAULT = ANIMATION.FLOW_STYLE_DEFAULT;
+const FLOW_STYLE_PATTERNS = ANIMATION.FLOW_STYLE_PATTERNS;
+const FLOW_BASE_LOOP_RATE = ANIMATION.FLOW_BASE_LOOP_RATE;
+const FLOW_MIN_GLOW_SCALE = ANIMATION.FLOW_MIN_GLOW_SCALE;
+
+// ============================================================
+// SVG TEXT BINDING DOCUMENTATION
+// ============================================================
 // SVG text binding: place <text> elements in the background SVG with matching data-role values.
 // JS will only populate text / visibility (positioning stays in the SVG).
 //
@@ -585,6 +662,1388 @@ const DEFAULT_BATTERY_LOW_THRESHOLD = 25;
 // - car1-label OR car1-name / car1-power / car1-soc
 // - car2-label OR car2-name / car2-power / car2-soc
 
+// ============================================================
+// SECTION 2A: UTILITY CLASSES
+// ============================================================
+
+/**
+ * Color manipulation utilities
+ * Provides consistent color resolution and manipulation across the card
+ */
+class ColorUtils {
+  /**
+   * Resolve color from config with fallback
+   * @param {string|null|undefined} configValue - Color value from configuration
+   * @param {string} fallback - Fallback color if config value is empty
+   * @returns {string} Resolved color value
+   */
+  static resolve(configValue, fallback) {
+    const value = (configValue === null || configValue === undefined) ? '' : String(configValue).trim();
+    return value || fallback;
+  }
+
+  /**
+   * Convert color to rgba with specified alpha channel
+   * @param {string} color - Color in any CSS format (#hex, rgb, rgba, named)
+   * @param {number} alpha - Alpha value (0-1)
+   * @returns {string} Color in rgba format
+   */
+  static withAlpha(color, alpha) {
+    if (!color) {
+      return `rgba(0, 255, 255, ${alpha})`;
+    }
+
+    // Handle hex colors
+    if (color.startsWith('#')) {
+      const hex = color.slice(1);
+      const fullHex = hex.length === 3
+        ? hex.split('').map((c) => c + c).join('')
+        : hex.padEnd(6, '0');
+      const r = parseInt(fullHex.slice(0, 2), 16);
+      const g = parseInt(fullHex.slice(2, 4), 16);
+      const b = parseInt(fullHex.slice(4, 6), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    // Handle rgb/rgba colors
+    const match = color.match(/rgba?\(([^)]+)\)/i);
+    if (match) {
+      const parts = match[1].split(',').map((part) => part.trim());
+      const [r, g, b] = parts;
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    // Return as-is if format not recognized
+    return color;
+  }
+
+  /**
+   * Interpolate between two colors based on a percentage
+   * @param {string} color1 - Starting color
+   * @param {string} color2 - Ending color
+   * @param {number} percent - Interpolation percentage (0-100)
+   * @returns {string} Interpolated color in rgb format
+   */
+  static interpolate(color1, color2, percent) {
+    const rgb1 = this._toRgb(color1);
+    const rgb2 = this._toRgb(color2);
+    const factor = Math.max(0, Math.min(100, percent)) / 100;
+    
+    const r = Math.round(rgb1.r + (rgb2.r - rgb1.r) * factor);
+    const g = Math.round(rgb1.g + (rgb2.g - rgb1.g) * factor);
+    const b = Math.round(rgb1.b + (rgb2.b - rgb1.b) * factor);
+    
+    return `rgb(${r}, ${g}, ${b})`;
+  }
+
+  /**
+   * Convert color to RGB object
+   * @private
+   * @param {string} color - Color in any CSS format
+   * @returns {{r: number, g: number, b: number}} RGB values
+   */
+  static _toRgb(color) {
+    // Handle hex colors
+    if (color.startsWith('#')) {
+      const hex = color.slice(1);
+      const fullHex = hex.length === 3
+        ? hex.split('').map((c) => c + c).join('')
+        : hex.padEnd(6, '0');
+      return {
+        r: parseInt(fullHex.slice(0, 2), 16),
+        g: parseInt(fullHex.slice(2, 4), 16),
+        b: parseInt(fullHex.slice(4, 6), 16)
+      };
+    }
+
+    // Handle rgb/rgba colors
+    const match = color.match(/rgba?\(([^)]+)\)/i);
+    if (match) {
+      const parts = match[1].split(',').map((part) => parseInt(part.trim(), 10));
+      return { r: parts[0], g: parts[1], b: parts[2] };
+    }
+
+    // Default to cyan if format not recognized
+    return { r: 0, g: 255, b: 255 };
+  }
+}
+
+/**
+ * Entity State Manager
+ * Centralizes Home Assistant entity state reading with consistent error handling
+ * Eliminates ~300 lines of duplicated entity reading patterns
+ */
+class EntityStateManager {
+  /**
+   * @param {object} hass - Home Assistant connection object
+   */
+  constructor(hass) {
+    this.hass = hass;
+  }
+
+  /**
+   * Safely get entity state with fallback
+   * @param {string} entityId - Entity ID to read
+   * @param {number} fallback - Fallback value if entity unavailable
+   * @returns {number} Entity state as number
+   */
+  getStateSafe(entityId, fallback = 0) {
+    if (!entityId || !this.hass || !this.hass.states) {
+      return fallback;
+    }
+    
+    const entity = this.hass.states[entityId];
+    if (!entity) {
+      return fallback;
+    }
+
+    const state = parseFloat(entity.state);
+    return isNaN(state) ? fallback : state;
+  }
+
+  /**
+   * Check if entity is available
+   * @param {string} entityId - Entity ID to check
+   * @returns {boolean} True if entity exists and is not unavailable
+   */
+  isAvailable(entityId) {
+    if (!entityId || !this.hass || !this.hass.states) {
+      return false;
+    }
+    
+    const entity = this.hass.states[entityId];
+    return entity && entity.state !== 'unavailable' && entity.state !== 'unknown';
+  }
+
+  /**
+   * Format power value with unit
+   * @param {number} value - Power value in watts
+   * @param {boolean} useKw - Use kilowatts instead of watts
+   * @returns {string} Formatted power string
+   */
+  formatPower(value, useKw = false) {
+    if (value === null || value === undefined || isNaN(value)) {
+      return '0 W';
+    }
+
+    const absValue = Math.abs(value);
+    if (useKw || absValue >= 1000) {
+      return `${(value / 1000).toFixed(2)} kW`;
+    }
+    
+    return `${Math.round(value)} W`;
+  }
+
+  /**
+   * Format energy value with unit
+   * @param {number} value - Energy value in Wh
+   * @param {boolean} useKwh - Use kilowatt-hours instead of watt-hours
+   * @returns {string} Formatted energy string
+   */
+  formatEnergy(value, useKwh = false) {
+    if (value === null || value === undefined || isNaN(value)) {
+      return '0 Wh';
+    }
+
+    const absValue = Math.abs(value);
+    if (useKwh || absValue >= 1000) {
+      return `${(value / 1000).toFixed(2)} kWh`;
+    }
+    
+    return `${Math.round(value)} Wh`;
+  }
+
+  /**
+   * Read a group of numbered sensors (e.g., pv1, pv2, pv3)
+   * @param {object} config - Configuration object containing sensor IDs
+   * @param {string} sensorPrefix - Prefix for sensor keys (e.g., 'pv' for pv1, pv2, etc.)
+   * @param {number} count - Number of sensors in the group
+   * @returns {Array<number>} Array of sensor values
+   */
+  readSensorGroup(config, sensorPrefix, count) {
+    const values = [];
+    for (let i = 1; i <= count; i++) {
+      const sensorKey = `${sensorPrefix}${i}`;
+      const entityId = config[sensorKey];
+      values.push(this.getStateSafe(entityId, 0));
+    }
+    return values;
+  }
+
+  /**
+   * Get entity attribute safely
+   * @param {string} entityId - Entity ID
+   * @param {string} attributeName - Attribute name
+   * @param {*} fallback - Fallback value
+   * @returns {*} Attribute value or fallback
+   */
+  getAttribute(entityId, attributeName, fallback = null) {
+    if (!entityId || !this.hass || !this.hass.states) {
+      return fallback;
+    }
+    
+    const entity = this.hass.states[entityId];
+    if (!entity || !entity.attributes) {
+      return fallback;
+    }
+    
+    const value = entity.attributes[attributeName];
+    return value !== undefined ? value : fallback;
+  }
+}
+
+/**
+ * Popup Manager
+ * Centralizes popup overlay logic for PV, House, Battery, Grid, and Inverter entities
+ * Eliminates ~800 lines of duplicate popup handling code
+ */
+class PopupManager {
+  /**
+   * @param {object} card - Reference to the AdvancedEnergyCard instance
+   */
+  constructor(card) {
+    this.card = card;
+    this.activePopup = null;
+    this.domRefs = null;
+  }
+
+  /**
+   * Initialize DOM references
+   * @param {object} refs - DOM references from the card
+   */
+  setDomRefs(refs) {
+    this.domRefs = refs;
+  }
+
+  /**
+   * Toggle popup overlay for a specific type
+   * @param {string} type - Popup type (pv, house, battery, grid, inverter)
+   */
+  togglePopup(type) {
+    const normalized = typeof type === 'string' ? type.trim().toLowerCase() : '';
+    if (!normalized) {
+      return;
+    }
+    const allowed = ['pv', 'house', 'battery', 'grid', 'inverter'];
+    if (!allowed.includes(normalized)) {
+      return;
+    }
+
+    if (this.activePopup === normalized) {
+      this.closePopup();
+      return;
+    }
+
+    const opened = this.openPopup(normalized);
+    if (!opened) {
+      this.closePopup();
+    }
+  }
+
+  /**
+   * Open popup overlay for a specific type
+   * @param {string} type - Popup type
+   * @returns {boolean} True if popup was opened successfully
+   */
+  openPopup(type) {
+    if (!this.domRefs || !this.domRefs.popupBackdrop || !this.domRefs.popupOverlay || !this.domRefs.popupLines) {
+      return false;
+    }
+
+    const config = this.card._config || this.card.config || {};
+    const prefixMap = {
+      pv: 'sensor_popup_pv_',
+      house: 'sensor_popup_house_',
+      battery: 'sensor_popup_bat_',
+      grid: 'sensor_popup_grid_',
+      inverter: 'sensor_popup_inverter_'
+    };
+    const prefix = prefixMap[type];
+    if (!prefix) {
+      return false;
+    }
+
+    const lineData = [];
+    const usedEntityIds = new Set();
+
+    // Handle special "house" type with auto-detected appliances
+    if (type === 'house') {
+      this._addHouseAutoEntries(config, lineData, usedEntityIds);
+    }
+
+    // Add manually configured popup entries (1-6)
+    this._addConfiguredEntries(config, prefix, lineData, usedEntityIds);
+
+    if (!lineData.length) {
+      return false;
+    }
+
+    // Render lines
+    this._renderPopupLines(lineData);
+
+    // Show and position popup
+    this._showAndPositionPopup(type, lineData);
+
+    return true;
+  }
+
+  /**
+   * Add auto-detected house appliance entries
+   * @private
+   */
+  _addHouseAutoEntries(config, lineData, usedEntityIds) {
+    const resolveEntityId = (keys) => {
+      for (const key of keys) {
+        const raw = config[key];
+        const candidate = typeof raw === 'string' ? raw.trim() : raw;
+        if (candidate) {
+          return candidate;
+        }
+      }
+      return '';
+    };
+
+    const basePopupFontSize = (() => {
+      const parsed = Number(config.sensor_popup_house_1_font_size);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : 16;
+    })();
+
+    const basePopupColor = (typeof config.sensor_popup_house_1_color === 'string' && config.sensor_popup_house_1_color.trim())
+      ? config.sensor_popup_house_1_color.trim()
+      : '#80ffff';
+
+    const heatPumpLabel = (typeof config.heat_pump_label === 'string' && config.heat_pump_label.trim())
+      ? config.heat_pump_label.trim()
+      : 'Heat Pump/AC';
+
+    // Get language for translations
+    const lang = (this.card._viewState && typeof this.card._viewState.language === 'string')
+      ? this.card._viewState.language
+      : 'en';
+    const i18n = new LocalizationManager(lang);
+
+    const autoEntries = [
+      { keys: ['sensor_heat_pump_consumption'], label: heatPumpLabel, i18nKey: 'heat_pump_full' },
+      { keys: ['sensor_pool_consumption', 'sensor_pool_power', 'sensor_pool_load'], label: i18n.t('pool_full') },
+      { keys: ['sensor_washing_machine_consumption', 'sensor_washer_consumption', 'sensor_washing_machine_power', 'sensor_washer_power'], label: i18n.t('washing_machine_full') },
+      { keys: ['sensor_dryer_consumption', 'sensor_dryer_power'], label: i18n.t('dryer_full') },
+      { keys: ['sensor_dishwasher_consumption', 'sensor_dishwasher_power', 'sensor_dish_washer_consumption', 'sensor_dishwasher_load'], label: i18n.t('dishwasher_full') },
+      { keys: ['sensor_refrigerator_consumption', 'sensor_refrigerator_power', 'sensor_fridge_consumption', 'sensor_fridge_power'], label: i18n.t('refrigerator_full') }
+    ];
+
+    autoEntries.forEach((entry) => {
+      const entityId = resolveEntityId(entry.keys || []);
+      if (!entityId) {
+        return;
+      }
+      const valueText = this.card.formatPopupValue(null, entityId);
+      if (!valueText) {
+        return;
+      }
+      lineData.push({
+        text: `${entry.label}: ${valueText}`,
+        fontSize: basePopupFontSize,
+        color: basePopupColor,
+        entityId
+      });
+      usedEntityIds.add(entityId);
+    });
+  }
+
+  /**
+   * Add manually configured popup entries
+   * @private
+   */
+  _addConfiguredEntries(config, prefix, lineData, usedEntityIds) {
+    for (let i = 1; i <= 6; i++) {
+      const entityKey = `${prefix}${i}`;
+      const nameKey = `${entityKey}_name`;
+      const fontKey = `${entityKey}_font_size`;
+      const colorKey = `${entityKey}_color`;
+
+      const entityIdRaw = config[entityKey];
+      const entityId = typeof entityIdRaw === 'string' ? entityIdRaw.trim() : entityIdRaw;
+      if (!entityId || usedEntityIds.has(entityId)) {
+        continue;
+      }
+
+      const valueText = this.card.formatPopupValue(null, entityId);
+      if (!valueText) {
+        continue;
+      }
+
+      const nameOverride = config[nameKey];
+      const name = (typeof nameOverride === 'string' && nameOverride.trim())
+        ? nameOverride.trim()
+        : this.card.getEntityName(entityId);
+
+      const fontSize = Number(config[fontKey]) || 16;
+      const color = (typeof config[colorKey] === 'string' && config[colorKey]) ? config[colorKey] : '#80ffff';
+
+      lineData.push({
+        text: `${name}: ${valueText}`,
+        fontSize,
+        color,
+        entityId
+      });
+      usedEntityIds.add(entityId);
+    }
+  }
+
+  /**
+   * Render popup lines in the DOM
+   * @private
+   */
+  _renderPopupLines(lineData) {
+    this.domRefs.popupLines.innerHTML = '';
+    lineData.forEach((line) => {
+      const div = document.createElement('div');
+      div.className = 'popup-line';
+      div.textContent = line.text;
+      div.style.color = line.color;
+      if (line.entityId) {
+        div.dataset.entityId = line.entityId;
+      }
+      div.tabIndex = 0;
+      div.setAttribute('role', 'button');
+      div.setAttribute('aria-label', line.text);
+      this.domRefs.popupLines.appendChild(div);
+    });
+  }
+
+  /**
+   * Show and position the popup overlay
+   * @private
+   */
+  _showAndPositionPopup(type, lineData) {
+    const refs = this.domRefs;
+    refs.popupBackdrop.style.display = 'block';
+    refs.popupOverlay.style.display = 'block';
+    refs.popupOverlay.style.visibility = 'hidden';
+
+    // Apply SVG->px scaling for font sizes and sizing constraints
+    let scaleX = 1;
+    const svgEl = refs.svgRoot;
+    if (svgEl && typeof svgEl.getBoundingClientRect === 'function') {
+      const svgBox = svgEl.getBoundingClientRect();
+      if (svgBox && svgBox.width > 0) {
+        scaleX = svgBox.width / GEOMETRY.SVG.width;
+      }
+    }
+
+    const paddingX = Math.max(8, 20 * scaleX);
+    const paddingY = Math.max(8, 20 * scaleX);
+    refs.popupOverlay.style.padding = `${paddingY}px ${paddingX}px`;
+    refs.popupOverlay.style.minWidth = `${Math.max(0, 240 * scaleX)}px`;
+    refs.popupOverlay.style.maxWidth = `${Math.max(0, 540 * scaleX)}px`;
+
+    const children = Array.from(refs.popupLines.children);
+    children.forEach((child, idx) => {
+      const base = lineData[idx] && Number.isFinite(lineData[idx].fontSize) ? lineData[idx].fontSize : 16;
+      child.style.fontSize = `${Math.max(8, base * scaleX)}px`;
+    });
+
+    this.activePopup = type;
+    this.card._activePopup = type; // Sync with card's state
+    this.syncPopupPosition();
+    refs.popupOverlay.style.visibility = 'visible';
+
+    // Re-sync after layout/fonts settle
+    requestAnimationFrame(() => {
+      this.syncPopupPosition();
+    });
+    if (document.fonts && document.fonts.ready && typeof document.fonts.ready.then === 'function') {
+      document.fonts.ready.then(() => {
+        this.syncPopupPosition();
+      }).catch(() => {
+        // ignore
+      });
+    }
+  }
+
+  /**
+   * Close the popup overlay
+   */
+  closePopup() {
+    if (!this.domRefs) {
+      return;
+    }
+    const refs = this.domRefs;
+    if (refs.popupOverlay) {
+      refs.popupOverlay.style.display = 'none';
+    }
+    if (refs.popupBackdrop) {
+      refs.popupBackdrop.style.display = 'none';
+    }
+    this.activePopup = null;
+    this.card._activePopup = null; // Sync with card's state
+  }
+
+  /**
+   * Sync popup position to anchor point
+   */
+  syncPopupPosition() {
+    try {
+      const refs = this.domRefs;
+      if (!refs || !refs.popupOverlay || refs.popupOverlay.style.display === 'none') {
+        return;
+      }
+      const svgRoot = refs.svgRoot;
+      const cardEl = refs.card;
+      if (!svgRoot || !cardEl) {
+        return;
+      }
+
+      const anchor = svgRoot.querySelector('[data-role="popup-anchor"]');
+      if (!anchor || typeof anchor.getBoundingClientRect !== 'function') {
+        // Fallback: center of card
+        refs.popupOverlay.style.left = '50%';
+        refs.popupOverlay.style.top = '50%';
+        refs.popupOverlay.style.transform = 'translate(-50%, -50%)';
+        return;
+      }
+
+      const anchorBox = anchor.getBoundingClientRect();
+      const cardBox = cardEl.getBoundingClientRect();
+      if (!anchorBox || !cardBox || anchorBox.width <= 0 || anchorBox.height <= 0) {
+        return;
+      }
+
+      const centerX = (anchorBox.left - cardBox.left) + anchorBox.width / 2;
+      const centerY = (anchorBox.top - cardBox.top) + anchorBox.height / 2;
+
+      refs.popupOverlay.style.left = `${centerX}px`;
+      refs.popupOverlay.style.top = `${centerY}px`;
+      refs.popupOverlay.style.transform = 'translate(-50%, -50%)';
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  /**
+   * Open Home Assistant more-info dialog for entity
+   * @param {string} entityId - Entity ID to show details for
+   */
+  openEntityMoreInfo(entityId) {
+    try {
+      if (!entityId) {
+        return;
+      }
+      const moreInfoEvent = new CustomEvent('hass-more-info', {
+        bubbles: true,
+        composed: true,
+        detail: { entityId }
+      });
+      this.card.dispatchEvent(moreInfoEvent);
+    } catch (error) {
+      console.warn('Failed to open entity dialog:', error);
+    }
+  }
+}
+
+/**
+ * Battery Manager
+ * Centralizes battery state reading and management for up to 4 batteries
+ * Eliminates ~400 lines of duplicated battery logic
+ */
+class BatteryManager {
+  /**
+   * @param {object} card - Reference to the AdvancedEnergyCard instance
+   */
+  constructor(card) {
+    this.card = card;
+  }
+
+  /**
+   * Get state for a single battery
+   * @param {number} index - Battery index (1-4)
+   * @param {object} config - Card configuration
+   * @returns {object} Battery state object
+   */
+  getBatteryState(index, config) {
+    const socKey = `sensor_bat${index}_soc`;
+    const powerKey = `sensor_bat${index}_power`;
+    const chargeKey = `sensor_bat${index}_charge_power`;
+    const dischargeKey = `sensor_bat${index}_discharge_power`;
+    const invertKey = index === 4 ? 'invert_battery' : `invert_bat${index}`;
+
+    const soc = this._getNumericState(config[socKey]);
+    const combinedPower = this._getNumericState(config[powerKey]);
+    const chargePower = this._getNumericState(config[chargeKey]);
+    const dischargePower = this._getNumericState(config[dischargeKey]);
+    const invertFlag = Boolean(config[invertKey] || config.invert_battery);
+
+    const hasSoc = soc !== null;
+    const hasCombinedPower = combinedPower !== null;
+    const hasSplitPower = chargePower !== null && dischargePower !== null;
+
+    let power = null;
+    let powerMode = 'none';
+    if (hasCombinedPower) {
+      power = combinedPower;
+      powerMode = 'combined';
+    } else if (hasSplitPower) {
+      power = chargePower - dischargePower;
+      powerMode = 'split';
+    }
+
+    if (power !== null && invertFlag) {
+      power = power * -1;
+    }
+
+    const gridPowerOnly = Boolean(config.grid_power_only);
+    const active = hasSoc && power !== null && !gridPowerOnly;
+
+    return {
+      index,
+      role: `battery${index}`,
+      soc,
+      power,
+      charge: chargePower,
+      discharge: dischargePower,
+      powerMode,
+      visible: active
+    };
+  }
+
+  /**
+   * Get states for all 4 batteries
+   * @param {object} config - Card configuration
+   * @returns {Array} Array of battery state objects
+   */
+  getAllBatteryStates(config) {
+    return [1, 2, 3, 4].map(index => this.getBatteryState(index, config));
+  }
+
+  /**
+   * Get only active (visible) batteries
+   * @param {Array} batteryStates - Array of battery states
+   * @returns {Array} Filtered array of active batteries
+   */
+  getActiveBatteries(batteryStates) {
+    return batteryStates.filter(bat => bat.visible);
+  }
+
+  /**
+   * Calculate total battery power
+   * @param {Array} batteryStates - Array of battery states
+   * @returns {number} Total power in watts
+   */
+  getTotalPower(batteryStates) {
+    return this.getActiveBatteries(batteryStates)
+      .reduce((acc, bat) => acc + (bat.power || 0), 0);
+  }
+
+  /**
+   * Calculate average battery SOC
+   * @param {Array} batteryStates - Array of battery states
+   * @returns {number} Average SOC percentage
+   */
+  getAverageSOC(batteryStates) {
+    const activeBatteries = this.getActiveBatteries(batteryStates);
+    if (activeBatteries.length === 0) {
+      return 0;
+    }
+    const totalSoc = activeBatteries.reduce((acc, bat) => acc + (bat.soc || 0), 0);
+    return totalSoc / activeBatteries.length;
+  }
+
+  /**
+   * Helper: Get numeric state from entity ID
+   * @private
+   */
+  _getNumericState(entityId) {
+    if (!entityId) {
+      return null;
+    }
+    const raw = this.card.getStateSafe(entityId);
+    const num = Number(raw);
+    return Number.isFinite(num) ? num : null;
+  }
+}
+
+/**
+ * Configuration Validator
+ * Handles validation, normalization, and migration of card configuration
+ */
+class ConfigValidator {
+  /**
+   * Validate and process configuration
+   * @param {object} config - Raw configuration object
+   * @param {object} defaults - Default configuration values
+   * @returns {object} Validated and normalized configuration
+   */
+  static validate(config, defaults = {}) {
+    if (!config || typeof config !== 'object') {
+      throw new Error('Invalid configuration');
+    }
+    
+    const migrated = this.migrate(config);
+    const sanitized = this.stripLegacyKeys(migrated);
+    const normalized = this.normalize(sanitized);
+    
+    return { ...defaults, ...normalized };
+  }
+
+  /**
+   * Migrate legacy configuration keys to new format
+   * @param {object} config - Configuration to migrate
+   * @returns {object} Migrated configuration
+   */
+  static migrate(config) {
+    if (!config || typeof config !== 'object') {
+      return config;
+    }
+    
+    let result = { ...config };
+    
+    // Migrate background filenames
+    result = this._migrateBackgroundFilenames(result);
+    
+    return result;
+  }
+
+  /**
+   * Strip deprecated/legacy configuration keys
+   * @param {object} config - Configuration to sanitize
+   * @returns {object} Sanitized configuration
+   */
+  static stripLegacyKeys(config) {
+    if (!config || typeof config !== 'object') {
+      return config;
+    }
+    
+    let sanitized = null;
+    
+    // Remove legacy car visibility keys
+    LEGACY_CAR_VISIBILITY_KEYS.forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(config, key)) {
+        if (!sanitized) {
+          sanitized = { ...config };
+        }
+        delete sanitized[key];
+      }
+    });
+    
+    return sanitized || config;
+  }
+
+  /**
+   * Normalize configuration values
+   * @param {object} config - Configuration to normalize
+   * @returns {object} Normalized configuration
+   */
+  static normalize(config) {
+    if (!config || typeof config !== 'object') {
+      return config;
+    }
+    
+    let result = { ...config };
+    
+    // Normalize background configuration
+    result = this._normalizeBackgroundConfig(result);
+    
+    return result;
+  }
+
+  /**
+   * Migrate old background filename references to new names
+   * @private
+   */
+  static _migrateBackgroundFilenames(config) {
+    const next = { ...config };
+
+    const replaceFilename = (value, from, to) => {
+      if (typeof value !== 'string') {
+        return value;
+      }
+      const trimmed = value.trim();
+      if (!trimmed) {
+        return value;
+      }
+      if (trimmed === from) {
+        return to;
+      }
+      const suffix = `/${from}`;
+      if (trimmed.endsWith(suffix)) {
+        return trimmed.slice(0, -from.length) + to;
+      }
+      if (trimmed.includes(from)) {
+        return trimmed.replace(from, to);
+      }
+      return value;
+    };
+
+    // Day/night backgrounds
+    next.background_day = replaceFilename(next.background_day, 'advanced-new-day.svg', 'advanced-modern-day.svg');
+    next.background_night = replaceFilename(next.background_night, 'advanced-new-night.svg', 'advanced-modern-night.svg');
+
+    // Legacy single background key (kept for backward compatibility)
+    next.background_image = replaceFilename(next.background_image, 'advanced-new-day.svg', 'advanced-modern-day.svg');
+    next.background_image = replaceFilename(next.background_image, 'advanced-new-night.svg', 'advanced-modern-night.svg');
+
+    return next;
+  }
+
+  /**
+   * Normalize background configuration (convert legacy background_image to day/night)
+   * @private
+   */
+  static _normalizeBackgroundConfig(config) {
+    const next = { ...config };
+    const legacy = typeof next.background_image === 'string' ? next.background_image.trim() : '';
+    if (legacy) {
+      if (!next.background_day) {
+        next.background_day = legacy;
+      }
+      if (!next.background_night) {
+        next.background_night = legacy;
+      }
+    }
+    delete next.background_image;
+    return next;
+  }
+}
+
+/**
+ * Car Manager
+ * Centralizes car state reading and view generation for up to 2 cars
+ * Eliminates ~200 lines of duplicated car logic
+ */
+class CarManager {
+  /**
+   * @param {object} card - Reference to the AdvancedEnergyCard instance
+   */
+  constructor(card) {
+    this.card = card;
+  }
+
+  /**
+   * Get state for a single car
+   * @param {number} carNumber - Car number (1 or 2)
+   * @param {object} config - Card configuration
+   * @returns {object} Car state object
+   */
+  getCarState(carNumber, config) {
+    // Handle both new (sensor_car_power) and legacy (car_power) config field names
+    const resolveEntityId = (primary, legacy) => {
+      if (typeof primary === 'string') {
+        const trimmed = primary.trim();
+        if (trimmed) return trimmed;
+      }
+      if (typeof legacy === 'string') {
+        const trimmed = legacy.trim();
+        if (trimmed) return trimmed;
+      }
+      return '';
+    };
+
+    const isCarOne = carNumber === 1;
+    const powerSensorId = isCarOne
+      ? resolveEntityId(config.sensor_car_power, config.car_power)
+      : resolveEntityId(config.sensor_car2_power, config.car2_power);
+    const socSensorId = isCarOne
+      ? resolveEntityId(config.sensor_car_soc, config.car_soc)
+      : resolveEntityId(config.sensor_car2_soc, config.car2_soc);
+
+    const power = this._getNumericState(powerSensorId);
+    const soc = this._getNumericState(socSensorId);
+    
+    const resolveLabel = (value, fallback) => {
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (trimmed) return trimmed;
+      }
+      return fallback;
+    };
+    const label = resolveLabel(config[`car${carNumber}_label`], `CAR ${carNumber}`);
+    
+    const entitiesConfigured = Boolean(powerSensorId || socSensorId);
+    const visible = entitiesConfigured;
+    const charging = power !== null && power > 10; // CAR_CHARGING_THRESHOLD_W = 10
+
+    return {
+      carNumber,
+      power: power !== null ? power : 0,
+      soc,
+      label,
+      visible,
+      charging,
+      powerSensorId,
+      socSensorId
+    };
+  }
+
+  /**
+   * Get states for both cars
+   * @param {object} config - Card configuration
+   * @returns {Array} Array of car state objects
+   */
+  getAllCarStates(config) {
+    return [1, 2].map(carNumber => this.getCarState(carNumber, config));
+  }
+
+  /**
+   * Get configured car count
+   * @param {object} config - Card configuration
+   * @returns {number} Number of configured cars (0, 1, or 2)
+   */
+  getConfiguredCarCount(config) {
+    const carStates = this.getAllCarStates(config);
+    return carStates.filter(car => car.visible).length;
+  }
+
+  /**
+   * Build car view state for rendering
+   * @param {number} carNumber - Car number (1 or 2)
+   * @param {object} carState - Car state object
+   * @param {object} config - Card configuration
+   * @param {object} layout - Car layout configuration
+   * @returns {object} Car view state for rendering
+   */
+  buildCarView(carNumber, carState, config, layout, transforms, useKw, formatPowerFn, resolveColorFn) {
+    if (!carState.visible || !layout) {
+      return {
+        visible: false,
+        label: { text: '', fontSize: 0, fill: '', x: 0, y: 0, transform: '' },
+        power: { text: '', fontSize: 0, fill: '', x: 0, y: 0, transform: '' },
+        soc: { visible: false, text: '', fontSize: 0, fill: '', x: 0, y: 0, transform: '' }
+      };
+    }
+
+    const isCarOne = carNumber === 1;
+    const nameFontSize = config[`car${isCarOne ? '' : '2'}_name_font_size`] || 14;
+    const powerFontSize = config[`car${isCarOne ? '' : '2'}_power_font_size`] || 14;
+    const socFontSize = config[`car${isCarOne ? '' : '2'}_soc_font_size`] || 14;
+    
+    const carColor = resolveColorFn(config[`car${carNumber}_color`], '#FFFFFF');
+    const nameColor = resolveColorFn(config[`car${carNumber}_name_color`], carColor);
+    const socColor = resolveColorFn(
+      isCarOne ? config.car_pct_color : config.car2_pct_color,
+      isCarOne ? '#00FFFF' : resolveColorFn(config.car_pct_color, '#00FFFF')
+    );
+
+    const textX = (typeof layout.x === 'number') ? layout.x : 0;
+    
+    return {
+      visible: true,
+      label: {
+        text: carState.label,
+        fontSize: nameFontSize,
+        fill: nameColor,
+        x: textX,
+        y: layout.labelY,
+        transform: transforms.label
+      },
+      power: {
+        text: formatPowerFn(carState.power, useKw),
+        fontSize: powerFontSize,
+        fill: carColor,
+        x: textX,
+        y: layout.powerY,
+        transform: transforms.power
+      },
+      soc: {
+        visible: carState.soc !== null,
+        text: (carState.soc !== null) ? `${Math.round(carState.soc)}%` : '',
+        fontSize: socFontSize,
+        fill: socColor,
+        x: textX,
+        y: layout.socY,
+        transform: transforms.soc
+      }
+    };
+  }
+
+  /**
+   * Helper: Get numeric state from entity ID
+   * @private
+   */
+  _getNumericState(entityId) {
+    if (!entityId) {
+      return null;
+    }
+    const raw = this.card.getStateSafe(entityId);
+    const num = Number(raw);
+    return Number.isFinite(num) ? num : null;
+  }
+}
+
+/**
+ * Flow Animation Manager
+ * Centralizes flow animation logic for energy flows
+ * Consolidates animation tweens, path lengths, and motion updates
+ */
+class FlowAnimationManager {
+  /**
+   * @param {object} card - Reference to the AdvancedEnergyCard instance
+   */
+  constructor(card) {
+    this.card = card;
+    this.tweens = new Map();
+    this.pathLengths = new Map();
+    this.fluidFlowRafs = new Map();
+  }
+
+  /**
+   * Sync animation for a flow element
+   * @param {string} flowKey - Unique key for the flow
+   * @param {Element} element - SVG element to animate
+   * @param {number} duration - Animation duration
+   * @param {object} flowState - Flow state object
+   */
+  syncAnimation(flowKey, element, duration, flowState) {
+    if (!element || !this.card._gsap) {
+      return;
+    }
+
+    const gsap = this.card._gsap;
+    const existingTween = this.tweens.get(flowKey);
+
+    if (existingTween) {
+      existingTween.kill();
+    }
+
+    const pathLength = this._getPathLength(element);
+    this.pathLengths.set(flowKey, pathLength);
+
+    const tween = gsap.to(element, {
+      strokeDashoffset: -pathLength,
+      duration: duration,
+      ease: 'none',
+      repeat: -1,
+      paused: !flowState.active
+    });
+
+    this.tweens.set(flowKey, tween);
+
+    if (flowState.glow) {
+      this._applyGlow(element, flowState.color, flowState.glowIntensity);
+    }
+  }
+
+  /**
+   * Kill animation for a flow
+   * @param {string} flowKey - Flow key to kill
+   */
+  killAnimation(flowKey) {
+    const tween = this.tweens.get(flowKey);
+    if (tween) {
+      tween.kill();
+      this.tweens.delete(flowKey);
+    }
+
+    const raf = this.fluidFlowRafs.get(flowKey);
+    if (raf) {
+      cancelAnimationFrame(raf);
+      this.fluidFlowRafs.delete(raf);
+    }
+
+    this.pathLengths.delete(flowKey);
+  }
+
+  /**
+   * Pause animation for a flow
+   * @param {string} flowKey - Flow key to pause
+   */
+  pauseAnimation(flowKey) {
+    const tween = this.tweens.get(flowKey);
+    if (tween) {
+      tween.pause();
+    }
+  }
+
+  /**
+   * Resume animation for a flow
+   * @param {string} flowKey - Flow key to resume
+   */
+  resumeAnimation(flowKey) {
+    const tween = this.tweens.get(flowKey);
+    if (tween) {
+      tween.resume();
+    }
+  }
+
+  /**
+   * Kill all animations
+   */
+  killAllAnimations() {
+    this.tweens.forEach(tween => tween.kill());
+    this.tweens.clear();
+    
+    this.fluidFlowRafs.forEach(raf => cancelAnimationFrame(raf));
+    this.fluidFlowRafs.clear();
+    
+    this.pathLengths.clear();
+  }
+
+  /**
+   * Get path length for an element
+   * @private
+   */
+  _getPathLength(element) {
+    if (!element || typeof element.getTotalLength !== 'function') {
+      return 100;
+    }
+    try {
+      return element.getTotalLength();
+    } catch (e) {
+      return 100;
+    }
+  }
+
+  /**
+   * Apply glow effect to element
+   * @private
+   */
+  _applyGlow(element, color, intensity = 1) {
+    if (!element) {
+      return;
+    }
+    element.style.filter = `drop-shadow(0 0 ${4 * intensity}px ${color})`;
+  }
+}
+
+/**
+ * Localization Manager
+ * Centralizes all translation strings and provides clean i18n API
+ * Supports: en, it, de, fr, nl (+ extensible for more languages)
+ */
+class LocalizationManager {
+  constructor(language = 'en') {
+    this.language = this._normalizeLanguage(language);
+    this._initTranslations();
+  }
+
+  /**
+   * Normalize language code to supported language
+   * @param {string} lang - Language code (e.g., 'en', 'en-US', 'it-IT')
+   * @returns {string} Normalized language code
+   */
+  _normalizeLanguage(lang) {
+    if (!lang || typeof lang !== 'string') return 'en';
+    const normalized = lang.toLowerCase().split('-')[0];
+    const supported = ['en', 'it', 'de', 'fr', 'nl', 'es'];
+    return supported.includes(normalized) ? normalized : 'en';
+  }
+
+  /**
+   * Initialize all translation dictionaries
+   * @private
+   */
+  _initTranslations() {
+    this.translations = {
+      // Solar/PV Labels
+      daily_yield: {
+        en: 'DAILY YIELD',
+        it: 'PRODUZIONE OGGI',
+        de: 'TAGESERTRAG',
+        es: 'PRODUCCIÓN DIARIA'
+      },
+      exporting: {
+        en: 'EXPORTING',
+        it: 'ESPORTAZIONE',
+        de: 'EXPORTIEREN',
+        fr: 'EXPORTATION',
+        nl: 'EXPORTEREN',
+        es: 'EXPORTANDO'
+      },
+
+      // Grid Labels
+      grid_current_power: {
+        en: 'Current Grid Power:',
+        it: 'Potenza di rete corrente:',
+        de: 'Aktuelle Netzleistung:',
+        fr: 'Puissance réseau actuelle :',
+        nl: 'Huidig netvermogen:',
+        es: 'Potencia de Red Actual:'
+      },
+      grid_daily_export: {
+        en: 'Daily Grid Export:',
+        it: 'Export rete giornaliero:',
+        de: 'Netzexport (Tag):',
+        fr: 'Export réseau (jour) :',
+        nl: 'Net-export (dag):',
+        es: 'Exportación Diaria de Red:'
+      },
+      grid_daily_import: {
+        en: 'Daily Grid Import:',
+        it: 'Import rete giornaliero:',
+        de: 'Netzimport (Tag):',
+        fr: 'Import réseau (jour) :',
+        nl: 'Net-import (dag):',
+        es: 'Importación Diaria de Red:'
+      },
+
+      // House & Appliances
+      house_load: {
+        en: 'House:',
+        it: 'Casa:',
+        de: 'Haus:',
+        fr: 'Maison :',
+        nl: 'Huis:',
+        es: 'Casa:'
+      },
+      washing_machine: {
+        en: 'Washer:',
+        it: 'Lavatrice:',
+        de: 'Waschmaschine:',
+        fr: 'Lave-linge :',
+        nl: 'Wasmachine:',
+        es: 'Lavadora:'
+      },
+      dishwasher: {
+        en: 'Dishwasher:',
+        es: 'Lavavajillas:'
+      },
+      dryer: {
+        en: 'Dryer:',
+        it: 'Asciugatrice:',
+        de: 'Trockner:',
+        fr: 'Sèche-linge :',
+        nl: 'Droger:',
+        es: 'Secadora:'
+      },
+      refrigerator: {
+        en: 'Fridge:',
+        it: 'Frigo:',
+        de: 'Kühlschrank:',
+        fr: 'Réfrigérateur :',
+        nl: 'Koelkast:',
+        es: 'Nevera:'
+      },
+      heat_pump: {
+        en: 'Heat Pump/AC:',
+        it: 'Pompa di calore/Clima:',
+        de: 'Wärmepumpe/Klima:',
+        fr: 'PAC/Clim :',
+        nl: 'Warmtepomp/AC:',
+        es: 'Bomba de Calor/AC:'
+      },
+      hot_water: {
+        en: 'Hot Water:',
+        es: 'Agua Caliente:'
+      },
+      pool: {
+        en: 'Pool:',
+        it: 'Piscina:',
+        de: 'Pool:',
+        fr: 'Piscine :',
+        nl: 'Zwembad:',
+        es: 'Piscina:'
+      },
+
+      // Popup Full Labels (for popup overlays)
+      washing_machine_full: {
+        en: 'Washing Machine',
+        it: 'Lavatrice',
+        de: 'Waschmaschine',
+        fr: 'Lave-linge',
+        nl: 'Wasmachine',
+        es: 'Lavadora'
+      },
+      dishwasher_full: {
+        en: 'Dish Washer',
+        it: 'Lavastoviglie',
+        de: 'Geschirrspüler',
+        fr: 'Lave-vaisselle',
+        nl: 'Vaatwasser',
+        es: 'Lavavajillas'
+      },
+      dryer_full: {
+        en: 'Dryer',
+        it: 'Asciugatrice',
+        de: 'Trockner',
+        fr: 'Sèche-linge',
+        nl: 'Droger',
+        es: 'Secadora'
+      },
+      refrigerator_full: {
+        en: 'Refrigerator',
+        it: 'Frigorifero',
+        de: 'Kühlschrank',
+        fr: 'Réfrigérateur',
+        nl: 'Koelkast',
+        es: 'Refrigerador'
+      },
+      heat_pump_full: {
+        en: 'Heat Pump/AC',
+        it: 'Pompa di calore/Clima',
+        de: 'Wärmepumpe/Klima',
+        fr: 'PAC/Clim',
+        nl: 'Warmtepomp/AC',
+        es: 'Bomba de Calor/AC'
+      },
+      pool_full: {
+        en: 'Pool',
+        it: 'Piscina',
+        de: 'Pool',
+        fr: 'Piscine',
+        nl: 'Zwembad',
+        es: 'Piscina'
+      }
+    };
+  }
+
+  /**
+   * Get translation for a key
+   * @param {string} key - Translation key
+   * @param {string} fallback - Optional fallback text
+   * @returns {string} Translated text
+   */
+  t(key, fallback = null) {
+    const dict = this.translations[key];
+    if (!dict) {
+      return fallback || key;
+    }
+    return dict[this.language] || dict['en'] || fallback || key;
+  }
+
+  /**
+   * Get translations for static text roles (SVG labels)
+   * Returns object compatible with existing STATIC_TEXT_TRANSLATIONS format
+   * @returns {Object} Role-based translations
+   */
+  getStaticTextTranslations() {
+    return {
+      'grid-current-power-text': this.translations.grid_current_power,
+      'grid-daily-export-text': this.translations.grid_daily_export,
+      'grid-daily-import-text': this.translations.grid_daily_import,
+      'daily-grid-export-text': this.translations.grid_daily_export,
+      'daily-grid-import-text': this.translations.grid_daily_import,
+      'house-load-text': this.translations.house_load,
+      'washing-machine-power-text': { ...this.translations.washing_machine, linkTo: 'washing-machine-power' },
+      'washing-machine-power': { ...this.translations.washing_machine, linkTo: 'washing-machine-power' },
+      'dishwasher-power-text': { ...this.translations.dishwasher, linkTo: 'dishwasher-power' },
+      'dryer-power-text': { ...this.translations.dryer, linkTo: 'dryer-power' },
+      'refrigerator-power-text': { ...this.translations.refrigerator, linkTo: 'refrigerator-power' },
+      'heat-pump-power-text': { ...this.translations.heat_pump, linkTo: 'heat-pump-power' },
+      'hot-water-power-text': { ...this.translations.hot_water, linkTo: 'hot-water-power' },
+      'pool-power-text': { ...this.translations.pool, linkTo: 'pool-power' }
+    };
+  }
+
+  /**
+   * Change active language
+   * @param {string} language - New language code
+   */
+  setLanguage(language) {
+    this.language = this._normalizeLanguage(language);
+  }
+
+  /**
+   * Get list of supported languages
+   * @returns {string[]} Array of supported language codes
+   */
+  static getSupportedLanguages() {
+    return ['en', 'it', 'de', 'fr', 'nl', 'es'];
+  }
+}
+
+// ============================================================
+// HELPER FUNCTIONS
+// ============================================================
+
 const buildArrowGroupSvg = (key, flowState) => {
   const color = flowState && (flowState.glowColor || flowState.stroke) ? (flowState.glowColor || flowState.stroke) : '#00FFFF';
   const activeOpacity = flowState && flowState.active ? 1 : 0;
@@ -594,7 +2053,16 @@ const buildArrowGroupSvg = (key, flowState) => {
   return `<g class="flow-arrow" data-arrow-key="${key}" style="opacity:${activeOpacity};">${segments}</g>`;
 };
 
+// ============================================================
+// SECTION 7: MAIN CARD CLASS
+// ============================================================
+
 class AdvancedEnergyCard extends HTMLElement {
+  
+  // ----------------------------------------------------------
+  // LIFECYCLE METHODS
+  // ----------------------------------------------------------
+  
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
@@ -623,6 +2091,8 @@ class AdvancedEnergyCard extends HTMLElement {
     this._headlightAnimations = new Map();
     this._lastSunState = null;
     this._lastEffectiveNightMode = null;
+    this._cardWasHidden = false;
+    this._renderCount = 0;
     this._defaults = (typeof AdvancedEnergyCard.getStubConfig === 'function')
       ? { ...AdvancedEnergyCard.getStubConfig() }
       : {};
@@ -632,13 +2102,19 @@ class AdvancedEnergyCard extends HTMLElement {
     this._handleEchoAliveClickBound = this._handleEchoAliveClick.bind(this);
     this._echoAliveClickTimeout = null;
 
+    // Initialize feature managers for unified handling
+    this._popupManager = new PopupManager(this);
+    this._batteryManager = new BatteryManager(this);
+    this._carManager = new CarManager(this);
+    this._flowAnimationManager = new FlowAnimationManager(this);
+
     // Event handler bindings (must be stable so we can detach/reattach across renders)
     this._handlePopupSvgClickBound = this._handlePopupSvgClick.bind(this);
     this._handlePopupLineActivateBound = this._handlePopupLineActivate.bind(this);
     this._handlePopupBackdropClickBound = (event) => {
       try {
         if (event && event.target === this._domRefs.popupBackdrop) {
-          this._closePopupOverlay();
+          this._popupManager.closePopup();
         }
       } catch (e) {
         // ignore
@@ -649,7 +2125,7 @@ class AdvancedEnergyCard extends HTMLElement {
         if (event && typeof event.stopPropagation === 'function') {
           event.stopPropagation();
         }
-        this._closePopupOverlay();
+        this._popupManager.closePopup();
       } catch (e) {
         // ignore
       }
@@ -728,89 +2204,11 @@ class AdvancedEnergyCard extends HTMLElement {
     }
   }
 
-  _migrateBackgroundFilenames(config) {
-    if (!config || typeof config !== 'object') {
-      return config;
-    }
-    const next = { ...config };
-
-    const replaceFilename = (value, from, to) => {
-      if (typeof value !== 'string') {
-        return value;
-      }
-      const trimmed = value.trim();
-      if (!trimmed) {
-        return value;
-      }
-      if (trimmed === from) {
-        return to;
-      }
-      const suffix = `/${from}`;
-      if (trimmed.endsWith(suffix)) {
-        return trimmed.slice(0, -from.length) + to;
-      }
-      if (trimmed.includes(from)) {
-        return trimmed.replace(from, to);
-      }
-      return value;
-    };
-
-    // Day/night backgrounds
-    next.background_day = replaceFilename(next.background_day, 'advanced-new-day.svg', 'advanced-modern-day.svg');
-    next.background_night = replaceFilename(next.background_night, 'advanced-new-night.svg', 'advanced-modern-night.svg');
-
-    // Legacy single background key (kept for backward compatibility)
-    next.background_image = replaceFilename(next.background_image, 'advanced-new-day.svg', 'advanced-modern-day.svg');
-    next.background_image = replaceFilename(next.background_image, 'advanced-new-night.svg', 'advanced-modern-night.svg');
-
-    return next;
-  }
-
-  _normalizeBackgroundConfig(config) {
-    if (!config || typeof config !== 'object') {
-      return config;
-    }
-    const next = { ...config };
-    const legacy = typeof next.background_image === 'string' ? next.background_image.trim() : '';
-    if (legacy) {
-      if (!next.background_day) {
-        next.background_day = legacy;
-      }
-      if (!next.background_night) {
-        next.background_night = legacy;
-      }
-    }
-    delete next.background_image;
-    return next;
-  }
-
-  _normalizeBackgroundConfig(config) {
-    if (!config || typeof config !== 'object') {
-      return config;
-    }
-    const next = { ...config };
-    const legacy = typeof next.background_image === 'string' ? next.background_image.trim() : '';
-    if (legacy) {
-      if (!next.background_day) {
-        next.background_day = legacy;
-      }
-      if (!next.background_night) {
-        next.background_night = legacy;
-      }
-    }
-    delete next.background_image;
-    return next;
-  }
-
   setConfig(config) {
     if (!config) {
       throw new Error('Invalid configuration');
     }
-    const defaults = this._defaults || {};
-    const migrated = this._migrateBackgroundFilenames(config);
-    const sanitized = stripLegacyCarVisibility(migrated);
-    const normalized = this._normalizeBackgroundConfig(sanitized);
-    this.config = { ...defaults, ...normalized };
+    this.config = ConfigValidator.validate(config, this._defaults || {});
     this._forceRender = true;
     this._prevViewState = null;
   }
@@ -824,6 +2222,14 @@ class AdvancedEnergyCard extends HTMLElement {
       this._forceRender = false;
       return;
     }
+
+    // Detect when card becomes visible (tab switch, scroll into view)
+    // Force immediate render to eliminate perceived lag
+    const isHidden = this.offsetParent === null;
+    if (this._cardWasHidden && !isHidden) {
+      this._forceRender = true;
+    }
+    this._cardWasHidden = isHidden;
 
     // Auto day/night mode should react immediately to sun.sun changes.
     // Home Assistant calls the `hass` setter on state changes, but this card
@@ -872,9 +2278,15 @@ class AdvancedEnergyCard extends HTMLElement {
     const intervalSeconds = Number.isFinite(configuredInterval) ? configuredInterval : 30;
     const clampedSeconds = Math.min(Math.max(intervalSeconds, 0), 60);
     const intervalMs = clampedSeconds > 0 ? clampedSeconds * 1000 : 0;
-    if (this._forceRender || !this._lastRender || intervalMs === 0 || now - this._lastRender >= intervalMs) {
+    
+    // Allow faster updates for initial renders (first 3 renders use 1 second interval)
+    // This eliminates startup lag while still rate-limiting steady state
+    const effectiveInterval = (this._renderCount < 3 && intervalMs > 1000) ? 1000 : intervalMs;
+    
+    if (this._forceRender || !this._lastRender || effectiveInterval === 0 || now - this._lastRender >= effectiveInterval) {
       this.render();
       this._forceRender = false;
+      this._renderCount++;
     }
   }
 
@@ -1433,6 +2845,10 @@ class AdvancedEnergyCard extends HTMLElement {
 
     this._rotateAnimRaf = requestAnimationFrame(tick);
   }
+
+  // ----------------------------------------------------------
+  // FLOW ANIMATION METHODS
+  // ----------------------------------------------------------
 
   _applyFlowAnimationTargets(flowDurations, flowStates) {
     if (!this._domRefs || !this._domRefs.flows) {
@@ -2014,6 +3430,10 @@ class AdvancedEnergyCard extends HTMLElement {
 
     return this._gsapLoading;
   }
+
+  // ----------------------------------------------------------
+  // FLOW ANIMATION SYNCHRONIZATION
+  // ----------------------------------------------------------
 
   _syncFlowAnimation(flowKey, element, seconds, flowState) {
     if (!element) {
@@ -2631,6 +4051,10 @@ class AdvancedEnergyCard extends HTMLElement {
     }
   }
 
+  // ----------------------------------------------------------
+  // FLOW GLOW EFFECTS
+  // ----------------------------------------------------------
+
   _setFlowGlow(element, color, intensity) {
     if (!element) {
       return;
@@ -2798,28 +4222,23 @@ class AdvancedEnergyCard extends HTMLElement {
     }
   }
 
+  // ----------------------------------------------------------
+  // COLOR UTILITIES
+  // ----------------------------------------------------------
+
+  /**
+   * Convert color to rgba with alpha (delegates to ColorUtils)
+   * @param {string} color - Color value
+   * @param {number} alpha - Alpha channel (0-1)
+   * @returns {string} Color in rgba format
+   */
   _colorWithAlpha(color, alpha) {
-    if (!color) {
-      return `rgba(0, 255, 255, ${alpha})`;
-    }
-    if (color.startsWith('#')) {
-      const hex = color.slice(1);
-      const fullHex = hex.length === 3
-        ? hex.split('').map((c) => c + c).join('')
-        : hex.padEnd(6, '0');
-      const r = parseInt(fullHex.slice(0, 2), 16);
-      const g = parseInt(fullHex.slice(2, 4), 16);
-      const b = parseInt(fullHex.slice(4, 6), 16);
-      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-    }
-    const match = color.match(/rgba?\(([^)]+)\)/i);
-    if (match) {
-      const parts = match[1].split(',').map((part) => part.trim());
-      const [r, g, b] = parts;
-      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-    }
-    return color;
+    return ColorUtils.withAlpha(color, alpha);
   }
+
+  // ----------------------------------------------------------
+  // FLOW CALCULATION UTILITIES
+  // ----------------------------------------------------------
 
   _computeFlowLoopRate(magnitude) {
     if (!Number.isFinite(magnitude) || magnitude <= 0) {
@@ -3441,13 +4860,39 @@ class AdvancedEnergyCard extends HTMLElement {
     return { ...base, night_mode: night };
   }
 
+  // ============================================================
+  // PHASE 3: REFACTORED RENDER PIPELINE
+  // ============================================================
+
+  /**
+   * Main render orchestrator - delegates to helper methods
+   * Replaces the original monolithic ~1,100 line render method
+   */
   render() {
     if (!this._hass || !this.config) return;
 
     const config = this._layerConfigWithEffectiveNight(this.config);
     this._lastRender = Date.now();
     
-    // Get PV sensors
+    // Phase 3.1: Call the extracted computation method
+    // (keeping original logic intact for now, will refactor incrementally)
+    this._renderInternal(config);
+  }
+
+  /**
+   * Internal render implementation (original render logic)
+   * TODO: Further refactor into:
+   *   - _readAllSensors(): Read sensor values
+   *   - _computeViewState(): Build viewState object  
+   *   - Rendering: _ensureTemplate, _updateView, _applyFlowAnimationTargets
+   */
+  _renderInternal(config) {
+    // ============================================================
+    // SECTION 1: SENSOR READING
+    // Read all sensor values from Home Assistant
+    // ============================================================
+    
+    // PV sensors
     const pvStringIds = [
       config.sensor_pv1, config.sensor_pv2, config.sensor_pv3,
       config.sensor_pv4, config.sensor_pv5, config.sensor_pv6
@@ -3466,6 +4911,8 @@ class AdvancedEnergyCard extends HTMLElement {
     const pv_primary_w = config.sensor_pv_total ? this.getStateSafe(config.sensor_pv_total) : pvTotalFromStrings;
     const pv_secondary_w = config.sensor_pv_total_secondary ? this.getStateSafe(config.sensor_pv_total_secondary) : pvArray2TotalFromStrings;
     const total_pv_w = pv_primary_w + pv_secondary_w;
+
+    // Appliance sensors
     const heatPumpSensorId = typeof config.sensor_heat_pump_consumption === 'string'
       ? config.sensor_heat_pump_consumption.trim()
       : (config.sensor_heat_pump_consumption || null);
@@ -3508,6 +4955,7 @@ class AdvancedEnergyCard extends HTMLElement {
     const hasRefrigeratorSensor = Boolean(refrigeratorSensorId);
     const refrigerator_w = hasRefrigeratorSensor ? this.getStateSafe(refrigeratorSensorId) : 0;
 
+    // Utility functions for sensor reading
     const resolveEntityId = (value) => (typeof value === 'string' ? value.trim() : '');
     const isEntityAvailable = (entityId) => {
       if (!entityId || !this._hass || !this._hass.states || !this._hass.states[entityId]) {
@@ -3516,7 +4964,6 @@ class AdvancedEnergyCard extends HTMLElement {
       const state = this._hass.states[entityId].state;
       return state !== 'unavailable' && state !== 'unknown';
     };
-    // Battery validity (active if SOC + power are both valid).
     const getNumericState = (entityId) => {
       const id = (typeof entityId === 'string') ? entityId.trim() : '';
       if (!id || !isEntityAvailable(id)) {
@@ -3527,50 +4974,13 @@ class AdvancedEnergyCard extends HTMLElement {
       return Number.isFinite(num) ? num : null;
     };
     const gridPowerOnly = Boolean(config.grid_power_only);
-    const buildBatteryState = (index, socId, powerId, chargeId, dischargeId, invertFlag) => {
-      const soc = getNumericState(socId);
-      const combinedPower = getNumericState(powerId);
-      const chargePower = getNumericState(chargeId);
-      const dischargePower = getNumericState(dischargeId);
-      const hasSoc = soc !== null;
-      const hasCombinedPower = combinedPower !== null;
-      const hasSplitPower = chargePower !== null && dischargePower !== null;
-      let power = null;
-      let powerMode = 'none';
-      if (hasCombinedPower) {
-        power = combinedPower;
-        powerMode = 'combined';
-      } else if (hasSplitPower) {
-        power = chargePower - dischargePower;
-        powerMode = 'split';
-      }
-      if (power !== null && invertFlag) {
-        power = power * -1;
-      }
-      const active = hasSoc && power !== null && !gridPowerOnly;
-      return {
-        index,
-        role: `battery${index}`,
-        soc,
-        power,
-        charge: chargePower,
-        discharge: dischargePower,
-        powerMode,
-        visible: active
-      };
-    };
-    const batteryStates = [
-      buildBatteryState(1, config.sensor_bat1_soc, config.sensor_bat1_power, config.sensor_bat1_charge_power, config.sensor_bat1_discharge_power, Boolean(config.invert_bat1 || config.invert_battery)),
-      buildBatteryState(2, config.sensor_bat2_soc, config.sensor_bat2_power, config.sensor_bat2_charge_power, config.sensor_bat2_discharge_power, Boolean(config.invert_bat2 || config.invert_battery)),
-      buildBatteryState(3, config.sensor_bat3_soc, config.sensor_bat3_power, config.sensor_bat3_charge_power, config.sensor_bat3_discharge_power, Boolean(config.invert_bat3 || config.invert_battery)),
-      buildBatteryState(4, config.sensor_bat4_soc, config.sensor_bat4_power, config.sensor_bat4_charge_power, config.sensor_bat4_discharge_power, Boolean(config.invert_battery))
-    ];
-    const activeBatteries = batteryStates.filter((bat) => bat.visible);
-    const total_bat_w = activeBatteries.reduce((acc, bat) => acc + (bat.power || 0), 0);
+    
+    // Battery states (using BatteryManager)
+    const batteryStates = this._batteryManager.getAllBatteryStates(config);
+    const activeBatteries = this._batteryManager.getActiveBatteries(batteryStates);
+    const total_bat_w = this._batteryManager.getTotalPower(batteryStates);
+    const avg_soc = this._batteryManager.getAverageSOC(batteryStates);
     const activeSocCount = activeBatteries.length;
-    const avg_soc = activeSocCount > 0
-      ? (activeBatteries.reduce((acc, bat) => acc + (bat.soc || 0), 0) / activeSocCount)
-      : 0;
 
     // Get other sensors
     const toNumber = (value) => {
@@ -3789,29 +5199,11 @@ class AdvancedEnergyCard extends HTMLElement {
     const total_daily_kwh = ((daily1 + daily2) / 1000).toFixed(1);
 
     // EV Cars
-    const resolveCarEntityId = (primary, legacy) => {
-      if (typeof primary === 'string') {
-        const trimmed = primary.trim();
-        if (trimmed) {
-          return trimmed;
-        }
-      }
-      if (typeof legacy === 'string') {
-        const trimmed = legacy.trim();
-        if (trimmed) {
-          return trimmed;
-        }
-      }
-      return '';
-    };
-    const car1PowerSensorId = resolveCarEntityId(config.sensor_car_power, config.car_power);
-    const car1SocSensorId = resolveCarEntityId(config.sensor_car_soc, config.car_soc);
-    const car2PowerSensorId = resolveCarEntityId(config.sensor_car2_power, config.car2_power);
-    const car2SocSensorId = resolveCarEntityId(config.sensor_car2_soc, config.car2_soc);
-    const car1EntitiesConfigured = Boolean(car1PowerSensorId || car1SocSensorId);
-    const car2EntitiesConfigured = Boolean(car2PowerSensorId || car2SocSensorId);
-    const showCar1 = car1EntitiesConfigured;
-    const showCar2 = car2EntitiesConfigured;
+    // Car states (using CarManager)
+    const car1State = this._carManager.getCarState(1, config);
+    const car2State = this._carManager.getCarState(2, config);
+    const showCar1 = car1State.visible;
+    const showCar2 = car2State.visible;
     const showDebugGrid = DEBUG_GRID_ENABLED;
     const resolveLabel = (value, fallback) => {
       if (typeof value === 'string') {
@@ -3822,12 +5214,12 @@ class AdvancedEnergyCard extends HTMLElement {
       }
       return fallback;
     };
-    const car1Label = resolveLabel(config.car1_label, 'CAR 1');
-    const car2Label = resolveLabel(config.car2_label, 'CAR 2');
-    const car1PowerValue = showCar1 && car1PowerSensorId ? this.getStateSafe(car1PowerSensorId) : 0;
-    const car1SocValue = showCar1 && car1SocSensorId ? this.getStateSafe(car1SocSensorId) : null;
-    const car2PowerValue = showCar2 && car2PowerSensorId ? this.getStateSafe(car2PowerSensorId) : 0;
-    const car2SocValue = showCar2 && car2SocSensorId ? this.getStateSafe(car2SocSensorId) : null;
+    const car1Label = car1State.label;
+    const car2Label = car2State.label;
+    const car1PowerValue = car1State.power;
+    const car1SocValue = car1State.soc;
+    const car2PowerValue = car2State.power;
+    const car2SocValue = car2State.soc;
     const carLayoutKey = showCar2 ? 'dual' : 'single';
     const carLayout = CAR_LAYOUTS[carLayoutKey];
     const car1Transforms = buildCarTextTransforms(carLayout.car1);
@@ -3875,6 +5267,11 @@ class AdvancedEnergyCard extends HTMLElement {
       config.sensor_popup_house_6_name && config.sensor_popup_house_6_name.trim() ? config.sensor_popup_house_6_name.trim() : this.getEntityName(config.sensor_popup_house_6)
     ];
 
+    // ============================================================
+    // SECTION 2: STATE COMPUTATION
+    // Process sensor data and compute derived values
+    // ============================================================
+    
     // Display settings
     const selectBackgroundPath = () => {
       const day = (typeof config.background_day === 'string' && config.background_day.trim())
@@ -4035,15 +5432,18 @@ class AdvancedEnergyCard extends HTMLElement {
     } catch (e) {
       // ignore
     }
-    // Fallback to small built-in dictionaries if locales don't provide values
+    // Fallback to LocalizationManager if locales don't provide values
     if (!label_daily) {
-      const dict_daily = { it: 'PRODUZIONE OGGI', en: 'DAILY YIELD', de: 'TAGESERTRAG' };
-      label_daily = dict_daily[lang] || dict_daily['en'];
+      const i18n = new LocalizationManager(lang);
+      label_daily = i18n.t('daily_yield');
     }
     if (!label_pv_tot) {
+      const i18n = new LocalizationManager(lang);
+      label_pv_tot = i18n.t('pv_tot');
+    }
     if (!label_exporting) {
-      const dict_exporting = { it: 'ESPORTAZIONE', en: 'EXPORTING', de: 'EXPORTIEREN', fr: 'EXPORTATION', nl: 'EXPORTEREN' };
-      label_exporting = dict_exporting[lang] || dict_exporting['en'];
+      const i18n = new LocalizationManager(lang);
+      label_exporting = i18n.t('exporting');
     }
 
     // 3D coordinates
@@ -4268,9 +5668,8 @@ class AdvancedEnergyCard extends HTMLElement {
 
     const car1Direction = car1PowerValue > 0 ? 1 : (car1PowerValue < 0 ? -1 : 1);
     const car2Direction = car2PowerValue > 0 ? 1 : (car2PowerValue < 0 ? -1 : 1);
-    const CAR_CHARGING_THRESHOLD_W = 10;
-    const car1Charging = showCar1 && car1PowerValue > CAR_CHARGING_THRESHOLD_W;
-    const car2Charging = showCar2 && car2PowerValue > CAR_CHARGING_THRESHOLD_W;
+    const car1Charging = car1State.charging;
+    const car2Charging = car2State.charging;
 
     this._logHeadlightDebug('power snapshot', {
       car1PowerW: car1PowerValue,
@@ -4391,45 +5790,9 @@ class AdvancedEnergyCard extends HTMLElement {
       };
     });
 
-    const car1Color = resolveColor(config.car1_color, C_WHITE);
-    const car2Color = resolveColor(config.car2_color, C_WHITE);
-    const car1NameColor = resolveColor(config.car1_name_color, car1Color);
-    const car2NameColor = resolveColor(config.car2_name_color, car2Color);
-    const car1SocColor = resolveColor(config.car_pct_color, '#00FFFF');
-    const car2SocColor = resolveColor(config.car2_pct_color, car1SocColor);
-    const buildCarView = (visible, label, powerValue, socValue, transforms, positions, nameFontSize, powerFontSize, socFontSize, textColor, nameColor, socColor) => {
-      const textX = (typeof positions.x === 'number') ? positions.x : CAR_TEXT_BASE.x;
-      return {
-        visible,
-        label: {
-          text: visible ? label : '',
-          fontSize: nameFontSize,
-          fill: nameColor,
-          x: textX,
-          y: positions.labelY,
-          transform: transforms.label
-        },
-        power: {
-          text: visible ? this.formatPower(powerValue, use_kw) : '',
-          fontSize: powerFontSize,
-          fill: textColor,
-          x: textX,
-          y: positions.powerY,
-          transform: transforms.power
-        },
-        soc: {
-          visible: visible && socValue !== null,
-          text: (visible && socValue !== null) ? `${Math.round(socValue)}%` : '',
-          fontSize: socFontSize,
-          fill: socColor,
-          x: textX,
-          y: positions.socY,
-          transform: transforms.soc
-        }
-      };
-    };
-    const car1View = buildCarView(showCar1, car1Label, car1PowerValue, car1SocValue, car1Transforms, carLayout.car1, car_name_font_size, car_power_font_size, car_soc_font_size, car1Color, car1NameColor, car1SocColor);
-    const car2View = buildCarView(showCar2, car2Label, car2PowerValue, car2SocValue, car2Transforms, carLayout.car2, car2_name_font_size, car2_power_font_size, car2_soc_font_size, car2Color, car2NameColor, car2SocColor);
+    // Build car views (using CarManager)
+    const car1View = this._carManager.buildCarView(1, car1State, config, carLayout.car1, car1Transforms, use_kw, this.formatPower.bind(this), resolveColor);
+    const car2View = this._carManager.buildCarView(2, car2State, config, carLayout.car2, car2Transforms, use_kw, this.formatPower.bind(this), resolveColor);
     const headlightFlashState = {
       enabled: Boolean(config.car_headlight_flash),
       car1: { visible: showCar1, charging: car1Charging },
@@ -4450,6 +5813,11 @@ class AdvancedEnergyCard extends HTMLElement {
       }
       return gridValueText;
     })();
+
+    // ============================================================
+    // SECTION 3: VIEW STATE CONSTRUCTION
+    // Build the viewState object for rendering
+    // ============================================================
 
     const viewState = {
       language: lang,
@@ -4552,6 +5920,20 @@ class AdvancedEnergyCard extends HTMLElement {
       showDebugGrid
     };
 
+    // ============================================================
+    // SECTION 4: RENDERING
+    // Apply viewState to DOM
+    // ============================================================
+
+    this._applyViewState(viewState);
+  }
+
+  /**
+   * Apply computed viewState to the DOM
+   * @param {object} viewState - Complete view state object
+   * @private
+   */
+  _applyViewState(viewState) {
     this._ensureTemplate(viewState);
     if (!this._domRefs) {
       this._cacheDomReferences();
@@ -4561,8 +5943,6 @@ class AdvancedEnergyCard extends HTMLElement {
     this._applyRotateAnimations();
     this._prevViewState = this._snapshotViewState(viewState);
     this._forceRender = false;
-  }
-
   }
 
   _ensureTemplate(viewState) {
@@ -7849,119 +9229,13 @@ class AdvancedEnergyCard extends HTMLElement {
 
       let styleSyncScheduled = false;
 
-      // Built-in static label translations.
+      // Built-in static label translations from LocalizationManager
       // Only applied when a translation exists; otherwise the SVG's existing (English) text remains.
-      // Naming convention: <base>-text (e.g., daily-grid-import-text).
-      const STATIC_TEXT_TRANSLATIONS = {
-        // Static grid labels (extend as needed).
-        'grid-current-power-text': {
-          en: 'Current Grid Power:',
-          it: 'Potenza di rete corrente:',
-          de: 'Aktuelle Netzleistung:',
-          fr: 'Puissance rÃ©seau actuelle :',
-          nl: 'Huidig netvermogen:'
-        },
-        'grid-daily-export-text': {
-          en: 'Daily Grid Export:',
-          it: 'Export rete giornaliero:',
-          de: 'Netzexport (Tag):',
-          fr: 'Export rÃ©seau (jour) :',
-          nl: 'Net-export (dag):'
-        },
-        'grid-daily-import-text': {
-          en: 'Daily Grid Import:',
-          it: 'Import rete giornaliero:',
-          de: 'Netzimport (Tag):',
-          fr: 'Import rÃ©seau (jour) :',
-          nl: 'Net-import (dag):'
-        },
-
-        'house-load-text': {
-          en: 'House:',
-          it: 'Casa:',
-          de: 'Haus:',
-          fr: 'Maison :',
-          nl: 'Huis:'
-        },
-        // Appliance labels
-        'washing-machine-power-text': {
-          en: 'Washer:',
-          it: 'Lavatrice:',
-          de: 'Waschmaschine:',
-          fr: 'Lave-linge :',
-          nl: 'Wasmachine:',
-          linkTo: 'washing-machine-power'
-        },
-        'dishwasher-power-text': {
-          en: 'Dishwasher:',
-          linkTo: 'dishwasher-power'
-        },
-        // Back-compat / common typo: user may provide washing-machine-power="Washer:" expecting the label.
-        // The translation system only targets roles ending in -text, so we alias it.
-        'washing-machine-power': {
-          en: 'Washer:',
-          it: 'Lavatrice:',
-          de: 'Waschmaschine:',
-          fr: 'Lave-linge :',
-          nl: 'Wasmachine:',
-          linkTo: 'washing-machine-power'
-        },
-        'dryer-power-text': {
-          en: 'Dryer:',
-          it: 'Asciugatrice:',
-          de: 'Trockner:',
-          fr: 'SÃ¨che-linge :',
-          nl: 'Droger:',
-          linkTo: 'dryer-power'
-        },
-        'refrigerator-power-text': {
-          en: 'Fridge:',
-          it: 'Frigo:',
-          de: 'KÃ¼hlschrank:',
-          fr: 'RÃ©frigÃ©rateur :',
-          nl: 'Koelkast:',
-          linkTo: 'refrigerator-power'
-        },
-        'heat-pump-power-text': {
-          en: 'Heat Pump/AC:',
-          it: 'Pompa di calore/Clima:',
-          de: 'WÃ¤rmepumpe/Klima:',
-          fr: 'PAC/Clim :',
-          nl: 'Warmtepomp/AC:',
-          linkTo: 'heat-pump-power'
-        },
-        'hot-water-power-text': {
-          en: 'Hot Water:',
-          linkTo: 'hot-water-power'
-        },
-        'pool-power-text': {
-          en: 'Pool:',
-          it: 'Piscina:',
-          de: 'Pool:',
-          fr: 'Piscine :',
-          nl: 'Zwembad:',
-          linkTo: 'pool-power'
-        },
-
-        // Back-compat / alias examples.
-        'daily-grid-import-text': {
-          en: 'Daily Grid Import:',
-          it: 'Import giornaliero rete:',
-          de: 'Netzimport (Tag):',
-          fr: 'Import rÃ©seau (jour) :',
-          nl: 'Net-import (dag):'
-        },
-        'daily-grid-export-text': {
-          en: 'Daily Grid Export:',
-          it: 'Export giornaliero rete:',
-          de: 'Netzexport (Tag):',
-          fr: 'Export rÃ©seau (jour) :',
-          nl: 'Net-export (dag):'
-        }
-      };
+      const i18n = new LocalizationManager(language);
+      const STATIC_TEXT_TRANSLATIONS = i18n.getStaticTextTranslations();
 
       // Optional external locale override hook (if you later add it):
-      // localeStrings.staticText[role][lang]
+      // localeStrings.staticText[role][language]
       let localeStaticText = null;
       try {
         const localeStrings = (typeof this._getLocaleStrings === 'function') ? this._getLocaleStrings() : null;
@@ -9550,7 +10824,11 @@ class AdvancedEnergyCard extends HTMLElement {
       if (event && typeof event.stopPropagation === 'function') {
         event.stopPropagation();
       }
-      this._togglePopupOverlay(type);
+      // Ensure PopupManager has latest DOM refs before calling
+      if (this._domRefs) {
+        this._popupManager.setDomRefs(this._domRefs);
+      }
+      this._popupManager.togglePopup(type);
     } catch (e) {
       // ignore
     }
@@ -9596,285 +10874,39 @@ class AdvancedEnergyCard extends HTMLElement {
         event.stopPropagation();
       }
 
-      this._openEntityMoreInfo(entityId);
+      this._popupManager.openEntityMoreInfo(entityId);
     } catch (error) {
       console.warn('Popup line activation error:', error);
     }
   }
 
   _openEntityMoreInfo(entityId) {
-    try {
-      if (!entityId) {
-        return;
-      }
-      const moreInfoEvent = new CustomEvent('hass-more-info', {
-        bubbles: true,
-        composed: true,
-        detail: { entityId }
-      });
-      this.dispatchEvent(moreInfoEvent);
-    } catch (error) {
-      console.warn('Failed to open entity dialog:', error);
-    }
+    this._popupManager.openEntityMoreInfo(entityId);
   }
 
   _togglePopupOverlay(type) {
-    const normalized = typeof type === 'string' ? type.trim().toLowerCase() : '';
-    if (!normalized) {
-      return;
+    // Update PopupManager with latest DOM refs if needed
+    if (this._domRefs) {
+      this._popupManager.setDomRefs(this._domRefs);
     }
-    const allowed = ['pv', 'house', 'battery', 'grid', 'inverter'];
-    if (!allowed.includes(normalized)) {
-      return;
-    }
-
-    // Popups are driven by explicit SVG click zones (data-action="popup:*") and the
-    // configured popup entities; they should not depend on whether a given UI section
-    // (like PV) is currently enabled.
-
-    if (this._activePopup === normalized) {
-      this._closePopupOverlay();
-      return;
-    }
-
-    const opened = this._openPopupOverlay(normalized);
-    if (!opened) {
-      this._closePopupOverlay();
-    }
+    this._popupManager.togglePopup(type);
   }
 
   _openPopupOverlay(type) {
+    // Update PopupManager with latest DOM refs if needed
     if (!this._domRefs) {
       this._cacheDomReferences();
     }
-    const refs = this._domRefs;
-    if (!refs || !refs.popupBackdrop || !refs.popupOverlay || !refs.popupLines) {
-      return false;
-    }
-
-    const config = this._config || this.config || {};
-    const prefixMap = {
-      pv: 'sensor_popup_pv_',
-      house: 'sensor_popup_house_',
-      battery: 'sensor_popup_bat_',
-      grid: 'sensor_popup_grid_',
-      inverter: 'sensor_popup_inverter_'
-    };
-    const prefix = prefixMap[type];
-    if (!prefix) {
-      return false;
-    }
-
-    const lineData = [];
-    const usedEntityIds = new Set();
-    const pushLine = (entry) => {
-      if (!entry) {
-        return;
-      }
-      lineData.push(entry);
-      if (entry.entityId) {
-        usedEntityIds.add(entry.entityId);
-      }
-    };
-
-    if (type === 'house') {
-      const resolveEntityId = (keys) => {
-        for (const key of keys) {
-          const raw = config[key];
-          const candidate = typeof raw === 'string' ? raw.trim() : raw;
-          if (candidate) {
-            return candidate;
-          }
-        }
-        return '';
-      };
-      const basePopupFontSize = (() => {
-        const parsed = Number(config.sensor_popup_house_1_font_size);
-        return Number.isFinite(parsed) && parsed > 0 ? parsed : 16;
-      })();
-      const basePopupColor = (typeof config.sensor_popup_house_1_color === 'string' && config.sensor_popup_house_1_color.trim())
-        ? config.sensor_popup_house_1_color.trim()
-        : '#80ffff';
-      const heatPumpLabel = (typeof config.heat_pump_label === 'string' && config.heat_pump_label.trim())
-        ? config.heat_pump_label.trim()
-        : 'Heat Pump/AC';
-
-      const autoEntries = [
-        { keys: ['sensor_heat_pump_consumption'], label: heatPumpLabel, fontKey: 'heat_pump_font_size', colorKey: 'heat_pump_text_color' },
-        { keys: ['sensor_pool_consumption', 'sensor_pool_power', 'sensor_pool_load'], label: 'Pool', fontKey: 'pool_font_size', colorKey: 'pool_text_color' },
-        { keys: ['sensor_washing_machine_consumption', 'sensor_washer_consumption', 'sensor_washing_machine_power', 'sensor_washer_power'], label: 'Washing Machine', fontKey: 'washing_machine_font_size', colorKey: 'washing_machine_text_color' },
-        { keys: ['sensor_dryer_consumption', 'sensor_dryer_power'], label: 'Dryer', fontKey: 'dryer_font_size', colorKey: 'dryer_text_color' },
-        { keys: ['sensor_dishwasher_consumption', 'sensor_dishwasher_power', 'sensor_dish_washer_consumption', 'sensor_dishwasher_load'], label: 'Dish Washer', fontKey: 'dishwasher_font_size', colorKey: 'dishwasher_text_color' },
-        { keys: ['sensor_refrigerator_consumption', 'sensor_refrigerator_power', 'sensor_fridge_consumption', 'sensor_fridge_power'], label: 'Refrigerator', fontKey: 'refrigerator_font_size', colorKey: 'refrigerator_text_color' }
-      ];
-      autoEntries.forEach((entry) => {
-        const entityId = resolveEntityId(entry.keys || []);
-        if (!entityId) {
-          return;
-        }
-        const valueText = this.formatPopupValue(null, entityId);
-        if (!valueText) {
-          return;
-        }
-        const fontSize = basePopupFontSize;
-        const color = basePopupColor;
-        lineData.push({
-          text: `${entry.label}: ${valueText}`,
-          fontSize,
-          color,
-          entityId
-        });
-      });
-    }
-
-    for (let i = 1; i <= 6; i++) {
-      const entityKey = `${prefix}${i}`;
-      const nameKey = `${entityKey}_name`;
-      const fontKey = `${entityKey}_font_size`;
-      const colorKey = `${entityKey}_color`;
-
-      const entityIdRaw = config[entityKey];
-      const entityId = typeof entityIdRaw === 'string' ? entityIdRaw.trim() : entityIdRaw;
-      if (!entityId || usedEntityIds.has(entityId)) {
-        continue;
-      }
-      const valueText = this.formatPopupValue(null, entityId);
-      if (!valueText) {
-        continue;
-      }
-
-      const nameOverride = config[nameKey];
-      const name = (typeof nameOverride === 'string' && nameOverride.trim())
-        ? nameOverride.trim()
-        : this.getEntityName(entityId);
-
-      const fontSize = Number(config[fontKey]) || 16;
-      const color = (typeof config[colorKey] === 'string' && config[colorKey]) ? config[colorKey] : '#80ffff';
-
-      pushLine({
-        text: `${name}: ${valueText}`,
-        fontSize,
-        color,
-        entityId
-      });
-    }
-
-    if (!lineData.length) {
-      return false;
-    }
-
-    // Render lines
-    refs.popupLines.innerHTML = '';
-    lineData.forEach((line) => {
-      const div = document.createElement('div');
-      div.className = 'popup-line';
-      div.textContent = line.text;
-      div.style.color = line.color;
-      if (line.entityId) {
-        div.dataset.entityId = line.entityId;
-      }
-      div.tabIndex = 0;
-      div.setAttribute('role', 'button');
-      div.setAttribute('aria-label', line.text);
-      refs.popupLines.appendChild(div);
-    });
-
-    // Show
-    refs.popupBackdrop.style.display = 'block';
-    refs.popupOverlay.style.display = 'block';
-    refs.popupOverlay.style.visibility = 'hidden';
-
-    // Apply SVG->px scaling for font sizes and sizing constraints
-    let scaleX = 1;
-    const svgEl = refs.svgRoot;
-    if (svgEl && typeof svgEl.getBoundingClientRect === 'function') {
-      const svgBox = svgEl.getBoundingClientRect();
-      if (svgBox && svgBox.width > 0) {
-        scaleX = svgBox.width / SVG_DIMENSIONS.width;
-      }
-    }
-
-    const paddingX = Math.max(8, 20 * scaleX);
-    const paddingY = Math.max(8, 20 * scaleX);
-    refs.popupOverlay.style.padding = `${paddingY}px ${paddingX}px`;
-    refs.popupOverlay.style.minWidth = `${Math.max(0, 240 * scaleX)}px`;
-    refs.popupOverlay.style.maxWidth = `${Math.max(0, 540 * scaleX)}px`;
-
-    const children = Array.from(refs.popupLines.children);
-    children.forEach((child, idx) => {
-      const base = lineData[idx] && Number.isFinite(lineData[idx].fontSize) ? lineData[idx].fontSize : 16;
-      child.style.fontSize = `${Math.max(8, base * scaleX)}px`;
-    });
-
-    this._activePopup = type;
-    this._syncPopupOverlayToAnchor();
-    refs.popupOverlay.style.visibility = 'visible';
-
-    // Re-sync after layout/fonts settle
-    requestAnimationFrame(() => {
-      this._syncPopupOverlayToAnchor();
-    });
-    if (document.fonts && document.fonts.ready && typeof document.fonts.ready.then === 'function') {
-      document.fonts.ready.then(() => {
-        this._syncPopupOverlayToAnchor();
-      }).catch(() => {
-        // ignore
-      });
-    }
-
-    return true;
+    this._popupManager.setDomRefs(this._domRefs);
+    return this._popupManager.openPopup(type);
   }
 
   _closePopupOverlay() {
-    if (!this._domRefs) {
-      return;
-    }
-    const refs = this._domRefs;
-    if (refs.popupOverlay) {
-      refs.popupOverlay.style.display = 'none';
-    }
-    if (refs.popupBackdrop) {
-      refs.popupBackdrop.style.display = 'none';
-    }
-    this._activePopup = null;
+    this._popupManager.closePopup();
   }
 
   _syncPopupOverlayToAnchor() {
-    try {
-      const refs = this._domRefs;
-      if (!refs || !refs.popupOverlay || refs.popupOverlay.style.display === 'none') {
-        return;
-      }
-      const svgRoot = refs.svgRoot;
-      const cardEl = refs.card;
-      if (!svgRoot || !cardEl) {
-        return;
-      }
-
-      const anchor = svgRoot.querySelector('[data-role="popup-anchor"]');
-      if (!anchor || typeof anchor.getBoundingClientRect !== 'function') {
-        // Fallback: center of card
-        refs.popupOverlay.style.left = '50%';
-        refs.popupOverlay.style.top = '50%';
-        refs.popupOverlay.style.transform = 'translate(-50%, -50%)';
-        return;
-      }
-
-      const anchorBox = anchor.getBoundingClientRect();
-      const cardBox = cardEl.getBoundingClientRect();
-      if (!anchorBox || !cardBox || anchorBox.width <= 0 || anchorBox.height <= 0) {
-        return;
-      }
-
-      const centerX = (anchorBox.left - cardBox.left) + anchorBox.width / 2;
-      const centerY = (anchorBox.top - cardBox.top) + anchorBox.height / 2;
-
-      refs.popupOverlay.style.left = `${centerX}px`;
-      refs.popupOverlay.style.top = `${centerY}px`;
-      refs.popupOverlay.style.transform = 'translate(-50%, -50%)';
-    } catch (e) {
-      // ignore
-    }
+    this._popupManager.syncPopupPosition();
   }
 
   _snapshotViewState(viewState) {
@@ -9914,7 +10946,7 @@ class AdvancedEnergyCard extends HTMLElement {
   }
 
   static get version() {
-    return '1.0.22';
+    return '1.0.23';
   }
 }
 
@@ -10058,9 +11090,8 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           initial_has_grid: { label: 'Do you have Grid supplied electricity?', helper: '' },
           initial_can_export: { label: 'Can you export excess electricity to the grid?', helper: '' },
           initial_has_windmill: { label: 'Do you have a Windmill?', helper: '' },
-          initial_has_ev: { label: "Do you have Electric Vehicles/EV's?", helper: '' },
+          initial_has_ev: { label: 'Do you have Electric Vehicles/EV\'s?', helper: '' },
           initial_ev_count: { label: 'How many do you have?', helper: '' },
-          initial_battery_dual_inverter_helper: { label: 'Omdat je 2 omvormers hebt geselecteerd, zijn minimaal 2 batterijen vereist. Batterijen 1 en 2 worden toegewezen aan Omvormer 1 en batterijen 3 en 4 aan Omvormer 2.', helper: '' },
           initial_config_items_title: { label: 'Required configuration items', helper: '' },
           initial_config_items_helper: { label: 'These items become relevant based on your answers above.', helper: '' },
           initial_config_items_empty: { label: 'No items to show yet.', helper: '' },
@@ -10074,41 +11105,40 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           fluid_flow_outer_glow: { label: 'Fluid Flow Outer Glow', helper: 'Enable the extra outer haze/glow layer for animation_style: fluid_flow.' },
           flow_stroke_width: { label: 'Flow Stroke Width (px)', helper: 'Optional override for the animated flow stroke width (no SVG edits). Leave blank to keep SVG defaults.' },
           fluid_flow_stroke_width: { label: 'Fluid Flow Stroke Width (px)', helper: 'Base stroke width for animation_style: fluid_flow. Overlay/mask widths are derived from this (default 5).' },
-          
           sensor_pv_total: { label: 'PV Total Sensor', helper: 'Optional aggregate production sensor displayed as the combined line.' },
           sensor_pv_total_secondary: { label: 'PV Total Sensor (Inverter 2)', helper: 'Optional second inverter total; added to the PV total when provided.' },
           sensor_windmill_total: { label: 'Windmill Total', helper: 'Power sensor for the windmill generator (W). When not configured the windmill SVG group is hidden.' },
           sensor_windmill_daily: { label: 'Daily Windmill Production', helper: 'Optional sensor reporting daily windmill production totals.' },
-          sensor_pv1: { label: 'PV String 1 (Array 1)', helper: 'Primary solar production sensor.' },
-          sensor_pv2: { label: 'PV String 2 (Array 1)' },
-          sensor_pv3: { label: 'PV String 3 (Array 1)' },
-          sensor_pv4: { label: 'PV String 4 (Array 1)' },
-          sensor_pv5: { label: 'PV String 5 (Array 1)' },
-          sensor_pv6: { label: 'PV String 6 (Array 1)' },
-          sensor_pv_array2_1: { label: 'PV String 1 (Array 2)', helper: 'Array 2 solar production sensor.' },
-          sensor_pv_array2_2: { label: 'PV String 2 (Array 2)', helper: 'Array 2 solar production sensor.' },
-          sensor_pv_array2_3: { label: 'PV String 3 (Array 2)', helper: 'Array 2 solar production sensor.' },
-          sensor_pv_array2_4: { label: 'PV String 4 (Array 2)', helper: 'Array 2 solar production sensor.' },
-          sensor_pv_array2_5: { label: 'PV String 5 (Array 2)', helper: 'Array 2 solar production sensor.' },
-          sensor_pv_array2_6: { label: 'PV String 6 (Array 2)', helper: 'Array 2 solar production sensor.' },
+          sensor_pv1: { label: 'PV String 1 (Array 1)', helper: 'Array 1 solar production sensor for string 1.' },
+          sensor_pv2: { label: 'PV String 2 (Array 1)', helper: 'Array 1 solar production sensor for string 2.' },
+          sensor_pv3: { label: 'PV String 3 (Array 1)', helper: 'Array 1 solar production sensor for string 3.' },
+          sensor_pv4: { label: 'PV String 4 (Array 1)', helper: 'Array 1 solar production sensor for string 4.' },
+          sensor_pv5: { label: 'PV String 5 (Array 1)', helper: 'Array 1 solar production sensor for string 5.' },
+          sensor_pv6: { label: 'PV String 6 (Array 1)', helper: 'Array 1 solar production sensor for string 6.' },
+          sensor_pv_array2_1: { label: 'PV String 1 (Array 2)', helper: 'Array 2 solar production sensor for string 1.' },
+          sensor_pv_array2_2: { label: 'PV String 2 (Array 2)', helper: 'Array 2 solar production sensor for string 2.' },
+          sensor_pv_array2_3: { label: 'PV String 3 (Array 2)', helper: 'Array 2 solar production sensor for string 3.' },
+          sensor_pv_array2_4: { label: 'PV String 4 (Array 2)', helper: 'Array 2 solar production sensor for string 4.' },
+          sensor_pv_array2_5: { label: 'PV String 5 (Array 2)', helper: 'Array 2 solar production sensor for string 5.' },
+          sensor_pv_array2_6: { label: 'PV String 6 (Array 2)', helper: 'Array 2 solar production sensor for string 6.' },
           sensor_daily: { label: 'Daily Production Sensor', helper: 'Sensor reporting daily production totals. Either the PV total sensor or your PV string arrays need to be specified as a minimum.' },
           sensor_daily_array2: { label: 'Daily Production Sensor (Array 2)', helper: 'Sensor reporting daily production totals for Array 2.' },
-          sensor_bat1_soc: { label: 'Battery 1 SOC' },
+          sensor_bat1_soc: { label: 'Battery 1 SOC', helper: 'State of Charge sensor for Battery 1 (percentage).' },
           sensor_bat1_power: { label: 'Battery 1 Power', helper: 'Provide this combined power sensor or both charge/discharge sensors so Battery 1 becomes active.' },
-          sensor_bat1_charge_power: { label: 'Battery 1 Charge Power' },
-          sensor_bat1_discharge_power: { label: 'Battery 1 Discharge Power' },
-          sensor_bat2_soc: { label: 'Battery 2 SOC' },
+          sensor_bat1_charge_power: { label: 'Battery 1 Charge Power', helper: 'Sensor for Battery 1 charging power.' },
+          sensor_bat1_discharge_power: { label: 'Battery 1 Discharge Power', helper: 'Sensor for Battery 1 discharging power.' },
+          sensor_bat2_soc: { label: 'Battery 2 SOC', helper: 'State of Charge sensor for Battery 2 (percentage).' },
           sensor_bat2_power: { label: 'Battery 2 Power', helper: 'Provide this combined power sensor or both charge/discharge sensors so Battery 2 becomes active.' },
-          sensor_bat2_charge_power: { label: 'Battery 2 Charge Power' },
-          sensor_bat2_discharge_power: { label: 'Battery 2 Discharge Power' },
-          sensor_bat3_soc: { label: 'Battery 3 SOC' },
+          sensor_bat2_charge_power: { label: 'Battery 2 Charge Power', helper: 'Sensor for Battery 2 charging power.' },
+          sensor_bat2_discharge_power: { label: 'Battery 2 Discharge Power', helper: 'Sensor for Battery 2 discharging power.' },
+          sensor_bat3_soc: { label: 'Battery 3 SOC', helper: 'State of Charge sensor for Battery 3 (percentage).' },
           sensor_bat3_power: { label: 'Battery 3 Power', helper: 'Provide this combined power sensor or both charge/discharge sensors so Battery 3 becomes active.' },
-          sensor_bat3_charge_power: { label: 'Battery 3 Charge Power' },
+          sensor_bat3_charge_power: { label: 'Battery 3 Charge Power', helper: 'Sensor for Battery 3 charging power.' },
           sensor_bat3_discharge_power: { label: 'Battery 3 Discharge Power' },
-          sensor_bat4_soc: { label: 'Battery 4 SOC' },
+          sensor_bat4_soc: { label: 'Battery 4 SOC', helper: 'State of Charge sensor for Battery 4 (percentage).' },
           sensor_bat4_power: { label: 'Battery 4 Power', helper: 'Provide this combined power sensor or both charge/discharge sensors so Battery 4 becomes active.' },
-          sensor_bat4_charge_power: { label: 'Battery 4 Charge Power' },
-          sensor_bat4_discharge_power: { label: 'Battery 4 Discharge Power' },
+          sensor_bat4_charge_power: { label: 'Battery 4 Charge Power', helper: 'Sensor for Battery 4 charging power.' },
+          sensor_bat4_discharge_power: { label: 'Battery 4 Discharge Power', helper: 'Sensor for Battery 4 discharging power.' },
           sensor_home_load: { label: 'Home Load/Consumption (Required)', helper: 'Total household consumption sensor.' },
           sensor_home_load_secondary: { label: 'Home Load (Inverter 2)', helper: 'Optional house load sensor for the second inverter.' },
           sensor_heat_pump_consumption: { label: 'Heat Pump Consumption', helper: 'Sensor for heat pump energy consumption.' },
@@ -10177,19 +11207,15 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           invert_bat1: { label: 'Invert Battery 1 Values', helper: 'Enable if Battery 1 charge/discharge polarity is reversed.' },
           invert_bat2: { label: 'Invert Battery 2 Values', helper: 'Enable if Battery 2 charge/discharge polarity is reversed.' },
           invert_bat3: { label: 'Invert Battery 3 Values', helper: 'Enable if Battery 3 charge/discharge polarity is reversed.' },
-          sensor_car_power: { label: 'Car 1 Power Sensor' },
-          sensor_car_soc: { label: 'Car 1 SOC Sensor' },
-          car_soc: { label: 'Car SOC', helper: 'Sensor for EV battery SOC.' },
-          car_range: { label: 'Car Range', helper: 'Sensor for EV range.' },
-          car_efficiency: { label: 'Car Efficiency', helper: 'Sensor for EV efficiency.' },
+          sensor_car_power: { label: 'Car 1 Power Sensor', helper: 'Sensor for EV charge/discharge power.' },
+          sensor_car_soc: { label: 'Car 1 SOC Sensor', helper: 'State of Charge sensor for EV 1 (percentage).' },
+          car_soc: { label: 'Car SOC', helper: 'Sensor for EV battery SOC (percentage).' },
           car_charger_power: { label: 'Car Charger Power', helper: 'Sensor for EV charger power.' },
           car1_label: { label: 'Car 1 Label', helper: 'Text displayed next to the first EV values.' },
-          sensor_car2_power: { label: 'Car 2 Power Sensor' },
+          sensor_car2_power: { label: 'Car 2 Power Sensor', helper: 'Sensor for EV 2 charge/discharge power.' },
           car2_power: { label: 'Car 2 Power', helper: 'Sensor for EV 2 charge/discharge power.' },
-          sensor_car2_soc: { label: 'Car 2 SOC Sensor' },
-          car2_soc: { label: 'Car 2 SOC', helper: 'Sensor for EV 2 battery SOC.' },
-          car2_range: { label: 'Car 2 Range', helper: 'Sensor for EV 2 range.' },
-          car2_efficiency: { label: 'Car 2 Efficiency', helper: 'Sensor for EV 2 efficiency.' },
+          sensor_car2_soc: { label: 'Car 2 SOC Sensor', helper: 'State of Charge sensor for EV 2 (percentage).' },
+          car2_soc: { label: 'Car 2 SOC', helper: 'Sensor for EV 2 battery SOC (percentage).' },
           car2_charger_power: { label: 'Car 2 Charger Power', helper: 'Sensor for EV 2 charger power.' },
           car2_label: { label: 'Car 2 Label', helper: 'Text displayed next to the second EV values.' },
           car_headlight_flash: { label: 'Headlight Flash While Charging', helper: 'Enable to flash the EV headlights whenever charging is detected.' },
@@ -10201,6 +11227,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           car2_name_color: { label: 'Car 2 Name Color', helper: 'Color applied to the Car 2 name label.' },
           car1_color: { label: 'Car 1 Color', helper: 'Color applied to Car 1 power value.' },
           car2_color: { label: 'Car 2 Color', helper: 'Color applied to Car 2 power value.' },
+          heat_pump_label: { label: 'Heat Pump Label', helper: 'Custom label for the heat pump/AC line (defaults to "Heat Pump/AC").' },
           heat_pump_flow_color: { label: 'Heat Pump Flow Color', helper: 'Color applied to the heat pump flow animation.' },
           heat_pump_text_color: { label: 'Heat Pump Text Color', helper: 'Color applied to the heat pump power text.' },
           pool_flow_color: { label: 'Pool Flow Color', helper: 'Color applied to the pool flow animation.' },
@@ -10210,28 +11237,28 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           refrigerator_text_color: { label: 'Refrigerator Text Color', helper: 'Color applied to the refrigerator power text.' },
           windmill_flow_color: { label: 'Windmill Flow Color', helper: 'Color applied to the windmill flow (data-flow-key="windmill-inverter1" / "windmill-inverter2").' },
           windmill_text_color: { label: 'Windmill Text Color', helper: 'Color applied to the windmill power text (data-role="windmill-power").' },
-          header_font_size: { label: 'Header Font Size (px)', helper: 'Default 16' },
-          daily_label_font_size: { label: 'Daily Label Font Size (px)', helper: 'Default 12' },
+          header_font_size: { label: 'Header Font Size (px)', helper: 'Default 8' },
+          daily_label_font_size: { label: 'Daily Label Font Size (px)', helper: 'Default 8' },
           daily_value_font_size: { label: 'Daily Value Font Size (px)', helper: 'Default 20' },
-          pv_font_size: { label: 'PV Text Font Size (px)', helper: 'Default 16' },
-          windmill_power_font_size: { label: 'Windmill Power Font Size (px)', helper: 'Default 16' },
+          pv_font_size: { label: 'PV Text Font Size (px)', helper: 'Default 8' },
+          windmill_power_font_size: { label: 'Windmill Power Font Size (px)', helper: 'Default 8' },
           battery_soc_font_size: { label: 'Battery SOC Font Size (px)', helper: 'Default 20' },
-          battery_power_font_size: { label: 'Battery Power Font Size (px)', helper: 'Default 16' },
-          load_font_size: { label: 'Load Font Size (px)', helper: 'Default 15' },
+          battery_power_font_size: { label: 'Battery Power Font Size (px)', helper: 'Default 8' },
+          load_font_size: { label: 'Load Font Size (px)', helper: 'Default 8' },
           inv1_power_font_size: { label: 'INV 1 Power Font Size (px)', helper: 'Font size for the INV 1 power line. Default uses Load Font Size.' },
           inv2_power_font_size: { label: 'INV 2 Power Font Size (px)', helper: 'Font size for the INV 2 power line. Default uses Load Font Size.' },
-          heat_pump_font_size: { label: 'Heat Pump Font Size (px)', helper: 'Default 16' },
-          pool_font_size: { label: 'Pool Font Size (px)', helper: 'Default 16' },
-          washing_machine_font_size: { label: 'Washing Machine Font Size (px)', helper: 'Default 16' },
-          dryer_font_size: { label: 'Dryer Font Size (px)', helper: 'Default 16' },
-          refrigerator_font_size: { label: 'Refrigerator Font Size (px)', helper: 'Default 16' },
-          grid_font_size: { label: 'Grid Font Size (px)', helper: 'Default 15' },
-          car_power_font_size: { label: 'Car Power Font Size (px)', helper: 'Default 15' },
-          car2_power_font_size: { label: 'Car 2 Power Font Size (px)', helper: 'Default 15' },
-          car_name_font_size: { label: 'Car Name Font Size (px)', helper: 'Default 15' },
-          car2_name_font_size: { label: 'Car 2 Name Font Size (px)', helper: 'Default 15' },
-          car_soc_font_size: { label: 'Car SOC Font Size (px)', helper: 'Default 12' },
-          car2_soc_font_size: { label: 'Car 2 SOC Font Size (px)', helper: 'Default 12' },
+          heat_pump_font_size: { label: 'Heat Pump Font Size (px)', helper: 'Default 8' },
+          pool_font_size: { label: 'Pool Font Size (px)', helper: 'Default 8' },
+          washing_machine_font_size: { label: 'Washing Machine Font Size (px)', helper: 'Default 8' },
+          dryer_font_size: { label: 'Dryer Font Size (px)', helper: 'Default 8' },
+          refrigerator_font_size: { label: 'Refrigerator Font Size (px)', helper: 'Default 8' },
+          grid_font_size: { label: 'Grid Font Size (px)', helper: 'Default 8' },
+          car_power_font_size: { label: 'Car Power Font Size (px)', helper: 'Default 8' },
+          car2_power_font_size: { label: 'Car 2 Power Font Size (px)', helper: 'Default 8' },
+          car_name_font_size: { label: 'Car Name Font Size (px)', helper: 'Default 8' },
+          car2_name_font_size: { label: 'Car 2 Name Font Size (px)', helper: 'Default 8' },
+          car_soc_font_size: { label: 'Car SOC Font Size (px)', helper: 'Default 8' },
+          car2_soc_font_size: { label: 'Car 2 SOC Font Size (px)', helper: 'Default 8' },
           sensor_popup_pv_1: { label: 'PV Popup 1', helper: 'Entity for PV popup line 1.' },
           sensor_popup_pv_2: { label: 'PV Popup 2', helper: 'Entity for PV popup line 2.' },
           sensor_popup_pv_3: { label: 'PV Popup 3', helper: 'Entity for PV popup line 3.' },
@@ -10250,116 +11277,117 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           sensor_popup_pv_4_color: { label: 'PV Popup 4 Color', helper: 'Color for PV popup line 4 text.' },
           sensor_popup_pv_5_color: { label: 'PV Popup 5 Color', helper: 'Color for PV popup line 5 text.' },
           sensor_popup_pv_6_color: { label: 'PV Popup 6 Color', helper: 'Color for PV popup line 6 text.' },
-          sensor_popup_pv_1_font_size: { label: 'PV Popup 1 Font Size (px)', helper: 'Font size for PV popup line 1. Default 16' },
-          sensor_popup_pv_2_font_size: { label: 'PV Popup 2 Font Size (px)', helper: 'Font size for PV popup line 2. Default 16' },
-          sensor_popup_pv_3_font_size: { label: 'PV Popup 3 Font Size (px)', helper: 'Font size for PV popup line 3. Default 16' },
-          sensor_popup_pv_4_font_size: { label: 'PV Popup 4 Font Size (px)', helper: 'Font size for PV popup line 4. Default 16' },
-          sensor_popup_pv_5_font_size: { label: 'PV Popup 5 Font Size (px)', helper: 'Font size for PV popup line 5. Default 16' },
-          sensor_popup_pv_6_font_size: { label: 'PV Popup 6 Font Size (px)', helper: 'Font size for PV popup line 6. Default 16' },
+          sensor_popup_pv_1_font_size: { label: 'PV Popup 1 Font Size (px)', helper: 'Font size for PV popup line 1. Default 8' },
+          sensor_popup_pv_2_font_size: { label: 'PV Popup 2 Font Size (px)', helper: 'Font size for PV popup line 2. Default 8' },
+          sensor_popup_pv_3_font_size: { label: 'PV Popup 3 Font Size (px)', helper: 'Font size for PV popup line 3. Default 8' },
+          sensor_popup_pv_4_font_size: { label: 'PV Popup 4 Font Size (px)', helper: 'Font size for PV popup line 4. Default 8' },
+          sensor_popup_pv_5_font_size: { label: 'PV Popup 5 Font Size (px)', helper: 'Font size for PV popup line 5. Default 8' },
+          sensor_popup_pv_6_font_size: { label: 'PV Popup 6 Font Size (px)', helper: 'Font size for PV popup line 6. Default 8' },
           sensor_popup_house_1: { label: 'House Popup 1', helper: 'Entity for house popup line 1.' },
           sensor_popup_house_1_name: { label: 'House Popup 1 Name', helper: 'Optional custom name for house popup line 1. Leave blank to use entity name.' },
           sensor_popup_house_1_color: { label: 'House Popup 1 Color', helper: 'Color for house popup line 1 text.' },
-          sensor_popup_house_1_font_size: { label: 'House Popup 1 Font Size (px)', helper: 'Font size for house popup line 1. Default 16' },
+          sensor_popup_house_1_font_size: { label: 'House Popup 1 Font Size (px)', helper: 'Font size for house popup line 1. Default 8' },
           sensor_popup_house_2: { label: 'House Popup 2', helper: 'Entity for house popup line 2.' },
           sensor_popup_house_2_name: { label: 'House Popup 2 Name', helper: 'Optional custom name for house popup line 2. Leave blank to use entity name.' },
           sensor_popup_house_2_color: { label: 'House Popup 2 Color', helper: 'Color for house popup line 2 text.' },
-          sensor_popup_house_2_font_size: { label: 'House Popup 2 Font Size (px)', helper: 'Font size for house popup line 2. Default 16' },
+          sensor_popup_house_2_font_size: { label: 'House Popup 2 Font Size (px)', helper: 'Font size for house popup line 2. Default 8' },
           sensor_popup_house_3: { label: 'House Popup 3', helper: 'Entity for house popup line 3.' },
           sensor_popup_house_3_name: { label: 'House Popup 3 Name', helper: 'Optional custom name for house popup line 3. Leave blank to use entity name.' },
           sensor_popup_house_3_color: { label: 'House Popup 3 Color', helper: 'Color for house popup line 3 text.' },
-          sensor_popup_house_3_font_size: { label: 'House Popup 3 Font Size (px)', helper: 'Font size for house popup line 3. Default 16' },
+          sensor_popup_house_3_font_size: { label: 'House Popup 3 Font Size (px)', helper: 'Font size for house popup line 3. Default 8' },
           sensor_popup_house_4: { label: 'House Popup 4', helper: 'Entity for house popup line 4.' },
           sensor_popup_house_4_name: { label: 'House Popup 4 Name', helper: 'Optional custom name for house popup line 4. Leave blank to use entity name.' },
           sensor_popup_house_4_color: { label: 'House Popup 4 Color', helper: 'Color for house popup line 4 text.' },
-          sensor_popup_house_4_font_size: { label: 'House Popup 4 Font Size (px)', helper: 'Font size for house popup line 4. Default 16' },
+          sensor_popup_house_4_font_size: { label: 'House Popup 4 Font Size (px)', helper: 'Font size for house popup line 4. Default 8' },
           sensor_popup_house_5: { label: 'House Popup 5', helper: 'Entity for house popup line 5.' },
           sensor_popup_house_5_name: { label: 'House Popup 5 Name', helper: 'Optional custom name for house popup line 5. Leave blank to use entity name.' },
           sensor_popup_house_5_color: { label: 'House Popup 5 Color', helper: 'Color for house popup line 5 text.' },
-          sensor_popup_house_5_font_size: { label: 'House Popup 5 Font Size (px)', helper: 'Font size for house popup line 5. Default 16' },
+          sensor_popup_house_5_font_size: { label: 'House Popup 5 Font Size (px)', helper: 'Font size for house popup line 5. Default 8' },
           sensor_popup_house_6: { label: 'House Popup 6', helper: 'Entity for house popup line 6.' },
           sensor_popup_house_6_name: { label: 'House Popup 6 Name', helper: 'Optional custom name for house popup line 6. Leave blank to use entity name.' },
           sensor_popup_house_6_color: { label: 'House Popup 6 Color', helper: 'Color for house popup line 6 text.' },
-          sensor_popup_house_6_font_size: { label: 'House Popup 6 Font Size (px)', helper: 'Font size for house popup line 6. Default 16' },
+          sensor_popup_house_6_font_size: { label: 'House Popup 6 Font Size (px)', helper: 'Font size for house popup line 6. Default 8' },
           sensor_popup_bat_1: { label: 'Battery Popup 1', helper: 'Entity for battery popup line 1.' },
           sensor_popup_bat_1_name: { label: 'Battery Popup 1 Name', helper: 'Optional custom name for battery popup line 1. Leave blank to use entity name.' },
           sensor_popup_bat_1_color: { label: 'Battery Popup 1 Color', helper: 'Color for battery popup line 1 text.' },
-          sensor_popup_bat_1_font_size: { label: 'Battery Popup 1 Font Size (px)', helper: 'Font size for battery popup line 1. Default 16' },
+          sensor_popup_bat_1_font_size: { label: 'Battery Popup 1 Font Size (px)', helper: 'Font size for battery popup line 1. Default 8' },
           sensor_popup_bat_2: { label: 'Battery Popup 2', helper: 'Entity for battery popup line 2.' },
           sensor_popup_bat_2_name: { label: 'Battery Popup 2 Name', helper: 'Optional custom name for battery popup line 2. Leave blank to use entity name.' },
           sensor_popup_bat_2_color: { label: 'Battery Popup 2 Color', helper: 'Color for battery popup line 2 text.' },
-          sensor_popup_bat_2_font_size: { label: 'Battery Popup 2 Font Size (px)', helper: 'Font size for battery popup line 2. Default 16' },
+          sensor_popup_bat_2_font_size: { label: 'Battery Popup 2 Font Size (px)', helper: 'Font size for battery popup line 2. Default 8' },
           sensor_popup_bat_3: { label: 'Battery Popup 3', helper: 'Entity for battery popup line 3.' },
           sensor_popup_bat_3_name: { label: 'Battery Popup 3 Name', helper: 'Optional custom name for battery popup line 3. Leave blank to use entity name.' },
           sensor_popup_bat_3_color: { label: 'Battery Popup 3 Color', helper: 'Color for battery popup line 3 text.' },
-          sensor_popup_bat_3_font_size: { label: 'Battery Popup 3 Font Size (px)', helper: 'Font size for battery popup line 3. Default 16' },
+          sensor_popup_bat_3_font_size: { label: 'Battery Popup 3 Font Size (px)', helper: 'Font size for battery popup line 3. Default 8' },
           sensor_popup_bat_4: { label: 'Battery Popup 4', helper: 'Entity for battery popup line 4.' },
           sensor_popup_bat_4_name: { label: 'Battery Popup 4 Name', helper: 'Optional custom name for battery popup line 4. Leave blank to use entity name.' },
           sensor_popup_bat_4_color: { label: 'Battery Popup 4 Color', helper: 'Color for battery popup line 4 text.' },
-          sensor_popup_bat_4_font_size: { label: 'Battery Popup 4 Font Size (px)', helper: 'Font size for battery popup line 4. Default 16' },
+          sensor_popup_bat_4_font_size: { label: 'Battery Popup 4 Font Size (px)', helper: 'Font size for battery popup line 4. Default 8' },
           sensor_popup_bat_5: { label: 'Battery Popup 5', helper: 'Entity for battery popup line 5.' },
           sensor_popup_bat_5_name: { label: 'Battery Popup 5 Name', helper: 'Optional custom name for battery popup line 5. Leave blank to use entity name.' },
           sensor_popup_bat_5_color: { label: 'Battery Popup 5 Color', helper: 'Color for battery popup line 5 text.' },
-          sensor_popup_bat_5_font_size: { label: 'Battery Popup 5 Font Size (px)', helper: 'Font size for battery popup line 5. Default 16' },
+          sensor_popup_bat_5_font_size: { label: 'Battery Popup 5 Font Size (px)', helper: 'Font size for battery popup line 5. Default 8' },
           sensor_popup_bat_6: { label: 'Battery Popup 6', helper: 'Entity for battery popup line 6.' },
           sensor_popup_bat_6_name: { label: 'Battery Popup 6 Name', helper: 'Optional custom name for battery popup line 6. Leave blank to use entity name.' },
           sensor_popup_bat_6_color: { label: 'Battery Popup 6 Color', helper: 'Color for battery popup line 6 text.' },
-          sensor_popup_bat_6_font_size: { label: 'Battery Popup 6 Font Size (px)', helper: 'Font size for battery popup line 6. Default 16' },
+          sensor_popup_bat_6_font_size: { label: 'Battery Popup 6 Font Size (px)', helper: 'Font size for battery popup line 6. Default 8' },
           sensor_popup_grid_1: { label: 'Grid Popup 1', helper: 'Entity for grid popup line 1.' },
           sensor_popup_grid_1_name: { label: 'Grid Popup 1 Name', helper: 'Optional custom name for grid popup line 1. Leave blank to use entity name.' },
           sensor_popup_grid_1_color: { label: 'Grid Popup 1 Color', helper: 'Color for grid popup line 1 text.' },
-          sensor_popup_grid_1_font_size: { label: 'Grid Popup 1 Font Size (px)', helper: 'Font size for grid popup line 1. Default 16' },
+          sensor_popup_grid_1_font_size: { label: 'Grid Popup 1 Font Size (px)', helper: 'Font size for grid popup line 1. Default 8' },
           sensor_popup_grid_2: { label: 'Grid Popup 2', helper: 'Entity for grid popup line 2.' },
           sensor_popup_grid_2_name: { label: 'Grid Popup 2 Name', helper: 'Optional custom name for grid popup line 2. Leave blank to use entity name.' },
           sensor_popup_grid_2_color: { label: 'Grid Popup 2 Color', helper: 'Color for grid popup line 2 text.' },
-          sensor_popup_grid_2_font_size: { label: 'Grid Popup 2 Font Size (px)', helper: 'Font size for grid popup line 2. Default 16' },
+          sensor_popup_grid_2_font_size: { label: 'Grid Popup 2 Font Size (px)', helper: 'Font size for grid popup line 2. Default 8' },
           sensor_popup_grid_3: { label: 'Grid Popup 3', helper: 'Entity for grid popup line 3.' },
           sensor_popup_grid_3_name: { label: 'Grid Popup 3 Name', helper: 'Optional custom name for grid popup line 3. Leave blank to use entity name.' },
           sensor_popup_grid_3_color: { label: 'Grid Popup 3 Color', helper: 'Color for grid popup line 3 text.' },
-          sensor_popup_grid_3_font_size: { label: 'Grid Popup 3 Font Size (px)', helper: 'Font size for grid popup line 3. Default 16' },
+          sensor_popup_grid_3_font_size: { label: 'Grid Popup 3 Font Size (px)', helper: 'Font size for grid popup line 3. Default 8' },
           sensor_popup_grid_4: { label: 'Grid Popup 4', helper: 'Entity for grid popup line 4.' },
           sensor_popup_grid_4_name: { label: 'Grid Popup 4 Name', helper: 'Optional custom name for grid popup line 4. Leave blank to use entity name.' },
           sensor_popup_grid_4_color: { label: 'Grid Popup 4 Color', helper: 'Color for grid popup line 4 text.' },
-          sensor_popup_grid_4_font_size: { label: 'Grid Popup 4 Font Size (px)', helper: 'Font size for grid popup line 4. Default 16' },
+          sensor_popup_grid_4_font_size: { label: 'Grid Popup 4 Font Size (px)', helper: 'Font size for grid popup line 4. Default 8' },
           sensor_popup_grid_5: { label: 'Grid Popup 5', helper: 'Entity for grid popup line 5.' },
           sensor_popup_grid_5_name: { label: 'Grid Popup 5 Name', helper: 'Optional custom name for grid popup line 5. Leave blank to use entity name.' },
           sensor_popup_grid_5_color: { label: 'Grid Popup 5 Color', helper: 'Color for grid popup line 5 text.' },
-          sensor_popup_grid_5_font_size: { label: 'Grid Popup 5 Font Size (px)', helper: 'Font size for grid popup line 5. Default 16' },
+          sensor_popup_grid_5_font_size: { label: 'Grid Popup 5 Font Size (px)', helper: 'Font size for grid popup line 5. Default 8' },
           sensor_popup_grid_6: { label: 'Grid Popup 6', helper: 'Entity for grid popup line 6.' },
           sensor_popup_grid_6_name: { label: 'Grid Popup 6 Name', helper: 'Optional custom name for grid popup line 6. Leave blank to use entity name.' },
           sensor_popup_grid_6_color: { label: 'Grid Popup 6 Color', helper: 'Color for grid popup line 6 text.' },
-          sensor_popup_grid_6_font_size: { label: 'Grid Popup 6 Font Size (px)', helper: 'Font size for grid popup line 6. Default 16' },
+          sensor_popup_grid_6_font_size: { label: 'Grid Popup 6 Font Size (px)', helper: 'Font size for grid popup line 6. Default 8' },
           sensor_popup_inverter_1: { label: 'Inverter Popup 1', helper: 'Entity for inverter popup line 1.' },
           sensor_popup_inverter_1_name: { label: 'Inverter Popup 1 Name', helper: 'Optional custom name for inverter popup line 1. Leave blank to use entity name.' },
           sensor_popup_inverter_1_color: { label: 'Inverter Popup 1 Color', helper: 'Color for inverter popup line 1 text.' },
-          sensor_popup_inverter_1_font_size: { label: 'Inverter Popup 1 Font Size (px)', helper: 'Font size for inverter popup line 1. Default 16' },
+          sensor_popup_inverter_1_font_size: { label: 'Inverter Popup 1 Font Size (px)', helper: 'Font size for inverter popup line 1. Default 8' },
           sensor_popup_inverter_2: { label: 'Inverter Popup 2', helper: 'Entity for inverter popup line 2.' },
           sensor_popup_inverter_2_name: { label: 'Inverter Popup 2 Name', helper: 'Optional custom name for inverter popup line 2. Leave blank to use entity name.' },
           sensor_popup_inverter_2_color: { label: 'Inverter Popup 2 Color', helper: 'Color for inverter popup line 2 text.' },
-          sensor_popup_inverter_2_font_size: { label: 'Inverter Popup 2 Font Size (px)', helper: 'Font size for inverter popup line 2. Default 16' },
+          sensor_popup_inverter_2_font_size: { label: 'Inverter Popup 2 Font Size (px)', helper: 'Font size for inverter popup line 2. Default 8' },
           sensor_popup_inverter_3: { label: 'Inverter Popup 3', helper: 'Entity for inverter popup line 3.' },
           sensor_popup_inverter_3_name: { label: 'Inverter Popup 3 Name', helper: 'Optional custom name for inverter popup line 3. Leave blank to use entity name.' },
           sensor_popup_inverter_3_color: { label: 'Inverter Popup 3 Color', helper: 'Color for inverter popup line 3 text.' },
-          sensor_popup_inverter_3_font_size: { label: 'Inverter Popup 3 Font Size (px)', helper: 'Font size for inverter popup line 3. Default 16' },
+          sensor_popup_inverter_3_font_size: { label: 'Inverter Popup 3 Font Size (px)', helper: 'Font size for inverter popup line 3. Default 8' },
           sensor_popup_inverter_4: { label: 'Inverter Popup 4', helper: 'Entity for inverter popup line 4.' },
           sensor_popup_inverter_4_name: { label: 'Inverter Popup 4 Name', helper: 'Optional custom name for inverter popup line 4. Leave blank to use entity name.' },
           sensor_popup_inverter_4_color: { label: 'Inverter Popup 4 Color', helper: 'Color for inverter popup line 4 text.' },
-          sensor_popup_inverter_4_font_size: { label: 'Inverter Popup 4 Font Size (px)', helper: 'Font size for inverter popup line 4. Default 16' },
+          sensor_popup_inverter_4_font_size: { label: 'Inverter Popup 4 Font Size (px)', helper: 'Font size for inverter popup line 4. Default 8' },
           sensor_popup_inverter_5: { label: 'Inverter Popup 5', helper: 'Entity for inverter popup line 5.' },
           sensor_popup_inverter_5_name: { label: 'Inverter Popup 5 Name', helper: 'Optional custom name for inverter popup line 5. Leave blank to use entity name.' },
           sensor_popup_inverter_5_color: { label: 'Inverter Popup 5 Color', helper: 'Color for inverter popup line 5 text.' },
-          sensor_popup_inverter_5_font_size: { label: 'Inverter Popup 5 Font Size (px)', helper: 'Font size for inverter popup line 5. Default 16' },
+          sensor_popup_inverter_5_font_size: { label: 'Inverter Popup 5 Font Size (px)', helper: 'Font size for inverter popup line 5. Default 8' },
           sensor_popup_inverter_6: { label: 'Inverter Popup 6', helper: 'Entity for inverter popup line 6.' },
           sensor_popup_inverter_6_name: { label: 'Inverter Popup 6 Name', helper: 'Optional custom name for inverter popup line 6. Leave blank to use entity name.' },
           sensor_popup_inverter_6_color: { label: 'Inverter Popup 6 Color', helper: 'Color for inverter popup line 6 text.' },
-          sensor_popup_inverter_6_font_size: { label: 'Inverter Popup 6 Font Size (px)', helper: 'Font size for inverter popup line 6. Default 16' }
+          sensor_popup_inverter_6_font_size: { label: 'Inverter Popup 6 Font Size (px)', helper: 'Font size for inverter popup line 6. Default 8' }
         },
         options: {
           languages: [
             { value: 'en', label: 'English' },
             { value: 'it', label: 'Italiano' },
             { value: 'de', label: 'Deutsch' },
-            { value: 'fr', label: 'FranÃ§ais' },
-            { value: 'nl', label: 'Nederlands' }
+            { value: 'fr', label: 'Français' },
+            { value: 'nl', label: 'Nederlands' },
+            { value: 'es', label: 'Español' }
           ],
           display_units: [
             { value: 'W', label: 'Watts (W)' },
@@ -10382,355 +11410,267 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           initial_batteries_4: '4',
           initial_evs_1: '1',
           initial_evs_2: '2'
+        },
+        view: {
+          daily: 'DAILY YIELD', pv_tot: 'PV TOTAL', car1: 'CAR 1', car2: 'CAR 2', importing: 'IMPORTING', exporting: 'EXPORTING'
         }
-      ,
-      view: {
-        daily: 'DAILY YIELD',
-        pv_tot: 'PV TOTAL',
-        car1: 'CAR 1',
-        car2: 'CAR 2',
-        importing: 'IMPORTING',
-        exporting: 'EXPORTING'
-      }
       },
       it: {
         sections: {
-          general: { title: 'Impostazioni generali', helper: 'Titolo scheda, sfondo, lingua e frequenza di aggiornamento.' },
-          initialConfig: { title: 'Configurazione iniziale', helper: 'Domande guidate per la prima configurazione.' },
-          pvCommon: { title: 'Solare/PV Comune', helper: 'Impostazioni Solare/PV condivise tra gli array.' },
-          array1: { title: 'Solare/PV Array 1', helper: 'Configura le entita dell Array PV 1.' },
-          array2: { title: 'Solare/PV Array 2', helper: 'If PV Total Sensor (Inverter 2) is set or the PV String values are provided, Array 2 will become active and enable the second inverter. You must also enable Daily Production Sensor (Array 2) and Home Load (Inverter 2).' },
-          windmill: { title: 'Windmill', helper: 'Configura il generatore eolico e lo stile di visualizzazione.' },
-          battery: { title: 'Batteria', helper: 'Configura le entita della batteria.' },
-          grid: { title: 'Rete', helper: 'Configura le entita della rete.' },
-          car: { title: 'Auto', helper: 'Configura le entita EV.' },
+          general: { title: 'Impostazioni generali', helper: 'Metadati della scheda, sfondo, lingua e intervallo di aggiornamento.' },
+          initialConfig: { title: 'Configurazione iniziale', helper: 'Checklist per l\'avvio e opzioni iniziali.' },
+          pvCommon: { title: 'Solare/PV (Comuni)', helper: 'Impostazioni comuni per Solare/PV condivise tra gli array.' },
+          array1: { title: 'Array Solare/PV 1', helper: 'Scegli le entità PV, batteria, rete, carico e veicoli elettrici utilizzate dalla scheda. È necessario specificare almeno il sensore totale PV o gli array di stringhe PV.' },
+          array2: { title: 'Array Solare/PV 2', helper: 'Se è impostato il sensore PV Total (Inverter 2) o sono fornite le stringhe PV, l\'Array 2 diventerà attivo e abiliterà il secondo inverter. È inoltre necessario abilitare il sensore di produzione giornaliera (Array 2) e il carico domestico (Inverter 2).' },
+          windmill: { title: 'Mulino a vento', helper: 'Configura i sensori del generatore eolico e lo stile di visualizzazione.' },
+          battery: { title: 'Batteria', helper: 'Configura le entità della batteria.' },
+          grid: { title: 'Rete', helper: 'Configura le entità di rete.' },
+          car: { title: 'Auto', helper: 'Configura le entità dei veicoli elettrici.' },
           other: { title: 'Casa', helper: 'Sensori aggiuntivi e opzioni avanzate.' },
-          entities: { title: 'Selezione entita', helper: 'Scegli le entita PV, batteria, rete, carico ed EV utilizzate dalla scheda. Come minimo deve essere specificato il sensore PV totale oppure gli array di stringhe PV.' },
-          pvPopup: { title: 'PV Popup', helper: 'Configura le entita per la visualizzazione del popup PV.' },
-          housePopup: { title: 'House Popup', helper: 'Configura le entita per la visualizzazione del popup casa.' },
-          batteryPopup: { title: 'Popup Batteria', helper: 'Configura il popup della batteria.' },
-          gridPopup: { title: 'Popup Rete', helper: 'Configura le entita per la visualizzazione del popup rete.' },
-          inverterPopup: { title: 'Popup Inverter', helper: 'Configura le entita per la visualizzazione del popup inverter.' },
-          colors: { title: 'Colori e soglie', helper: 'Configura soglie della rete e colori di accento per i flussi.' },
-          typography: { title: 'Tipografia', helper: 'Regola le dimensioni dei caratteri utilizzate nella scheda.' },
+          pvPopup: { title: 'Popup PV', helper: 'Configura le entità per la visualizzazione popup del PV.' },
+          housePopup: { title: 'Popup Casa', helper: 'Configura le entità per il popup della casa.' },
+          batteryPopup: { title: 'Popup Batteria', helper: 'Configura la visualizzazione popup della batteria.' },
+          gridPopup: { title: 'Popup Rete', helper: 'Configura le entità per il popup della rete.' },
+          inverterPopup: { title: 'Popup Inverter', helper: 'Configura le entità per il popup dell\'inverter.' },
+          colors: { title: 'Colori & Soglie', helper: 'Configura soglie di rete e colori di accento per i flussi e la visualizzazione EV.' },
+          typography: { title: 'Tipografia', helper: 'Regola le dimensioni dei font usati nella scheda.' },
           about: { title: 'Informazioni', helper: 'Crediti, versione e link utili.' }
         },
         fields: {
-          card_title: { label: 'Titolo scheda', helper: 'Titolo mostrato nella parte superiore della scheda. Lasciare vuoto per disabilitare.' },
-          language: { label: 'Lingua', helper: 'Seleziona la lingua dell editor.' },
-          display_unit: { label: 'Unita di visualizzazione', helper: 'Unita usata per i valori di potenza.' },
-          update_interval: { label: 'Intervallo di aggiornamento', helper: 'Frequenza di aggiornamento della scheda (0 disattiva il limite).' },
-          initial_configuration: { label: 'Configurazione iniziale', helper: 'Mostra la sezione Configurazione iniziale nell editor.' },
-          initial_has_pv: { label: 'Hai energia Solare/PV?', helper: 'Seleziona Sì se hai produzione solare da configurare.' },
-          initial_inverters: { label: 'Quanti inverter hai?', helper: 'Mostrato solo quando il solare/PV è abilitato.' },
-          initial_has_battery: { label: 'Hai accumulo batterie?', helper: '' },
+          card_title: { label: 'Titolo della scheda', helper: 'Titolo mostrato in cima alla scheda. Lascia vuoto per disabilitare.' },
+          title_text_color: { label: 'Colore testo titolo', helper: 'Sovrascrive il colore di riempimento per [data-role="title-text"]. Lascia vuoto per mantenere lo stile SVG.' },
+          title_bg_color: { label: 'Colore sfondo titolo', helper: 'Sovrascrive il colore di riempimento per [data-role="title-bg"]. Lascia vuoto per mantenere lo stile SVG.' },
+          font_family: { label: 'Famiglia di font', helper: 'CSS font-family usato per tutto il testo SVG (es. sans-serif, Roboto, "Segoe UI").' },
+          odometer_font_family: { label: 'Font odometro (Monospace)', helper: 'Font usato solo per i valori animati tipo odometro. Lascia vuoto per riutilizzare la famiglia di font. Suggerimento: scegli una variante monospace.' },
+          background_day: { label: 'Sfondo giorno', helper: 'Percorso al file SVG di sfondo giorno (es. /local/community/advanced-energy-card/advanced_background_day.svg).' },
+          background_night: { label: 'Sfondo notte', helper: 'Percorso al file SVG di sfondo notte (es. /local/community/advanced-energy-card/advanced_background_night.svg).' },
+          night_mode: { label: 'Modalità Giorno/Notte', helper: 'Seleziona Giorno, Notte o Auto. Auto usa sun.sun: above_horizon = Giorno, below_horizon = Notte.' },
+          language: { label: 'Lingua', helper: 'Scegli la lingua dell\'editor.' },
+          display_unit: { label: 'Unità di visualizzazione', helper: 'Unità usata per formattare i valori di potenza.' },
+          update_interval: { label: 'Intervallo aggiornamento', helper: 'Cadenza di aggiornamento della scheda (0 disabilita il throttling).' },
+          initial_configuration: { label: 'Configurazione iniziale', helper: 'Mostra la sezione di configurazione iniziale nell\'editor.' },
+          initial_has_pv: { label: 'Hai impianto solare/PV?', helper: 'Seleziona Sì se hai produzione solare da configurare.' },
+          initial_inverters: { label: 'Quanti inverter hai?', helper: 'Mostrato solo quando Solare/PV è abilitato.' },
+          initial_has_battery: { label: 'Hai accumulo a batteria?', helper: '' },
           initial_battery_count: { label: 'Quante batterie hai? Massimo 4', helper: '' },
-          initial_has_grid: { label: 'Hai elettricità dalla rete?', helper: '' },
-          initial_can_export: { label: 'Puoi esportare l\'elettricità in eccesso alla rete?', helper: '' },
-          initial_has_windmill: { label: 'Hai una turbina eolica?', helper: '' },
-          initial_has_ev: { label: 'Hai veicoli elettrici/EV?', helper: '' },
+          initial_has_grid: { label: 'Hai elettricità fornita dalla rete?', helper: '' },
+          initial_can_export: { label: 'Puoi esportare l\'energia in eccesso alla rete?', helper: '' },
+          initial_has_windmill: { label: 'Hai un mulino a vento?', helper: '' },
+          initial_has_ev: { label: 'Hai veicoli elettrici (EV)?', helper: '' },
           initial_ev_count: { label: 'Quanti ne hai?', helper: '' },
-          initial_battery_dual_inverter_helper: { label: 'Da Sie 2 Wechselrichter ausgewÃ¤hlt haben, sind mindestens 2 Batterien erforderlich. Batterien 1 und 2 werden Wechselrichter 1 zugeordnet und Batterien 3 und 4 Wechselrichter 2.', helper: '' },
           initial_config_items_title: { label: 'Elementi di configurazione richiesti', helper: '' },
-          initial_config_items_helper: { label: 'Questi elementi dipendono dalle risposte sopra.', helper: '' },
-          initial_config_items_empty: { label: 'Nessun elemento da mostrare.', helper: '' },
-          initial_config_complete_helper: { label: 'Questo completa la configurazione minima richiesta. Dopo aver fatto clic sul pulsante Completa, controlla tutti i menu per eventuali elementi aggiuntivi e configurazioni dei popup. Questa configurazione iniziale puÃ² essere riabilitata nel menu Generale.', helper: '' },
+          initial_config_items_helper: { label: 'Questi elementi diventano rilevanti in base alle risposte precedenti.', helper: '' },
+          initial_config_items_empty: { label: 'Nessun elemento da mostrare al momento.', helper: '' },
+          initial_config_complete_helper: { label: 'Questo completa la configurazione minima richiesta. Dopo aver cliccato su Completa, controlla tutti i menu per elementi aggiuntivi e le configurazioni popup. Questa configurazione iniziale può essere riattivata nel menu Generale.', helper: '' },
           initial_config_complete_button: { label: 'Completa', helper: '' },
-          array_helper_text: { label: 'Ogni array deve avere almeno un sensore PV totale combinato che rappresenta la potenza totale di quell\'array oppure valori delle stringhe individuali che vengono sommati per ottenere la potenza totale dell\'array. La produzione giornaliera puÃ² essere fornita e puÃ² essere mostrata in una scheda di produzione giornaliera.', helper: '' },
-          animation_speed_factor: { label: 'Fattore velocita animazioni', helper: 'Regola il moltiplicatore (-3x a 3x). Usa 0 per mettere in pausa; valori negativi invertono il flusso.' },
-          animation_style: { label: 'Stile animazione (Giorno)', helper: 'Stile dei flussi usato in modalita Giorno.' },
-          night_animation_style: { label: 'Stile animazione (Notte)', helper: 'Stile dei flussi usato in modalita Notte. Lascia vuoto per usare lo stile Giorno.' },
-          dashes_glow_intensity: { label: 'Intensita bagliore tratteggi', helper: 'Controlla il bagliore per "Tratteggi + Bagliore" (0 disattiva).' },
-          fluid_flow_outer_glow: { label: 'Bagliore esterno fluid flow', helper: 'Abilita lo strato esterno di bagliore per animation_style: fluid_flow.' },
-          flow_stroke_width: { label: 'Spessore flussi (px)', helper: 'Override opzionale per lo spessore dei flussi animati (senza modificare l SVG). Lascia vuoto per usare i valori dell SVG.' },
-          fluid_flow_stroke_width: { label: 'Spessore fluid flow (px)', helper: 'Spessore base per animation_style: fluid_flow. Overlay/maschera derivano da questo (default 5).' },
-          
-          sensor_pv_total: { label: 'Sensore PV totale', helper: 'Sensore aggregato opzionale mostrato come linea combinata.' },
-          sensor_pv_total_secondary: { label: 'Sensore PV totale (Inverter 2)', helper: 'Secondo sensore inverter opzionale; viene sommato al totale PV.' },
-          sensor_windmill_total: { label: 'Windmill Total', helper: 'Sensore di potenza del generatore eolico (W). Se non configurato, il gruppo SVG del windmill viene nascosto.' },
-          sensor_windmill_daily: { label: 'Daily Windmill Production', helper: 'Sensore opzionale per la produzione giornaliera del windmill.' },
-          sensor_pv1: { label: 'PV String 1 (Array 1)', helper: 'Sensore principale di produzione solare.' },
-          sensor_pv2: { label: 'PV String 2 (Array 1)' },
-          sensor_pv3: { label: 'PV String 3 (Array 1)' },
-          sensor_pv4: { label: 'PV String 4 (Array 1)' },
-          sensor_pv5: { label: 'PV String 5 (Array 1)' },
-          sensor_pv6: { label: 'PV String 6 (Array 1)' },
-          sensor_daily: { label: 'Sensore produzione giornaliera (Obbligatorio)', helper: 'Sensore che riporta la produzione giornaliera. Come minimo deve essere specificato il sensore PV totale oppure gli array di stringhe PV.' },
-          sensor_daily_array2: { label: 'Sensore produzione giornaliera (Array 2)', helper: 'Sensore che riporta la produzione giornaliera per l Array 2.' },
-          sensor_bat1_soc: { label: 'Batteria 1 SOC' },
-          sensor_bat1_power: { label: 'Batteria 1 potenza', helper: 'Fornisci questo sensore di potenza combinato oppure entrambi i sensori di carica e scarica per attivare la Batteria 1.' },
-          sensor_bat1_charge_power: { label: 'Potenza carica Batteria 1' },
-          sensor_bat1_discharge_power: { label: 'Potenza scarica Batteria 1' },
-          sensor_bat2_soc: { label: 'Batteria 2 SOC' },
-          sensor_bat2_power: { label: 'Batteria 2 potenza', helper: 'Fornisci questo sensore di potenza combinato oppure entrambi i sensori di carica e scarica per attivare la Batteria 2.' },
-          sensor_bat2_charge_power: { label: 'Potenza carica Batteria 2' },
-          sensor_bat2_discharge_power: { label: 'Potenza scarica Batteria 2' },
-          sensor_bat3_soc: { label: 'Batteria 3 SOC' },
-          sensor_bat3_power: { label: 'Batteria 3 potenza', helper: 'Fornisci questo sensore di potenza combinato oppure entrambi i sensori di carica e scarica per attivare la Batteria 3.' },
-          sensor_bat3_charge_power: { label: 'Potenza carica Batteria 3' },
-          sensor_bat3_discharge_power: { label: 'Potenza scarica Batteria 3' },
-          sensor_bat4_soc: { label: 'Batteria 4 SOC' },
-          sensor_bat4_power: { label: 'Batteria 4 potenza', helper: 'Fornisci questo sensore di potenza combinato oppure entrambi i sensori di carica e scarica per attivare la Batteria 4.' },
-          sensor_bat4_charge_power: { label: 'Potenza carica Batteria 4' },
-          sensor_bat4_discharge_power: { label: 'Potenza scarica Batteria 4' },
-          sensor_home_load: { label: 'Carico casa/consumo (Obbligatorio)', helper: 'Sensore del consumo totale dell abitazione.' },
-          sensor_home_load_secondary: { label: 'Carico casa (Inverter 2)', helper: 'Sensore opzionale del carico domestico per il secondo inverter.' },
+          array_helper_text: { label: 'Ogni Array deve avere almeno un sensore totale Solar/PV combinato o valori di stringa individuali che vengono sommati per ottenere la produzione totale dell\'array. La produzione giornaliera può essere fornita e mostrata in una scheda Produzione Giornaliera.', helper: '' },
+          animation_speed_factor: { label: 'Fattore velocità animazione', helper: 'Regola il moltiplicatore della velocità di animazione (-3x a 3x). Imposta 0 per mettere in pausa; valori negativi invertono la direzione.' },
+          animation_style: { label: 'Stile animazione giorno', helper: 'Stile di animazione del flusso usato in modalità Giorno.' },
+          night_animation_style: { label: 'Stile animazione notte', helper: 'Stile di animazione del flusso usato in modalità Notte. Lascia vuoto per usare lo stile Giorno.' },
+          dashes_glow_intensity: { label: 'Intensità bagliore tratteggi', helper: 'Controlla la forza del bagliore per "Tratteggi + Bagliore" (0 disabilita).' },
+          fluid_flow_outer_glow: { label: 'Bagliore esterno Fluid Flow', helper: 'Abilita lo strato extra di alone/bagliore per animation_style: fluid_flow.' },
+          flow_stroke_width: { label: 'Spessore tratto flusso (px)', helper: 'Sovrascrittura opzionale per lo spessore del tratto animato (senza modifiche SVG). Lascia vuoto per i valori predefiniti SVG.' },
+          fluid_flow_stroke_width: { label: 'Spessore tratto Fluid Flow (px)', helper: 'Spessore base per animation_style: fluid_flow. Gli overlay/maschere sono derivati da questo (default 5).' },
+          sensor_pv_total: { label: 'Sensore PV Totale', helper: 'Sensore aggregato opzionale mostrato come linea combinata.' },
+          sensor_pv_total_secondary: { label: 'Sensore PV Totale (Inverter 2)', helper: 'Totale opzionale del secondo inverter; viene aggiunto al PV totale se fornito.' },
+          sensor_windmill_total: { label: 'Totale mulino a vento', helper: 'Sensore di potenza per il generatore eolico (W). Se non configurato, il gruppo SVG del mulino a vento è nascosto.' },
+          sensor_windmill_daily: { label: 'Produzione giornaliera mulino', helper: 'Sensore opzionale che riporta la produzione giornaliera del mulino.' },
+          sensor_pv1: { label: 'Stringa PV 1 (Array 1)', helper: 'Sensore di produzione solare Array 1 per la stringa 1.' },
+          sensor_pv2: { label: 'Stringa PV 2 (Array 1)', helper: 'Sensore di produzione solare Array 1 per la stringa 2.' },
+          sensor_pv3: { label: 'Stringa PV 3 (Array 1)', helper: 'Sensore di produzione solare Array 1 per la stringa 3.' },
+          sensor_pv4: { label: 'Stringa PV 4 (Array 1)', helper: 'Sensore di produzione solare Array 1 per la stringa 4.' },
+          sensor_pv5: { label: 'Stringa PV 5 (Array 1)', helper: 'Sensore di produzione solare Array 1 per la stringa 5.' },
+          sensor_pv6: { label: 'Stringa PV 6 (Array 1)', helper: 'Sensore di produzione solare Array 1 per la stringa 6.' },
+          sensor_pv_array2_1: { label: 'Stringa PV 1 (Array 2)', helper: 'Sensore di produzione solare Array 2 per la stringa 1.' },
+          sensor_pv_array2_2: { label: 'Stringa PV 2 (Array 2)', helper: 'Sensore di produzione solare Array 2 per la stringa 2.' },
+          sensor_pv_array2_3: { label: 'Stringa PV 3 (Array 2)', helper: 'Sensore di produzione solare Array 2 per la stringa 3.' },
+          sensor_pv_array2_4: { label: 'Stringa PV 4 (Array 2)', helper: 'Sensore di produzione solare Array 2 per la stringa 4.' },
+          sensor_pv_array2_5: { label: 'Stringa PV 5 (Array 2)', helper: 'Sensore di produzione solare Array 2 per la stringa 5.' },
+          sensor_pv_array2_6: { label: 'Stringa PV 6 (Array 2)', helper: 'Sensore di produzione solare Array 2 per la stringa 6.' },
+          sensor_daily: { label: 'Sensore produzione giornaliera', helper: 'Sensore che riporta i totali di produzione giornaliera. È richiesto il sensore PV totale o le stringhe PV.' },
+          sensor_daily_array2: { label: 'Sensore produzione giornaliera (Array 2)', helper: 'Sensore che riporta i totali giornalieri per l\'Array 2.' },
+          sensor_bat1_soc: { label: 'SOC Batteria 1', helper: 'Sensore Stato di Carica per la Batteria 1 (percentuale).' },
+          sensor_bat1_power: { label: 'Potenza Batteria 1', helper: 'Fornire questo sensore di potenza combinato o i sensori di carica/scarica affinché la Batteria 1 diventi attiva.' },
+          sensor_bat1_charge_power: { label: 'Potenza carica Batteria 1', helper: 'Sensore per la potenza in carica della Batteria 1.' },
+          sensor_bat1_discharge_power: { label: 'Potenza scarica Batteria 1', helper: 'Sensore per la potenza in scarica della Batteria 1.' },
+          sensor_bat2_soc: { label: 'SOC Batteria 2', helper: 'Sensore Stato di Carica per la Batteria 2 (percentuale).' },
+          sensor_bat2_power: { label: 'Potenza Batteria 2', helper: 'Fornire questo sensore di potenza combinato o i sensori di carica/scarica affinché la Batteria 2 diventi attiva.' },
+          sensor_bat2_charge_power: { label: 'Potenza carica Batteria 2', helper: 'Sensore per la potenza in carica della Batteria 2.' },
+          sensor_bat2_discharge_power: { label: 'Potenza scarica Batteria 2', helper: 'Sensore per la potenza in scarica della Batteria 2.' },
+          sensor_bat3_soc: { label: 'SOC Batteria 3', helper: 'Sensore Stato di Carica per la Batteria 3 (percentuale).' },
+          sensor_bat3_power: { label: 'Potenza Batteria 3', helper: 'Fornire questo sensore di potenza combinato o i sensori di carica/scarica affinché la Batteria 3 diventi attiva.' },
+          sensor_bat3_charge_power: { label: 'Potenza carica Batteria 3', helper: 'Sensore per la potenza in carica della Batteria 3.' },
+          sensor_bat3_discharge_power: { label: 'Potenza scarica Batteria 3', helper: '' },
+          sensor_bat4_soc: { label: 'SOC Batteria 4', helper: 'Sensore Stato di Carica per la Batteria 4 (percentuale).' },
+          sensor_bat4_power: { label: 'Potenza Batteria 4', helper: 'Fornire questo sensore di potenza combinato o i sensori di carica/scarica affinché la Batteria 4 diventi attiva.' },
+          sensor_bat4_charge_power: { label: 'Potenza carica Batteria 4', helper: 'Sensore per la potenza in carica della Batteria 4.' },
+          sensor_bat4_discharge_power: { label: 'Potenza scarica Batteria 4', helper: 'Sensore per la potenza in scarica della Batteria 4.' },
+          sensor_home_load: { label: 'Consumo domestico (obbligatorio)', helper: 'Sensore del consumo totale della casa.' },
+          sensor_home_load_secondary: { label: 'Consumo domestico (Inverter 2)', helper: 'Sensore carico casa opzionale per il secondo inverter.' },
           sensor_heat_pump_consumption: { label: 'Consumo pompa di calore', helper: 'Sensore per il consumo energetico della pompa di calore.' },
-          sensor_pool_consumption: { label: 'Piscina', helper: 'Sensore per potenza/consumo piscina.' },
-          sensor_washing_machine_consumption: { label: 'Lavatrice', helper: 'Sensore per potenza/consumo lavatrice.' },
-          sensor_dryer_consumption: { label: 'Asciugatrice', helper: 'Sensore per potenza/consumo asciugatrice.' },
-          sensor_refrigerator_consumption: { label: 'Frigorifero', helper: 'Sensore per potenza/consumo frigorifero.' },
-          sensor_grid_power: { label: 'Potenza rete Inverter 1', helper: 'Sensore flusso rete positivo/negativo per Inverter 1. Specificare o questo sensore o entrambi il Sensore import rete Inverter 1 e il Sensore export rete Inverter 1.' },
-          sensor_grid_import: { label: 'Sensore import rete Inverter 1', helper: 'Entita opzionale che riporta la potenza di import (valori positivi) per Inverter 1.' },
-          sensor_grid_export: { label: 'Sensore export rete Inverter 1', helper: 'Entita opzionale che riporta la potenza di export (valori positivi) per Inverter 1.' },
-          sensor_grid_import_daily: { label: 'Sensore import rete giornaliero Inverter 1', helper: 'Entita opzionale che riporta l import cumulativo della rete per il giorno corrente (Inverter 1).' },
-          sensor_grid_export_daily: { label: 'Sensore export rete giornaliero Inverter 1', helper: 'Entita opzionale che riporta l export cumulativo della rete per il giorno corrente (Inverter 1).' },
-          sensor_grid2_power: { label: 'Potenza rete Inverter 2', helper: 'Sensore flusso rete positivo/negativo per Inverter 2. Specificare o questo sensore o entrambi il Sensore import rete Inverter 2 e il Sensore export rete Inverter 2.' },
-          sensor_grid2_import: { label: 'Sensore import rete Inverter 2', helper: 'Entita opzionale che riporta la potenza di import (valori positivi) per Inverter 2.' },
-          sensor_grid2_export: { label: 'Sensore export rete Inverter 2', helper: 'Entita opzionale che riporta la potenza di export (valori positivi) per Inverter 2.' },
-          sensor_grid2_import_daily: { label: 'Sensore import rete giornaliero Inverter 2', helper: 'Entita opzionale che riporta l import cumulativo della rete per il giorno corrente (Inverter 2).' },
-          sensor_grid2_export_daily: { label: 'Sensore export rete giornaliero Inverter 2', helper: 'Entita opzionale che riporta l export cumulativo della rete per il giorno corrente (Inverter 2).' },
-          show_daily_grid: { label: 'Mostra valori rete giornalieri', helper: 'Mostra i totali import/export giornalieri sotto il flusso rete corrente quando abilitato.' },
-          grid_daily_font_size: { label: 'Dimensione testo rete giornaliero (px)', helper: 'Opzionale: sovrascrive la dimensione del testo import/export giornaliero. Predefinita: Dimensione rete.' },
-          grid_current_odometer: { label: 'Contatore: Rete attuale', helper: 'Anima il valore rete attuale con un effetto a cifre scorrevoli.' },
-          grid_current_odometer_duration: { label: 'Durata contatore (ms)', helper: 'Durata animazione in millisecondi. Predefinita 350.' },
-          show_grid_flow_label: { label: 'Mostra etichetta import/export rete', helper: 'Aggiunge "Importazione"/"Esportazione" prima del valore rete quando attivato.' },
-          enable_echo_alive: { label: 'Enable Echo Alive', helper: 'Enables an invisible iframe to keep the Silk browser open on Echo Show. The button will be positioned in a corner of the card.' },
-          pv_primary_color: { label: 'Colore flusso FV 1', helper: 'Colore utilizzato per l animazione FV principale.' },
-          pv_tot_color: { label: 'Colore PV TOTALE', helper: 'Colore applicato alla riga PV TOTALE.' },
-          pv_secondary_color: { label: 'Colore flusso FV 2', helper: 'Colore utilizzato per la seconda linea FV quando presente.' },
-          load_flow_color: { label: 'Colore flusso carico', helper: 'Colore applicato all animazione del carico della casa.' },
-          load_text_color: { label: 'Colore testo carico', helper: 'Colore applicato al testo del carico di casa quando le soglie non sono attive.' },
-          house_total_color: { label: 'Colore HOUSE TOT', helper: 'Colore applicato al testo/flusso HOUSE TOT.' },
-          inv1_color: { label: 'Colore da Inverter 1 a Casa', helper: 'Colore applicato al flusso da Inverter 1 verso la casa.' },
-          inv2_color: { label: 'Colore da Inverter 2 a Casa', helper: 'Colore applicato al flusso da Inverter 2 verso la casa.' },
-          load_threshold_warning: { label: 'Soglia avviso carico', helper: 'Cambia colore quando il carico raggiunge questa soglia. Usa l unita di visualizzazione selezionata.' },
-          load_warning_color: { label: 'Colore avviso carico', helper: 'Colore applicato alla soglia di avviso del carico.' },
-          load_threshold_critical: { label: 'Soglia critica carico', helper: 'Cambia colore quando il carico raggiunge questa soglia critica. Usa l unita di visualizzazione selezionata.' },
-          load_critical_color: { label: 'Colore critico carico', helper: 'Colore applicato alla soglia critica del carico.' },
-          battery_soc_color: { label: 'Colore SOC batteria', helper: 'Colore applicato al testo percentuale SOC della batteria.' },
-          battery_charge_color: { label: 'Colore flusso carica batteria', helper: 'Colore quando l energia entra nella batteria.' },
-          battery_discharge_color: { label: 'Colore flusso scarica batteria', helper: 'Colore quando l energia esce dalla batteria.' },
-          grid_import_color: { label: 'Colore import da rete (Inverter 1)', helper: 'Colore base (prima delle soglie) quando Inverter 1 importa dalla rete.' },
-          grid_export_color: { label: 'Colore export verso rete (Inverter 1)', helper: 'Colore base (prima delle soglie) quando Inverter 1 esporta verso la rete.' },
-          grid2_import_color: { label: 'Colore import da rete (Inverter 2)', helper: 'Colore base (prima delle soglie) quando Inverter 2 importa dalla rete.' },
-          grid2_export_color: { label: 'Colore export verso rete (Inverter 2)', helper: 'Colore base (prima delle soglie) quando Inverter 2 esporta verso la rete.' },
-          car_flow_color: { label: 'Colore flusso EV', helper: 'Colore applicato all animazione del veicolo elettrico.' },
-          battery_fill_high_color: { label: 'Colore riempimento batteria (normale)', helper: 'Colore del liquido batteria quando la SOC supera la soglia bassa.' },
-          battery_fill_low_color: { label: 'Colore riempimento batteria (basso)', helper: 'Colore del liquido batteria quando la SOC Ã¨ uguale o inferiore alla soglia bassa.' },
-          battery_fill_low_threshold: { label: 'Soglia SOC bassa batteria (%)', helper: 'Usa il colore di riempimento basso quando la SOC Ã¨ uguale o inferiore a questa percentuale.' },
-          battery_fill_opacity: { label: 'OpacitÃ  riempimento batteria', helper: 'OpacitÃ  del livello di riempimento batteria (0-1).' },
-          grid_activity_threshold: { label: 'Soglia animazione rete (W)', helper: 'Ignora i flussi rete con magnitudine inferiore a questo valore prima di animarli.' },
-          grid_power_only: { label: 'Solo potenza rete', helper: 'Nasconde i flussi di inverter/batterie e mostra un flusso diretto rete-casa.' },
-          grid_threshold_warning: { label: 'Soglia avviso rete (Inverter 1)', helper: 'Cambia colore quando la magnitudine di Inverter 1 raggiunge questa soglia. Usa l unita di visualizzazione selezionata.' },
-          grid_warning_color: { label: 'Colore avviso rete (Inverter 1)', helper: 'Colore applicato alla soglia di avviso per Inverter 1.' },
-          grid_threshold_critical: { label: 'Soglia critica rete (Inverter 1)', helper: 'Cambia colore quando la magnitudine di Inverter 1 raggiunge questa soglia. Usa l unita di visualizzazione selezionata.' },
-          grid_critical_color: { label: 'Colore critico rete (Inverter 1)', helper: 'Colore applicato alla soglia critica per Inverter 1.' },
-          grid2_threshold_warning: { label: 'Soglia avviso rete (Inverter 2)', helper: 'Cambia colore quando la magnitudine di Inverter 2 raggiunge questa soglia. Usa l unita di visualizzazione selezionata.' },
-          grid2_warning_color: { label: 'Colore avviso rete (Inverter 2)', helper: 'Colore applicato alla soglia di avviso per Inverter 2.' },
-          grid2_threshold_critical: { label: 'Soglia critica rete (Inverter 2)', helper: 'Cambia colore quando la magnitudine di Inverter 2 raggiunge questa soglia. Usa l unita di visualizzazione selezionata.' },
-          grid2_critical_color: { label: 'Colore critico rete (Inverter 2)', helper: 'Colore applicato alla soglia critica per Inverter 2.' },
-            invert_grid: { label: 'Inverti valori rete', helper: 'Attiva se l import/export ha polarita invertita.' },
-            invert_battery: { label: 'Inverti valori batteria', helper: 'Abilita se la polarita carica/scarica e invertita.' },
-            invert_bat1: { label: 'Inverti Batteria 1', helper: 'Abilita se la polarita carica/scarica della Batteria 1 e invertita.' },
-            invert_bat2: { label: 'Inverti Batteria 2', helper: 'Abilita se la polarita carica/scarica della Batteria 2 e invertita.' },
-            invert_bat3: { label: 'Inverti Batteria 3', helper: 'Abilita se la polarita carica/scarica della Batteria 3 e invertita.' },
-          sensor_car_power: { label: 'Sensore potenza auto 1' },
-          sensor_car_soc: { label: 'Sensore SOC auto 1' },
-          car_soc: { label: 'SOC Auto', helper: 'Sensore per SOC batteria EV.' },
-          car_range: { label: 'Autonomia Auto', helper: 'Sensore per autonomia EV.' },
-          car_efficiency: { label: 'Efficienza Auto', helper: 'Sensore per efficienza EV.' },
-          car_charger_power: { label: 'Potenza Caricabatterie Auto', helper: 'Sensore per potenza caricabatterie EV.' },
-          car1_label: { label: 'Etichetta Auto 1', helper: 'Testo mostrato vicino ai valori della prima EV.' },
-          sensor_car2_power: { label: 'Sensore potenza auto 2' },
-          car2_power: { label: 'Potenza Auto 2', helper: 'Sensore per potenza carica/scarica EV 2.' },
-          sensor_car2_soc: { label: 'Sensore SOC auto 2' },
-          car2_soc: { label: 'SOC Auto 2', helper: 'Sensore per SOC batteria EV 2.' },
-          car2_range: { label: 'Autonomia Auto 2', helper: 'Sensore per autonomia EV 2.' },
-          car2_efficiency: { label: 'Efficienza Auto 2', helper: 'Sensore per efficienza EV 2.' },
-          car2_charger_power: { label: 'Potenza Caricabatterie Auto 2', helper: 'Sensore per potenza caricabatterie EV 2.' },
-          car2_label: { label: 'Etichetta Auto 2', helper: 'Testo mostrato vicino ai valori della seconda EV.' },
-          car_headlight_flash: { label: 'Lampeggio fari durante la ricarica', helper: 'Attiva per far lampeggiare i fari del veicolo mentre e in carica.' },
-          car1_glow_brightness: { label: 'Effetto bagliore auto', helper: 'Percentuale di effetto del flusso auto visibile quando non in carica.' },
-          car2_glow_brightness: { label: 'Effetto bagliore auto', helper: 'Percentuale di effetto del flusso auto visibile quando non in carica.' },
-          car_pct_color: { label: 'Colore SOC auto', helper: 'Colore esadecimale per il testo SOC EV (es. #00FFFF).' },
-          car2_pct_color: { label: 'Colore SOC Auto 2', helper: 'Colore esadecimale per il testo SOC della seconda EV (usa Car SOC se vuoto).' },
-          car1_name_color: { label: 'Colore nome Auto 1', helper: 'Colore applicato all etichetta del nome Auto 1.' },
-          car2_name_color: { label: 'Colore nome Auto 2', helper: 'Colore applicato all etichetta del nome Auto 2.' },
-          car1_color: { label: 'Colore Auto 1', helper: 'Colore applicato al valore potenza Auto 1.' },
-          car2_color: { label: 'Colore Auto 2', helper: 'Colore applicato al valore potenza Auto 2.' },
-          heat_pump_flow_color: { label: 'Colore flusso pompa di calore', helper: 'Colore applicato all animazione del flusso della pompa di calore.' },
+          sensor_hot_water_consumption: { label: 'Riscaldamento acqua', helper: 'Sensore per il carico di riscaldamento dell\'acqua calda.' },
+          sensor_pool_consumption: { label: 'Piscina', helper: 'Sensore per il consumo/energia della piscina.' },
+          sensor_washing_machine_consumption: { label: 'Lavatrice', helper: 'Sensore per il consumo energetico della lavatrice.' },
+          sensor_dishwasher_consumption: { label: 'Lavastoviglie', helper: 'Sensore per il consumo della lavastoviglie.' },
+          sensor_dryer_consumption: { label: 'Asciugatrice', helper: 'Sensore per il consumo dell\'asciugatrice.' },
+          sensor_refrigerator_consumption: { label: 'Frigorifero', helper: 'Sensore per il consumo del frigorifero.' },
+          hot_water_text_color: { label: 'Colore testo riscaldamento acqua', helper: 'Colore applicato al testo della potenza dell\'acqua calda.' },
+          dishwasher_text_color: { label: 'Colore testo lavastoviglie', helper: 'Colore applicato al testo della potenza della lavastoviglie.' },
+          hot_water_font_size: { label: 'Dimensione font riscaldamento acqua (px)', helper: 'Default 8' },
+          dishwasher_font_size: { label: 'Dimensione font lavastoviglie (px)', helper: 'Default 8' },
+          sensor_grid_power: { label: 'Potenza rete Inverter 1', helper: 'Sensore di flusso rete positivo/negativo per inverter 1. Specifica questo sensore o entrambi Import ed Export.' },
+          sensor_grid_import: { label: 'Sensore import rete Inverter 1', helper: 'Entità opzionale che riporta l\'import (positivo) dell\'inverter 1.' },
+          sensor_grid_export: { label: 'Sensore export rete Inverter 1', helper: 'Entità opzionale che riporta l\'export (positivo) dell\'inverter 1.' },
+          sensor_grid_import_daily: { label: 'Sensore import giornaliero Inverter 1', helper: 'Entità opzionale che riporta l\'import cumulativo dell\'inverter 1 per il giorno corrente.' },
+          sensor_grid_export_daily: { label: 'Sensore export giornaliero Inverter 1', helper: 'Entità opzionale che riporta l\'export cumulativo dell\'inverter 1 per il giorno corrente.' },
+          sensor_grid2_power: { label: 'Potenza rete Inverter 2', helper: 'Sensore di flusso rete positivo/negativo per inverter 2. Specifica questo sensore o entrambi Import ed Export.' },
+          sensor_grid2_import: { label: 'Sensore import rete Inverter 2', helper: 'Entità opzionale che riporta l\'import (positivo) dell\'inverter 2.' },
+          sensor_grid2_export: { label: 'Sensore export rete Inverter 2', helper: 'Entità opzionale che riporta l\'export (positivo) dell\'inverter 2.' },
+          sensor_grid2_import_daily: { label: 'Sensore import giornaliero Inverter 2', helper: 'Entità opzionale che riporta l\'import cumulativo dell\'inverter 2 per il giorno corrente.' },
+          sensor_grid2_export_daily: { label: 'Sensore export giornaliero Inverter 2', helper: 'Entità opzionale che riporta l\'export cumulativo dell\'inverter 2 per il giorno corrente.' },
+          show_daily_grid: { label: 'Mostra valori grid giornalieri', helper: 'Mostra i totali giornalieri di import/export sotto il flusso di rete corrente quando abilitato.' },
+          grid_daily_font_size: { label: 'Dimensione font Grid Giornaliero (px)', helper: 'Sovrascrittura opzionale per il testo import/export giornaliero. Default: Grid Font Size.' },
+          grid_current_odometer: { label: 'Odometer: Corrente rete', helper: 'Anima la corrente di rete con un effetto di rotazione per cifra.' },
+          grid_current_odometer_duration: { label: 'Durata odometro (ms)', helper: 'Durata dell\'animazione in millisecondi. Default 350.' },
+          show_grid_flow_label: { label: 'Mostra nome Import/Export rete', helper: 'Prependi la label importing/exporting prima del valore di rete quando abilitato.' },
+          enable_echo_alive: { label: 'Abilita Echo Alive', helper: 'Abilita un iframe invisibile per mantenere il browser Silk aperto su Echo Show. Il pulsante sarà posizionato in un angolo della scheda.' },
+          pv_tot_color: { label: 'Colore PV Totale', helper: 'Colore applicato alla linea di testo PV TOTAL.' },
+          pv_primary_color: { label: 'Colore flusso PV 1', helper: 'Colore usato per la linea di animazione primaria del PV.' },
+          pv_secondary_color: { label: 'Colore flusso PV 2', helper: 'Colore usato per la linea di animazione secondaria del PV quando disponibile.' },
+          load_flow_color: { label: 'Colore flusso carico', helper: 'Colore applicato alla linea di animazione del carico domestico.' },
+          load_text_color: { label: 'Colore testo carico', helper: 'Colore applicato al testo del carico quando le soglie sono inattive.' },
+          house_total_color: { label: 'Colore totale casa', helper: 'Colore applicato al testo/flow HOUSE TOT.' },
+          inv1_color: { label: 'Colore Inverter 1 → Casa', helper: 'Colore applicato al flusso dall\'Inverter 1 verso la casa.' },
+          inv2_color: { label: 'Colore Inverter 2 → Casa', helper: 'Colore applicato al flusso dall\'Inverter 2 verso la casa.' },
+          load_threshold_warning: { label: 'Soglia avviso carico', helper: 'Cambia il colore del carico quando la magnitudine è uguale o superiore a questo valore. Usa l\'unità di visualizzazione selezionata.' },
+          load_warning_color: { label: 'Colore avviso carico', helper: 'Colore hex o CSS applicato alla soglia di avviso del carico.' },
+          load_threshold_critical: { label: 'Soglia critica carico', helper: 'Cambia il colore del carico quando la magnitudine è uguale o superiore a questo valore. Usa l\'unità di visualizzazione selezionata.' },
+          load_critical_color: { label: 'Colore critico carico', helper: 'Colore hex o CSS applicato alla soglia critica del carico.' },
+          battery_soc_color: { label: 'Colore SOC batteria', helper: 'Colore hex applicato al testo percentuale SOC batteria.' },
+          battery_charge_color: { label: 'Colore flusso carica batteria', helper: 'Colore usato quando l\'energia fluisce nella batteria.' },
+          battery_discharge_color: { label: 'Colore flusso scarica batteria', helper: 'Colore usato quando l\'energia fluisce dalla batteria.' },
+          grid_import_color: { label: 'Colore import rete Inverter 1', helper: 'Colore base prima delle soglie quando l\'inverter 1 importa dalla rete.' },
+          grid_export_color: { label: 'Colore export rete Inverter 1', helper: 'Colore base prima delle soglie quando l\'inverter 1 esporta in rete.' },
+          grid2_import_color: { label: 'Colore import rete Inverter 2', helper: 'Colore base prima delle soglie quando l\'inverter 2 importa dalla rete.' },
+          grid2_export_color: { label: 'Colore export rete Inverter 2', helper: 'Colore base prima delle soglie quando l\'inverter 2 esporta in rete.' },
+          car_flow_color: { label: 'Colore flusso EV', helper: 'Colore applicato alla linea di animazione del veicolo elettrico.' },
+          battery_fill_high_color: { label: 'Colore riempimento batteria (Normale)', helper: 'Colore di riempimento liquido quando il SOC è sopra la soglia bassa.' },
+          battery_fill_low_color: { label: 'Colore riempimento batteria (Basso)', helper: 'Colore di riempimento liquido quando il SOC è al di sotto o uguale alla soglia bassa.' },
+          battery_fill_low_threshold: { label: 'Soglia riempimento batteria bassa (%)', helper: 'Usa il colore basso di riempimento quando il SOC è a o sotto questa percentuale.' },
+          battery_fill_opacity: { label: 'Opacità riempimento batteria', helper: 'Opacità per il livello di riempimento della batteria (0-1).' },
+          grid_activity_threshold: { label: 'Soglia animazione rete (W)', helper: 'Ignora i flussi di rete il cui valore assoluto è inferiore a questa potenza prima di animare.' },
+          grid_power_only: { label: 'Solo potenza rete', helper: 'Nascondi i flussi inverter/batteria e mostra un flusso diretto rete→casa.' },
+          grid_threshold_warning: { label: 'Soglia avviso rete Inverter 1', helper: 'Cambia il colore della rete inverter 1 quando la magnitudine è uguale o superiore a questo valore. Usa l\'unità di visualizzazione selezionata.' },
+          grid_warning_color: { label: 'Colore avviso rete Inverter 1', helper: 'Colore hex o CSS applicato alla soglia di avviso dell\'inverter 1.' },
+          grid_threshold_critical: { label: 'Soglia critica rete Inverter 1', helper: 'Cambia il colore della rete inverter 1 quando la magnitudine è uguale o superiore a questo valore. Usa l\'unità di visualizzazione selezionata.' },
+          grid_critical_color: { label: 'Colore critico rete Inverter 1', helper: 'Colore hex o CSS applicato alla soglia critica dell\'inverter 1.' },
+          grid2_threshold_warning: { label: 'Soglia avviso rete Inverter 2', helper: 'Cambia il colore della rete inverter 2 quando la magnitudine è uguale o superiore a questo valore. Usa l\'unità di visualizzazione selezionata.' },
+          grid2_warning_color: { label: 'Colore avviso rete Inverter 2', helper: 'Colore hex o CSS applicato alla soglia di avviso dell\'inverter 2.' },
+          grid2_threshold_critical: { label: 'Soglia critica rete Inverter 2', helper: 'Cambia il colore della rete inverter 2 quando la magnitudine è uguale o superiore a questo valore. Usa l\'unità di visualizzazione selezionata.' },
+          grid2_critical_color: { label: 'Colore critico rete Inverter 2', helper: 'Colore hex o CSS applicato alla soglia critica dell\'inverter 2.' },
+          invert_grid: { label: 'Inverti valori rete', helper: 'Abilita se la polarità import/export è invertita.' },
+          invert_battery: { label: 'Inverti valori batteria', helper: 'Abilita se la polarità carica/scarica è invertita.' },
+          invert_bat1: { label: 'Inverti valori Batteria 1', helper: 'Abilita se la polarità carica/scarica della Batteria 1 è invertita.' },
+          invert_bat2: { label: 'Inverti valori Batteria 2', helper: 'Abilita se la polarità carica/scarica della Batteria 2 è invertita.' },
+          invert_bat3: { label: 'Inverti valori Batteria 3', helper: 'Abilita se la polarità carica/scarica della Batteria 3 è invertita.' },
+          sensor_car_power: { label: 'Sensore potenza Auto 1', helper: 'Sensore per la potenza di carica/scarica del veicolo elettrico.' },
+          sensor_car_soc: { label: 'Sensore SOC Auto 1', helper: 'Sensore Stato di Carica per EV 1 (percentuale).' },
+          car_soc: { label: 'SOC Auto', helper: 'Sensore per il SOC della batteria dell\'EV (percentuale).' },
+          car_charger_power: { label: 'Potenza caricatore Auto', helper: 'Sensore per la potenza del caricatore EV.' },
+          car1_label: { label: 'Etichetta Auto 1', helper: 'Testo mostrato accanto ai valori del primo EV.' },
+          sensor_car2_power: { label: 'Sensore potenza Auto 2', helper: 'Sensore per la potenza di carica/scarica del secondo EV.' },
+          car2_power: { label: 'Potenza Auto 2', helper: 'Sensore per la potenza di carica/scarica del secondo EV.' },
+          sensor_car2_soc: { label: 'Sensore SOC Auto 2', helper: 'Sensore Stato di Carica per EV 2 (percentuale).' },
+          car2_soc: { label: 'SOC Auto 2', helper: 'Sensore per il SOC dell\'EV 2 (percentuale).' },
+          car2_charger_power: { label: 'Potenza caricatore Auto 2', helper: 'Sensore per la potenza del caricatore EV 2.' },
+          car2_label: { label: 'Etichetta Auto 2', helper: 'Testo mostrato accanto ai valori del secondo EV.' },
+          car_headlight_flash: { label: 'Flash fari durante la ricarica', helper: 'Abilita per far lampeggiare i fari dell\'EV quando la ricarica è rilevata.' },
+          car1_glow_brightness: { label: 'Effetto glow Auto 1', helper: 'Percentuale dell\'effetto glow quando non si sta caricando.' },
+          car2_glow_brightness: { label: 'Effetto glow Auto 2', helper: 'Percentuale dell\'effetto glow quando non si sta caricando.' },
+          car_pct_color: { label: 'Colore SOC Auto', helper: 'Colore hex per il testo SOC EV (es. #00FFFF).' },
+          car2_pct_color: { label: 'Colore SOC Auto 2', helper: 'Colore hex per il testo SOC del secondo EV (usa fallback se vuoto).' },
+          car1_name_color: { label: 'Colore nome Auto 1', helper: 'Colore applicato all\'etichetta del nome Auto 1.' },
+          car2_name_color: { label: 'Colore nome Auto 2', helper: 'Colore applicato all\'etichetta del nome Auto 2.' },
+          car1_color: { label: 'Colore Auto 1', helper: 'Colore applicato al valore di potenza Auto 1.' },
+          car2_color: { label: 'Colore Auto 2', helper: 'Colore applicato al valore di potenza Auto 2.' },
+          heat_pump_label: { label: 'Etichetta pompa di calore', helper: 'Etichetta personalizzata per la linea pompa di calore/AC (default "Heat Pump/AC").' },
+          heat_pump_flow_color: { label: 'Colore flusso pompa di calore', helper: 'Colore applicato all\'animazione del flusso della pompa di calore.' },
           heat_pump_text_color: { label: 'Colore testo pompa di calore', helper: 'Colore applicato al testo della potenza della pompa di calore.' },
-          pool_flow_color: { label: 'Colore flusso piscina', helper: 'Colore applicato all animazione del flusso della piscina.' },
+          pool_flow_color: { label: 'Colore flusso piscina', helper: 'Colore applicato all\'animazione del flusso della piscina.' },
           pool_text_color: { label: 'Colore testo piscina', helper: 'Colore applicato al testo della potenza della piscina.' },
-          washing_machine_text_color: { label: 'Colore testo lavatrice', helper: 'Colore applicato al testo potenza della lavatrice.' },
-          dryer_text_color: { label: 'Colore testo asciugatrice', helper: 'Colore applicato al testo potenza dell asciugatrice.' },
-          refrigerator_text_color: { label: 'Colore testo frigorifero', helper: 'Colore applicato al testo potenza del frigorifero.' },
-          windmill_flow_color: { label: 'Windmill Flow Color', helper: 'Colore applicato al flusso del windmill (data-flow-key="windmill-inverter1" / "windmill-inverter2").' },
-          windmill_text_color: { label: 'Windmill Text Color', helper: 'Colore applicato al testo potenza del windmill (data-role="windmill-power").' },
-          header_font_size: { label: 'Dimensione titolo (px)', helper: 'Predefinita 16' },
-          daily_label_font_size: { label: 'Dimensione etichetta giornaliera (px)', helper: 'Predefinita 12' },
-          daily_value_font_size: { label: 'Dimensione valore giornaliero (px)', helper: 'Predefinita 20' },
-          pv_font_size: { label: 'Dimensione testo PV (px)', helper: 'Predefinita 16' },
-          windmill_power_font_size: { label: 'Windmill Power Font Size (px)', helper: 'Predefinita 16' },
-          battery_soc_font_size: { label: 'Dimensione SOC batteria (px)', helper: 'Predefinita 20' },
-          battery_power_font_size: { label: 'Dimensione potenza batteria (px)', helper: 'Predefinita 16' },
-          load_font_size: { label: 'Dimensione carico (px)', helper: 'Predefinita 15' },
-          inv1_power_font_size: { label: 'Dimensione potenza INV 1 (px)', helper: 'Dimensione carattere per la riga potenza INV 1. Predefinita come Dimensione carico.' },
-          inv2_power_font_size: { label: 'Dimensione potenza INV 2 (px)', helper: 'Dimensione carattere per la riga potenza INV 2. Predefinita come Dimensione carico.' },
-          heat_pump_font_size: { label: 'Dimensione pompa di calore (px)', helper: 'Predefinita 16' },
-          pool_font_size: { label: 'Dimensione piscina (px)', helper: 'Predefinita 16' },
-          washing_machine_font_size: { label: 'Dimensione lavatrice (px)', helper: 'Predefinita 16' },
-          dryer_font_size: { label: 'Dimensione asciugatrice (px)', helper: 'Predefinita 16' },
-          refrigerator_font_size: { label: 'Dimensione frigorifero (px)', helper: 'Predefinita 16' },
-          grid_font_size: { label: 'Dimensione rete (px)', helper: 'Predefinita 15' },
-          car_power_font_size: { label: 'Dimensione potenza auto (px)', helper: 'Predefinita 15' },
-          car2_power_font_size: { label: 'Dimensione potenza Auto 2 (px)', helper: 'Predefinita 15' },
-          car_name_font_size: { label: 'Dimensione nome auto (px)', helper: 'Predefinita come la dimensione potenza auto' },
-          car2_name_font_size: { label: 'Dimensione nome Auto 2 (px)', helper: 'Predefinita come la dimensione potenza Auto 2' },
-          car_soc_font_size: { label: 'Dimensione SOC auto (px)', helper: 'Predefinita 12' },
-          car2_soc_font_size: { label: 'Dimensione SOC Auto 2 (px)', helper: 'Predefinita 12' },
-          sensor_popup_pv_1: { label: 'PV Popup 1', helper: 'Entita per la riga 1 del popup PV.' },
-          sensor_popup_pv_2: { label: 'PV Popup 2', helper: 'Entita per la riga 2 del popup PV.' },
-          sensor_popup_pv_3: { label: 'PV Popup 3', helper: 'Entita per la riga 3 del popup PV.' },
-          sensor_popup_pv_4: { label: 'PV Popup 4', helper: 'Entita per la riga 4 del popup PV.' },
-          sensor_popup_pv_5: { label: 'PV Popup 5', helper: 'Entita per la riga 5 del popup PV.' },
-          sensor_popup_pv_6: { label: 'PV Popup 6', helper: 'Entita per la riga 6 del popup PV.' },
-          sensor_popup_pv_1_name: { label: 'Nome PV Popup 1', helper: 'Nome personalizzato opzionale per la riga 1 del popup PV. Lasciare vuoto per usare il nome entitÃ .' },
-          sensor_popup_pv_2_name: { label: 'Nome PV Popup 2', helper: 'Nome personalizzato opzionale per la riga 2 del popup PV. Lasciare vuoto per usare il nome entitÃ .' },
-          sensor_popup_pv_3_name: { label: 'Nome PV Popup 3', helper: 'Nome personalizzato opzionale per la riga 3 del popup PV. Lasciare vuoto per usare il nome entitÃ .' },
-          sensor_popup_pv_4_name: { label: 'Nome PV Popup 4', helper: 'Nome personalizzato opzionale per la riga 4 del popup PV. Lasciare vuoto per usare il nome entitÃ .' },
-          sensor_popup_pv_5_name: { label: 'Nome PV Popup 5', helper: 'Nome personalizzato opzionale per la riga 5 del popup PV. Lasciare vuoto per usare il nome entitÃ .' },
-          sensor_popup_pv_6_name: { label: 'Nome PV Popup 6', helper: 'Nome personalizzato opzionale per la riga 6 del popup PV. Lasciare vuoto per usare il nome entitÃ .' },
-          sensor_popup_pv_1_color: { label: 'Colore PV Popup 1', helper: 'Colore per il testo della riga 1 del popup PV.' },
-          sensor_popup_pv_2_color: { label: 'Colore PV Popup 2', helper: 'Colore per il testo della riga 2 del popup PV.' },
-          sensor_popup_pv_3_color: { label: 'Colore PV Popup 3', helper: 'Colore per il testo della riga 3 del popup PV.' },
-          sensor_popup_pv_4_color: { label: 'Colore PV Popup 4', helper: 'Colore per il testo della riga 4 del popup PV.' },
-          sensor_popup_pv_5_color: { label: 'Colore PV Popup 5', helper: 'Colore per il testo della riga 5 del popup PV.' },
-          sensor_popup_pv_6_color: { label: 'Colore PV Popup 6', helper: 'Colore per il testo della riga 6 del popup PV.' },
-          sensor_popup_pv_1_font_size: { label: 'Dimensione carattere PV Popup 1 (px)', helper: 'Dimensione carattere per la riga 1 del popup PV. Predefinita 16' },
-          sensor_popup_pv_2_font_size: { label: 'Dimensione carattere PV Popup 2 (px)', helper: 'Dimensione carattere per la riga 2 del popup PV. Predefinita 16' },
-          sensor_popup_pv_3_font_size: { label: 'Dimensione carattere PV Popup 3 (px)', helper: 'Dimensione carattere per la riga 3 del popup PV. Predefinita 16' },
-          sensor_popup_pv_4_font_size: { label: 'Dimensione carattere PV Popup 4 (px)', helper: 'Dimensione carattere per la riga 4 del popup PV. Predefinita 16' },
-          sensor_popup_pv_5_font_size: { label: 'Dimensione carattere PV Popup 5 (px)', helper: 'Dimensione carattere per la riga 5 del popup PV. Predefinita 16' },
-          sensor_popup_pv_6_font_size: { label: 'Dimensione carattere PV Popup 6 (px)', helper: 'Dimensione carattere per la riga 6 del popup PV. Predefinita 16' },
-          sensor_popup_house_1: { label: 'House Popup 1', helper: 'Entita per la riga 1 del popup casa.' },
-          sensor_popup_house_1_name: { label: 'Nome House Popup 1', helper: 'Nome personalizzato opzionale per la riga 1 del popup casa. Lasciare vuoto per usare il nome entitÃ .' },
-          sensor_popup_house_1_color: { label: 'Colore House Popup 1', helper: 'Colore per il testo della riga 1 del popup casa.' },
-          sensor_popup_house_1_font_size: { label: 'Dimensione carattere House Popup 1 (px)', helper: 'Dimensione carattere per la riga 1 del popup casa. Predefinita 16' },
-          sensor_popup_house_2: { label: 'House Popup 2', helper: 'Entita per la riga 2 del popup casa.' },
-          sensor_popup_house_2_name: { label: 'Nome House Popup 2', helper: 'Nome personalizzato opzionale per la riga 2 del popup casa. Lasciare vuoto per usare il nome entitÃ .' },
-          sensor_popup_house_2_color: { label: 'Colore House Popup 2', helper: 'Colore per il testo della riga 2 del popup casa.' },
-          sensor_popup_house_2_font_size: { label: 'Dimensione carattere House Popup 2 (px)', helper: 'Dimensione carattere per la riga 2 del popup casa. Predefinita 16' },
-          sensor_popup_house_3: { label: 'House Popup 3', helper: 'Entita per la riga 3 del popup casa.' },
-          sensor_popup_house_3_name: { label: 'Nome House Popup 3', helper: 'Nome personalizzato opzionale per la riga 3 del popup casa. Lasciare vuoto per usare il nome entitÃ .' },
-          sensor_popup_house_3_color: { label: 'Colore House Popup 3', helper: 'Colore per il testo della riga 3 del popup casa.' },
-          sensor_popup_house_3_font_size: { label: 'Dimensione carattere House Popup 3 (px)', helper: 'Dimensione carattere per la riga 3 del popup casa. Predefinita 16' },
-          sensor_popup_house_4: { label: 'House Popup 4', helper: 'Entita per la riga 4 del popup casa.' },
-          sensor_popup_house_4_name: { label: 'Nome House Popup 4', helper: 'Nome personalizzato opzionale per la riga 4 del popup casa. Lasciare vuoto per usare il nome entitÃ .' },
-          sensor_popup_house_4_color: { label: 'Colore House Popup 4', helper: 'Colore per il testo della riga 4 del popup casa.' },
-          sensor_popup_house_4_font_size: { label: 'Dimensione carattere House Popup 4 (px)', helper: 'Dimensione carattere per la riga 4 del popup casa. Predefinita 16' },
-          sensor_popup_house_5: { label: 'House Popup 5', helper: 'Entita per la riga 5 del popup casa.' },
-          sensor_popup_house_5_name: { label: 'Nome House Popup 5', helper: 'Nome personalizzato opzionale per la riga 5 del popup casa. Lasciare vuoto per usare il nome entitÃ .' },
-          sensor_popup_house_5_color: { label: 'Colore House Popup 5', helper: 'Colore per il testo della riga 5 del popup casa.' },
-          sensor_popup_house_5_font_size: { label: 'Dimensione carattere House Popup 5 (px)', helper: 'Dimensione carattere per la riga 5 del popup casa. Predefinita 16' },
-          sensor_popup_house_6: { label: 'House Popup 6', helper: 'Entita per la riga 6 del popup casa.' },
-          sensor_popup_house_6_name: { label: 'Nome House Popup 6', helper: 'Nome personalizzato opzionale per la riga 6 del popup casa. Lasciare vuoto per usare il nome entitÃ .' },
-          sensor_popup_house_6_color: { label: 'Colore House Popup 6', helper: 'Colore per il testo della riga 6 del popup casa.' },
-          sensor_popup_house_6_font_size: { label: 'Dimensione carattere House Popup 6 (px)', helper: 'Dimensione carattere per la riga 6 del popup casa. Predefinita 16' },
-          sensor_popup_bat_1: { label: 'Battery Popup 1', helper: 'EntitÃ  per la riga 1 del popup batteria.' },
-          sensor_popup_bat_1_name: { label: 'Nome Battery Popup 1', helper: 'Nome personalizzato opzionale per la riga 1 del popup batteria. Lasciare vuoto per usare il nome entitÃ .' },
-          sensor_popup_bat_1_color: { label: 'Colore Battery Popup 1', helper: 'Colore per il testo della riga 1 del popup batteria.' },
-          sensor_popup_bat_1_font_size: { label: 'Dimensione carattere Battery Popup 1 (px)', helper: 'Dimensione carattere per la riga 1 del popup batteria. Predefinita 16' },
-          sensor_popup_bat_2: { label: 'Battery Popup 2', helper: 'EntitÃ  per la riga 2 del popup batteria.' },
-          sensor_popup_bat_2_name: { label: 'Nome Battery Popup 2', helper: 'Nome personalizzato opzionale per la riga 2 del popup batteria. Lasciare vuoto per usare il nome entitÃ .' },
-          sensor_popup_bat_2_color: { label: 'Colore Battery Popup 2', helper: 'Colore per il testo della riga 2 del popup batteria.' },
-          sensor_popup_bat_2_font_size: { label: 'Dimensione carattere Battery Popup 2 (px)', helper: 'Dimensione carattere per la riga 2 del popup batteria. Predefinita 16' },
-          sensor_popup_bat_3: { label: 'Battery Popup 3', helper: 'EntitÃ  per la riga 3 del popup batteria.' },
-          sensor_popup_bat_3_name: { label: 'Nome Battery Popup 3', helper: 'Nome personalizzato opzionale per la riga 3 del popup batteria. Lasciare vuoto per usare il nome entitÃ .' },
-          sensor_popup_bat_3_color: { label: 'Colore Battery Popup 3', helper: 'Colore per il testo della riga 3 del popup batteria.' },
-          sensor_popup_bat_3_font_size: { label: 'Dimensione carattere Battery Popup 3 (px)', helper: 'Dimensione carattere per la riga 3 del popup batteria. Predefinita 16' },
-          sensor_popup_bat_4: { label: 'Battery Popup 4', helper: 'EntitÃ  per la riga 4 del popup batteria.' },
-          sensor_popup_bat_4_name: { label: 'Nome Battery Popup 4', helper: 'Nome personalizzato opzionale per la riga 4 del popup batteria. Lasciare vuoto per usare il nome entitÃ .' },
-          sensor_popup_bat_4_color: { label: 'Colore Battery Popup 4', helper: 'Colore per il testo della riga 4 del popup batteria.' },
-          sensor_popup_bat_4_font_size: { label: 'Dimensione carattere Battery Popup 4 (px)', helper: 'Dimensione carattere per la riga 4 del popup batteria. Predefinita 16' },
-          sensor_popup_bat_5: { label: 'Battery Popup 5', helper: 'EntitÃ  per la riga 5 del popup batteria.' },
-          sensor_popup_bat_5_name: { label: 'Nome Battery Popup 5', helper: 'Nome personalizzato opzionale per la riga 5 del popup batteria. Lasciare vuoto per usare il nome entitÃ .' },
-          sensor_popup_bat_5_color: { label: 'Colore Battery Popup 5', helper: 'Colore per il testo della riga 5 del popup batteria.' },
-          sensor_popup_bat_5_font_size: { label: 'Dimensione carattere Battery Popup 5 (px)', helper: 'Dimensione carattere per la riga 5 del popup batteria. Predefinita 16' },
-          sensor_popup_bat_6: { label: 'Battery Popup 6', helper: 'EntitÃ  per la riga 6 del popup batteria.' },
-          sensor_popup_bat_6_name: { label: 'Nome Battery Popup 6', helper: 'Nome personalizzato opzionale per la riga 6 del popup batteria. Lasciare vuoto per usare il nome entitÃ .' },
-          sensor_popup_bat_6_color: { label: 'Colore Battery Popup 6', helper: 'Colore per il testo della riga 6 del popup batteria.' },
-          sensor_popup_bat_6_font_size: { label: 'Dimensione carattere Battery Popup 6 (px)', helper: 'Dimensione carattere per la riga 6 del popup batteria. Predefinita 16' },
-          sensor_popup_grid_1: { label: 'Grid Popup 1', helper: 'EntitÃ  per la riga 1 del popup rete.' },
-          sensor_popup_grid_1_name: { label: 'Nome Grid Popup 1', helper: 'Nome personalizzato opzionale per la riga 1 del popup rete. Lasciare vuoto per usare il nome entitÃ .' },
-          sensor_popup_grid_1_color: { label: 'Colore Grid Popup 1', helper: 'Colore per il testo della riga 1 del popup rete.' },
-          sensor_popup_grid_1_font_size: { label: 'Dimensione carattere Grid Popup 1 (px)', helper: 'Dimensione carattere per la riga 1 del popup rete. Predefinita 16' },
-          sensor_popup_grid_2: { label: 'Grid Popup 2', helper: 'EntitÃ  per la riga 2 del popup rete.' },
-          sensor_popup_grid_2_name: { label: 'Nome Grid Popup 2', helper: 'Nome personalizzato opzionale per la riga 2 del popup rete. Lasciare vuoto per usare il nome entitÃ .' },
-          sensor_popup_grid_2_color: { label: 'Colore Grid Popup 2', helper: 'Colore per il testo della riga 2 del popup rete.' },
-          sensor_popup_grid_2_font_size: { label: 'Dimensione carattere Grid Popup 2 (px)', helper: 'Dimensione carattere per la riga 2 del popup rete. Predefinita 16' },
-          sensor_popup_grid_3: { label: 'Grid Popup 3', helper: 'EntitÃ  per la riga 3 del popup rete.' },
-          sensor_popup_grid_3_name: { label: 'Nome Grid Popup 3', helper: 'Nome personalizzato opzionale per la riga 3 del popup rete. Lasciare vuoto per usare il nome entitÃ .' },
-          sensor_popup_grid_3_color: { label: 'Colore Grid Popup 3', helper: 'Colore per il testo della riga 3 del popup rete.' },
-          sensor_popup_grid_3_font_size: { label: 'Dimensione carattere Grid Popup 3 (px)', helper: 'Dimensione carattere per la riga 3 del popup rete. Predefinita 16' },
-          sensor_popup_grid_4: { label: 'Grid Popup 4', helper: 'EntitÃ  per la riga 4 del popup rete.' },
-          sensor_popup_grid_4_name: { label: 'Nome Grid Popup 4', helper: 'Nome personalizzato opzionale per la riga 4 del popup rete. Lasciare vuoto per usare il nome entitÃ .' },
-          sensor_popup_grid_4_color: { label: 'Colore Grid Popup 4', helper: 'Colore per il testo della riga 4 del popup rete.' },
-          sensor_popup_grid_4_font_size: { label: 'Dimensione carattere Grid Popup 4 (px)', helper: 'Dimensione carattere per la riga 4 del popup rete. Predefinita 16' },
-          sensor_popup_grid_5: { label: 'Grid Popup 5', helper: 'EntitÃ  per la riga 5 del popup rete.' },
-          sensor_popup_grid_5_name: { label: 'Nome Grid Popup 5', helper: 'Nome personalizzato opzionale per la riga 5 del popup rete. Lasciare vuoto per usare il nome entitÃ .' },
-          sensor_popup_grid_5_color: { label: 'Colore Grid Popup 5', helper: 'Colore per il testo della riga 5 del popup rete.' },
-          sensor_popup_grid_5_font_size: { label: 'Dimensione carattere Grid Popup 5 (px)', helper: 'Dimensione carattere per la riga 5 del popup rete. Predefinita 16' },
-          sensor_popup_grid_6: { label: 'Grid Popup 6', helper: 'EntitÃ  per la riga 6 del popup rete.' },
-          sensor_popup_grid_6_name: { label: 'Nome Grid Popup 6', helper: 'Nome personalizzato opzionale per la riga 6 del popup rete. Lasciare vuoto per usare il nome entitÃ .' },
-          sensor_popup_grid_6_color: { label: 'Colore Grid Popup 6', helper: 'Colore per il testo della riga 6 del popup rete.' },
-          sensor_popup_grid_6_font_size: { label: 'Dimensione carattere Grid Popup 6 (px)', helper: 'Dimensione carattere per la riga 6 del popup rete. Predefinita 16' },
-          sensor_popup_inverter_1: { label: 'Inverter Popup 1', helper: 'Entita per la riga 1 del popup inverter.' },
-          sensor_popup_inverter_1_name: { label: 'Nome Inverter Popup 1', helper: 'Nome personalizzato opzionale per la riga 1 del popup inverter. Lasciare vuoto per utilizzare il nome entita.' },
-          sensor_popup_inverter_1_color: { label: 'Colore Inverter Popup 1', helper: 'Colore per il testo della riga 1 del popup inverter.' },
-          sensor_popup_inverter_1_font_size: { label: 'Dimensione carattere Inverter Popup 1 (px)', helper: 'Dimensione carattere per la riga 1 del popup inverter. Predefinita 16' },
-          sensor_popup_inverter_2: { label: 'Inverter Popup 2', helper: 'Entita per la riga 2 del popup inverter.' },
-          sensor_popup_inverter_2_name: { label: 'Nome Inverter Popup 2', helper: 'Nome personalizzato opzionale per la riga 2 del popup inverter. Lasciare vuoto per utilizzare il nome entita.' },
-          sensor_popup_inverter_2_color: { label: 'Colore Inverter Popup 2', helper: 'Colore per il testo della riga 2 del popup inverter.' },
-          sensor_popup_inverter_2_font_size: { label: 'Dimensione carattere Inverter Popup 2 (px)', helper: 'Dimensione carattere per la riga 2 del popup inverter. Predefinita 16' },
-          sensor_popup_inverter_3: { label: 'Inverter Popup 3', helper: 'Entita per la riga 3 del popup inverter.' },
-          sensor_popup_inverter_3_name: { label: 'Nome Inverter Popup 3', helper: 'Nome personalizzato opzionale per la riga 3 del popup inverter. Lasciare vuoto per utilizzare il nome entita.' },
-          sensor_popup_inverter_3_color: { label: 'Colore Inverter Popup 3', helper: 'Colore per il testo della riga 3 del popup inverter.' },
-          sensor_popup_inverter_3_font_size: { label: 'Dimensione carattere Inverter Popup 3 (px)', helper: 'Dimensione carattere per la riga 3 del popup inverter. Predefinita 16' },
-          sensor_popup_inverter_4: { label: 'Inverter Popup 4', helper: 'Entita per la riga 4 del popup inverter.' },
-          sensor_popup_inverter_4_name: { label: 'Nome Inverter Popup 4', helper: 'Nome personalizzato opzionale per la riga 4 del popup inverter. Lasciare vuoto per utilizzare il nome entita.' },
-          sensor_popup_inverter_4_color: { label: 'Colore Inverter Popup 4', helper: 'Colore per il testo della riga 4 del popup inverter.' },
-          sensor_popup_inverter_4_font_size: { label: 'Dimensione carattere Inverter Popup 4 (px)', helper: 'Dimensione carattere per la riga 4 del popup inverter. Predefinita 16' },
-          sensor_popup_inverter_5: { label: 'Inverter Popup 5', helper: 'Entita per la riga 5 del popup inverter.' },
-          sensor_popup_inverter_5_name: { label: 'Nome Inverter Popup 5', helper: 'Nome personalizzato opzionale per la riga 5 del popup inverter. Lasciare vuoto per utilizzare il nome entita.' },
-          sensor_popup_inverter_5_color: { label: 'Colore Inverter Popup 5', helper: 'Colore per il testo della riga 5 del popup inverter.' },
-          sensor_popup_inverter_5_font_size: { label: 'Dimensione carattere Inverter Popup 5 (px)', helper: 'Dimensione carattere per la riga 5 del popup inverter. Predefinita 16' },
-          sensor_popup_inverter_6: { label: 'Inverter Popup 6', helper: 'Entita per la riga 6 del popup inverter.' },
-          sensor_popup_inverter_6_name: { label: 'Nome Inverter Popup 6', helper: 'Nome personalizzato opzionale per la riga 6 del popup inverter. Lasciare vuoto per utilizzare il nome entita.' },
-          sensor_popup_inverter_6_color: { label: 'Colore Inverter Popup 6', helper: 'Colore per il testo della riga 6 del popup inverter.' },
-          sensor_popup_inverter_6_font_size: { label: 'Dimensione carattere Inverter Popup 6 (px)', helper: 'Dimensione carattere per la riga 6 del popup inverter. Predefinita 16' }
+          washing_machine_text_color: { label: 'Colore testo lavatrice', helper: 'Colore applicato al testo della potenza della lavatrice.' },
+          dryer_text_color: { label: 'Colore testo asciugatrice', helper: 'Colore applicato al testo della potenza dell\'asciugatrice.' },
+          refrigerator_text_color: { label: 'Colore testo frigorifero', helper: 'Colore applicato al testo della potenza del frigorifero.' },
+          windmill_flow_color: { label: 'Colore flusso mulino', helper: 'Colore applicato al flusso del mulino a vento (data-flow-key="windmill-inverter1" / "windmill-inverter2").' },
+          windmill_text_color: { label: 'Colore testo mulino', helper: 'Colore applicato al testo della potenza del mulino (data-role="windmill-power").' },
+          header_font_size: { label: 'Dimensione font header (px)', helper: 'Default 8' },
+          daily_label_font_size: { label: 'Dimensione font etichetta giornaliera (px)', helper: 'Default 8' },
+          daily_value_font_size: { label: 'Dimensione font valore giornaliero (px)', helper: 'Default 20' },
+          pv_font_size: { label: 'Dimensione font PV (px)', helper: 'Default 8' },
+          windmill_power_font_size: { label: 'Dimensione font potenza mulino (px)', helper: 'Default 8' },
+          battery_soc_font_size: { label: 'Dimensione font SOC batteria (px)', helper: 'Default 20' },
+          battery_power_font_size: { label: 'Dimensione font potenza batteria (px)', helper: 'Default 8' },
+          load_font_size: { label: 'Dimensione font carico (px)', helper: 'Default 8' },
+          inv1_power_font_size: { label: 'Dimensione font potenza INV 1 (px)', helper: 'Dimensione font per la linea di potenza INV 1. Di default usa Load Font Size.' },
+          inv2_power_font_size: { label: 'Dimensione font potenza INV 2 (px)', helper: 'Dimensione font per la linea di potenza INV 2. Di default usa Load Font Size.' },
+          heat_pump_font_size: { label: 'Dimensione font pompa di calore (px)', helper: 'Default 8' },
+          pool_font_size: { label: 'Dimensione font piscina (px)', helper: 'Default 8' },
+          washing_machine_font_size: { label: 'Dimensione font lavatrice (px)', helper: 'Default 8' },
+          dryer_font_size: { label: 'Dimensione font asciugatrice (px)', helper: 'Default 8' },
+          refrigerator_font_size: { label: 'Dimensione font frigorifero (px)', helper: 'Default 8' },
+          grid_font_size: { label: 'Dimensione font rete (px)', helper: 'Default 8' },
+          car_power_font_size: { label: 'Dimensione font potenza auto (px)', helper: 'Default 8' },
+          car2_power_font_size: { label: 'Dimensione font potenza auto 2 (px)', helper: 'Default 8' },
+          car_name_font_size: { label: 'Dimensione font nome auto (px)', helper: 'Default 8' },
+          car2_name_font_size: { label: 'Dimensione font nome auto 2 (px)', helper: 'Default 8' },
+          car_soc_font_size: { label: 'Dimensione font SOC auto (px)', helper: 'Default 8' },
+          car2_soc_font_size: { label: 'Dimensione font SOC auto 2 (px)', helper: 'Default 8' },
+          sensor_popup_pv_1: { label: 'Popup PV 1', helper: 'Entiteit voor PV-popup regel 1.' },
+          sensor_popup_pv_2: { label: 'Popup PV 2', helper: 'Entiteit voor PV-popup regel 2.' },
+          sensor_popup_pv_3: { label: 'Popup PV 3', helper: 'Entiteit voor PV-popup regel 3.' },
+          sensor_popup_pv_4: { label: 'Popup PV 4', helper: 'Entiteit voor PV-popup regel 4.' },
+          sensor_popup_pv_5: { label: 'Popup PV 5', helper: 'Entiteit voor PV-popup regel 5.' },
+          sensor_popup_pv_6: { label: 'Popup PV 6', helper: 'Entiteit voor PV-popup regel 6.' },
+          sensor_popup_pv_1_name: { label: 'Naam Popup PV 1', helper: 'Optionele aangepaste naam voor PV-popup regel 1. Laat leeg om entiteitsnaam te gebruiken.' },
+          sensor_popup_pv_2_name: { label: 'Naam Popup PV 2', helper: 'Optionele aangepaste naam voor PV-popup regel 2. Laat leeg om entiteitsnaam te gebruiken.' },
+          sensor_popup_pv_3_name: { label: 'Naam Popup PV 3', helper: 'Optionele aangepaste naam voor PV-popup regel 3. Laat leeg om entiteitsnaam te gebruiken.' },
+          sensor_popup_pv_4_name: { label: 'Naam Popup PV 4', helper: 'Optionele aangepaste naam voor PV-popup regel 4. Laat leeg om entiteitsnaam te gebruiken.' },
+          sensor_popup_pv_5_name: { label: 'Naam Popup PV 5', helper: 'Optionele aangepaste naam voor PV-popup regel 5. Laat leeg om entiteitsnaam te gebruiken.' },
+          sensor_popup_pv_6_name: { label: 'Naam Popup PV 6', helper: 'Optionele aangepaste naam voor PV-popup regel 6. Laat leeg om entiteitsnaam te gebruiken.' },
+          sensor_popup_pv_1_color: { label: 'Kleur Popup PV 1', helper: 'Kleur voor PV-popup regel 1 tekst.' },
+          sensor_popup_pv_2_color: { label: 'Kleur Popup PV 2', helper: 'Kleur voor PV-popup regel 2 tekst.' },
+          sensor_popup_pv_3_color: { label: 'Kleur Popup PV 3', helper: 'Kleur voor PV-popup regel 3 tekst.' },
+          sensor_popup_pv_4_color: { label: 'Kleur Popup PV 4', helper: 'Kleur voor PV-popup regel 4 tekst.' },
+          sensor_popup_pv_5_color: { label: 'Kleur Popup PV 5', helper: 'Kleur voor PV-popup regel 5 tekst.' },
+          sensor_popup_pv_6_color: { label: 'Kleur Popup PV 6', helper: 'Kleur voor PV-popup regel 6 tekst.' },
+          sensor_popup_pv_1_font_size: { label: 'Lettergrootte Popup PV 1 (px)', helper: 'Lettergrootte voor PV-popup regel 1. Standaard 8' },
+          sensor_popup_pv_2_font_size: { label: 'Lettergrootte Popup PV 2 (px)', helper: 'Lettergrootte voor PV-popup regel 2. Standaard 8' },
+          sensor_popup_pv_3_font_size: { label: 'Lettergrootte Popup PV 3 (px)', helper: 'Lettergrootte voor PV-popup regel 3. Standaard 8' },
+          sensor_popup_pv_4_font_size: { label: 'Lettergrootte Popup PV 4 (px)', helper: 'Lettergrootte voor PV-popup regel 4. Standaard 8' },
+          sensor_popup_pv_5_font_size: { label: 'Lettergrootte Popup PV 5 (px)', helper: 'Lettergrootte voor PV-popup regel 5. Standaard 8' },
+          sensor_popup_pv_6_font_size: { label: 'Lettergrootte Popup PV 6 (px)', helper: 'Lettergrootte voor PV-popup regel 6. Standaard 8' }
         },
         options: {
           languages: [
-            { value: 'en', label: 'Inglese' },
+            { value: 'en', label: 'English' },
             { value: 'it', label: 'Italiano' },
-            { value: 'de', label: 'Tedesco' },
-            { value: 'fr', label: 'Francese' },
-            { value: 'nl', label: 'Olandese' }
+            { value: 'de', label: 'Deutsch' },
+            { value: 'fr', label: 'Français' },
+            { value: 'nl', label: 'Nederlands' },
+            { value: 'es', label: 'Español' }
           ],
           display_units: [
-            { value: 'W', label: 'Watt (W)' },
-            { value: 'kW', label: 'Kilowatt (kW)' }
+            { value: 'W', label: 'Watts (W)' },
+            { value: 'kW', label: 'Kilowatts (kW)' }
           ],
           animation_styles: [
-            { value: 'dashes', label: 'Tratteggi (predefinito)' },
-            { value: 'dashes_glow', label: 'Tratteggi + Bagliore' },
-            { value: 'fluid_flow', label: 'Flusso fluido' },
-            { value: 'dots', label: 'Punti' },
-            { value: 'arrows', label: 'Frecce' }
+            { value: 'dashes', label: 'Dashes (default)' },
+            { value: 'dashes_glow', label: 'Dashes + Glow' },
+            { value: 'fluid_flow', label: 'Fluid Flow' },
+            { value: 'dots', label: 'Dots' },
+            { value: 'arrows', label: 'Arrows' }
           ],
-          initial_yes: 'Sì',
+          initial_yes: 'Yes',
           initial_no: 'No',
           initial_inverters_1: '1',
           initial_inverters_2: '2',
@@ -10740,338 +11680,352 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           initial_batteries_4: '4',
           initial_evs_1: '1',
           initial_evs_2: '2'
+        },
+        view: {
+          daily: 'DAILY YIELD', pv_tot: 'PV TOTAL', car1: 'CAR 1', car2: 'CAR 2', importing: 'IMPORTING', exporting: 'EXPORTING'
         }
-      ,
-      view: {
-        daily: 'PRODUZIONE OGGI',
-        pv_tot: 'PV TOTALE',
-        car1: 'AUTO 1',
-        car2: 'AUTO 2',
-        importing: 'IMPORTAZIONE',
-        exporting: 'ESPORTAZIONE'
-      }
+      },
+      note: {
       },
       de: {
         sections: {
-          general: { title: 'Allgemeine Einstellungen', helper: 'Kartentitel, Hintergrund, Sprache und Aktualisierungsintervall.' },
-          initialConfig: { title: 'Erstkonfiguration', helper: 'Geführte Fragen für die Ersteinrichtung.' },
-          pvCommon: { title: 'Solar/PV Allgemein', helper: 'Gemeinsame Solar/PV Einstellungen fuer beide Arrays.' },
-          array1: { title: 'Solar/PV Array 1', helper: 'PV Array 1 Entitaeten konfigurieren.' },
-          array2: { title: 'Solar/PV Array 2', helper: 'If PV Total Sensor (Inverter 2) is set or the PV String values are provided, Array 2 will become active and enable the second inverter. You must also enable Daily Production Sensor (Array 2) and Home Load (Inverter 2).' },
-          windmill: { title: 'Windmill', helper: 'Windrad-Generator Sensoren und Darstellung konfigurieren.' },
-          battery: { title: 'Batterie', helper: 'Batterie-Entitaeten konfigurieren.' },
-          grid: { title: 'Netz', helper: 'Netz-Entitaeten konfigurieren.' },
-          car: { title: 'Auto', helper: 'EV-Entitaeten konfigurieren.' },
-          other: { title: 'Haus', helper: 'ZusÃ¤tzliche Sensoren und Erweiterungsoptionen.' },
-          entities: { title: 'Entitaetenauswahl', helper: 'PV-, Batterie-, Netz-, Verbrauchs- und optionale EV-Entitaeten waehlen. Entweder der PV-Gesamt-Sensor oder Ihre PV-String-Arrays muessen mindestens angegeben werden.' },
-          pvPopup: { title: 'PV Popup', helper: 'Entitaeten fuer die PV-Popup-Anzeige konfigurieren.' },
-          housePopup: { title: 'House Popup', helper: 'Entitaeten fuer die House-Popup-Anzeige konfigurieren.' },
-          batteryPopup: { title: 'Batterie-Popup', helper: 'Konfigurieren Sie die Batterie-Popup-Anzeige.' },
-          gridPopup: { title: 'Netz-Popup', helper: 'Entitaeten fuer die Netz-Popup-Anzeige konfigurieren.' },
-          inverterPopup: { title: 'Inverter-Popup', helper: 'Entitaeten fuer die Inverter-Popup-Anzeige konfigurieren.' },
-          colors: { title: 'Farben & Schwellwerte', helper: 'Grenzwerte und Farben fuer Netz- und EV-Anzeige einstellen.' },
-          typography: { title: 'Typografie', helper: 'Schriftgroessen der Karte feinjustieren.' },
-          about: { title: 'Info', helper: 'Credits, Version und nuetzliche Links.' }
+          general: { title: 'General Settings', helper: 'Karte metadata, background, language, and update cadence.' },
+          initialConfig: { title: 'Erstkonfiguration', helper: 'First-time setup checklist and starter options.' },
+          pvCommon: { title: 'Solar/PV Common', helper: 'Common Solar/PV settings shared across arrays.' },
+          array1: { title: 'Solar/PV Array 1', helper: 'Wähle the PV, battery, grid, load, and EV entities used by the card. Either the PV total sensor or your PV string arrays need to be specified as a minimum.' },
+          array2: { title: 'Solar/PV Array 2', helper: 'If PV-Gesamtsensor (Wechselrichter 2) is set or the PV String values are provided, Array 2 will become active and enable the second inverter. You must also enable Täglich Ertrag Sensor (Array 2) and Home Load (Wechselrichter 2).' },
+          windmill: { title: 'Windrad', helper: 'Konfiguriere windmill generator sensors and display styling.' },
+          battery: { title: 'Batterie', helper: 'Konfiguriere battery entities.' },
+          grid: { title: 'Netz', helper: 'Konfiguriere grid entities.' },
+          car: { title: 'Auto', helper: 'Konfiguriere EV entities.' },
+          other: { title: 'Haus', helper: 'Additional sensors and advanced toggles.' },
+          pvPopup: { title: 'PV Popup', helper: 'Konfiguriere entities for the PV popup display.' },
+          housePopup: { title: 'Haus Popup', helper: 'Konfiguriere entities for the house popup display.' },
+          batteryPopup: { title: 'Batterie Popup', helper: 'Konfiguriere battery popup display.' },
+          gridPopup: { title: 'Netz Popup', helper: 'Konfiguriere entities for the grid popup display.' },
+          inverterPopup: { title: 'Wechselrichter Popup', helper: 'Konfiguriere entities for the inverter popup display.' },
+          colors: { title: 'Farbe & Thresholds', helper: 'Konfiguriere grid thresholds and accent colours for flows and EV display.' },
+          typography: { title: 'Typography', helper: 'Fine tune the font sizes used across the card.' },
+          about: { title: 'About', helper: 'Credits, version, and helpful links.' }
         },
         fields: {
-          card_title: { label: 'Kartentitel', helper: 'Titel oben auf der Karte. Leer lassen, um zu deaktivieren.' },
-          language: { label: 'Sprache', helper: 'Editor-Sprache waehlen.' },
-          display_unit: { label: 'Anzeigeeinheit', helper: 'Einheit fuer Leistungswerte.' },
-          update_interval: { label: 'Aktualisierungsintervall', helper: 'Aktualisierungsfrequenz der Karte (0 deaktiviert das Limit).' },
-          initial_configuration: { label: 'Erstkonfiguration', helper: 'Zeigt den Abschnitt „Erstkonfiguration“ im Editor an.' },
-          initial_has_pv: { label: 'Haben Sie Solar/PV-Leistung?', helper: 'Wählen Sie Ja, wenn Sie Solarerzeugung konfigurieren.' },
-          initial_inverters: { label: 'Wie viele Wechselrichter haben Sie?', helper: 'Nur sichtbar, wenn Solar/PV aktiviert ist.' },
-          initial_has_battery: { label: 'Haben Sie Batteriespeicher?', helper: '' },
-          initial_battery_count: { label: 'Wie viele Batterien haben Sie? Maximal 4', helper: '' },
-          initial_has_grid: { label: 'Haben Sie Netzstrom?', helper: '' },
-          initial_can_export: { label: 'Können Sie überschüssigen Strom ins Netz einspeisen?', helper: '' },
-          initial_has_windmill: { label: 'Haben Sie ein Windrad?', helper: '' },
-          initial_has_ev: { label: 'Haben Sie Elektrofahrzeuge/EVs?', helper: '' },
-          initial_ev_count: { label: 'Wie viele haben Sie?', helper: '' },
-          initial_battery_dual_inverter_helper: { label: 'Comme vous avez sÃ©lectionnÃ© 2 onduleurs, un minimum de 2 batteries est requis. Les batteries 1 et 2 seront affectÃ©es Ã  l\'onduleur 1 et les batteries 3 et 4 Ã  l\'onduleur 2.', helper: '' },
-          initial_config_items_title: { label: 'Erforderliche Konfigurationselemente', helper: '' },
-          initial_config_items_helper: { label: 'Diese Elemente werden basierend auf Ihren Antworten sichtbar.', helper: '' },
-          initial_config_items_empty: { label: 'Noch keine Elemente anzuzeigen.', helper: '' },
-          initial_config_complete_helper: { label: 'Dies schlieÃt die erforderliche Mindestkonfiguration ab. Klicken Sie auf die SchaltflÃ¤che Fertig und prÃ¼fen Sie anschlieÃend alle MenÃ¼s auf weitere Elemente und Popup-Konfigurationen. Diese Erstkonfiguration kann im MenÃ¼ Allgemein wieder aktiviert werden.', helper: '' },
-          initial_config_complete_button: { label: 'Fertig', helper: '' },
-          array_helper_text: { label: 'Jedes Array muss mindestens einen kombinierten Solar/PV-Gesamtsensor haben, der die Gesamtleistung dieses Arrays darstellt, oder einzelne String-Werte, die zur Gesamtleistung des Arrays summiert werden. Die Tagesproduktion kann angegeben werden und in einer Tagesproduktionskarte angezeigt werden.', helper: '' },
-          animation_speed_factor: { label: 'Animationsgeschwindigkeit', helper: 'Animationsfaktor zwischen -3x und 3x. 0 pausiert, negative Werte kehren den Fluss um.' },
-          animation_style: { label: 'Animationsstil (Tag)', helper: 'Fluss-Animationsstil fuer Tag-Modus.' },
-          night_animation_style: { label: 'Animationsstil (Nacht)', helper: 'Fluss-Animationsstil fuer Nacht-Modus. Leer lassen fuer Tag-Stil.' },
-          dashes_glow_intensity: { label: 'Strich-Glow Intensitaet', helper: 'Steuert den Glow fuer "Striche + Leuchten" (0 deaktiviert).' },
-          fluid_flow_outer_glow: { label: 'Fluid Flow Aussen-Glow', helper: 'Aktiviert die zusaetzliche Aussen-Glow/Haze-Schicht fuer animation_style: fluid_flow.' },
-          flow_stroke_width: { label: 'Flow Strichstaerke (px)', helper: 'Optionales Override fuer die Strichstaerke der Flow-Animation (ohne SVG-Aenderung). Leer lassen fuer SVG-Defaults.' },
-          fluid_flow_stroke_width: { label: 'Fluid Flow Strichstaerke (px)', helper: 'Basis-Strichstaerke fuer animation_style: fluid_flow. Overlay/Maskenbreiten werden davon abgeleitet (Standard 5).' },
-          
-          sensor_pv_total: { label: 'PV Gesamt Sensor', helper: 'Optionaler aggregierter Sensor fuer die kombinierte Linie.' },
-          sensor_pv_total_secondary: { label: 'PV Gesamt Sensor (WR 2)', helper: 'Optionaler zweiter Wechselrichter; wird mit dem PV-Gesamtwert addiert.' },
-          sensor_windmill_total: { label: 'Windmill Total', helper: 'Leistungssensor fuer den Windrad-Generator (W). Wenn nicht gesetzt, wird die Windmill SVG-Gruppe ausgeblendet.' },
-          sensor_windmill_daily: { label: 'Daily Windmill Production', helper: 'Optionaler Sensor fuer taegliche Windmill-Produktion.' },
-          sensor_pv1: { label: 'PV String 1 (Array 1)', helper: 'Primaerer Solarsensor.' },
-          sensor_pv2: { label: 'PV String 2 (Array 1)' },
-          sensor_pv3: { label: 'PV String 3 (Array 1)' },
-          sensor_pv4: { label: 'PV String 4 (Array 1)' },
-          sensor_pv5: { label: 'PV String 5 (Array 1)' },
-          sensor_pv6: { label: 'PV String 6 (Array 1)' },
-          sensor_daily: { label: 'Tagesproduktion Sensor (Erforderlich)', helper: 'Sensor fuer taegliche Produktionssumme. Entweder der PV-Gesamt-Sensor oder Ihre PV-String-Arrays muessen mindestens angegeben werden.' },
-          sensor_daily_array2: { label: 'Tagesproduktion Sensor (Array 2)', helper: 'Sensor fuer die taegliche Produktionssumme von Array 2.' },
-          sensor_bat1_soc: { label: 'Batterie 1 SOC' },
-          sensor_bat1_power: { label: 'Batterie 1 Leistung', helper: 'Hinterlegen Sie entweder diesen kombinierten Leistungssensor oder sowohl Lade- als auch Entladeleistung, damit Batterie 1 aktiv wird.' },
-          sensor_bat1_charge_power: { label: 'Batterie 1 Ladeleistung' },
-          sensor_bat1_discharge_power: { label: 'Batterie 1 Entladeleistung' },
-          sensor_bat2_soc: { label: 'Batterie 2 SOC' },
-          sensor_bat2_power: { label: 'Batterie 2 Leistung', helper: 'Hinterlegen Sie entweder diesen kombinierten Leistungssensor oder sowohl Lade- als auch Entladeleistung, damit Batterie 2 aktiv wird.' },
-          sensor_bat2_charge_power: { label: 'Batterie 2 Ladeleistung' },
-          sensor_bat2_discharge_power: { label: 'Batterie 2 Entladeleistung' },
-          sensor_bat3_soc: { label: 'Batterie 3 SOC' },
-          sensor_bat3_power: { label: 'Batterie 3 Leistung', helper: 'Hinterlegen Sie entweder diesen kombinierten Leistungssensor oder sowohl Lade- als auch Entladeleistung, damit Batterie 3 aktiv wird.' },
-          sensor_bat3_charge_power: { label: 'Batterie 3 Ladeleistung' },
-          sensor_bat3_discharge_power: { label: 'Batterie 3 Entladeleistung' },
-          sensor_bat4_soc: { label: 'Batterie 4 SOC' },
-          sensor_bat4_power: { label: 'Batterie 4 Leistung', helper: 'Hinterlegen Sie entweder diesen kombinierten Leistungssensor oder sowohl Lade- als auch Entladeleistung, damit Batterie 4 aktiv wird.' },
-          sensor_bat4_charge_power: { label: 'Batterie 4 Ladeleistung' },
-          sensor_bat4_discharge_power: { label: 'Batterie 4 Entladeleistung' },
-          sensor_home_load: { label: 'Hausverbrauch (Erforderlich)', helper: 'Sensor fuer Gesamtverbrauch des Haushalts.' },
-          sensor_home_load_secondary: { label: 'Hausverbrauch (WR 2)', helper: 'Optionale Hauslast-Entitaet fuer den zweiten Wechselrichter.' },
-          sensor_heat_pump_consumption: { label: 'Waermepumpenverbrauch', helper: 'Sensor fuer den Energieverbrauch der Waermepumpe.' },
-          sensor_pool_consumption: { label: 'Pool', helper: 'Sensor fuer Pool-Leistung/Verbrauch.' },
-          sensor_washing_machine_consumption: { label: 'Waschmaschine', helper: 'Sensor fuer Waschmaschinen-Leistung/Verbrauch.' },
-          sensor_dryer_consumption: { label: 'Trockner', helper: 'Sensor fuer Trockner-Leistung/Verbrauch.' },
-          sensor_refrigerator_consumption: { label: 'Kuehlschrank', helper: 'Sensor fuer Kuehlschrank-Leistung/Verbrauch.' },
-          sensor_grid_power: { label: 'Netzleistung (WR 1)', helper: 'Sensor fuer positiven/negativen Netzfluss fuer Wechselrichter 1. Geben Sie entweder diesen Sensor an oder sowohl den Netzimport-Sensor (WR 1) als auch den Netzexport-Sensor (WR 1).' },
-          sensor_grid_import: { label: 'Netzimport Sensor (WR 1)', helper: 'Optionale Entitaet fuer positiven Netzimport von Wechselrichter 1.' },
-          sensor_grid_export: { label: 'Netzexport Sensor (WR 1)', helper: 'Optionale Entitaet fuer positiven Netzexport von Wechselrichter 1.' },
-          sensor_grid_import_daily: { label: 'Tages-Netzimport Sensor (WR 1)', helper: 'Optionale Entitaet, die den kumulierten Netzimport fuer den aktuellen Tag (WR 1) meldet.' },
-          sensor_grid_export_daily: { label: 'Tages-Netzexport Sensor (WR 1)', helper: 'Optionale Entitaet, die den kumulierten Netzexport fuer den aktuellen Tag (WR 1) meldet.' },
-          sensor_grid2_power: { label: 'Netzleistung (WR 2)', helper: 'Sensor fuer positiven/negativen Netzfluss fuer Wechselrichter 2. Geben Sie entweder diesen Sensor an oder sowohl den Netzimport-Sensor (WR 2) als auch den Netzexport-Sensor (WR 2).' },
-          sensor_grid2_import: { label: 'Netzimport Sensor (WR 2)', helper: 'Optionale Entitaet fuer positiven Netzimport von Wechselrichter 2.' },
-          sensor_grid2_export: { label: 'Netzexport Sensor (WR 2)', helper: 'Optionale Entitaet fuer positiven Netzexport von Wechselrichter 2.' },
-          sensor_grid2_import_daily: { label: 'Tages-Netzimport Sensor (WR 2)', helper: 'Optionale Entitaet, die den kumulierten Netzimport fuer den aktuellen Tag (WR 2) meldet.' },
-          sensor_grid2_export_daily: { label: 'Tages-Netzexport Sensor (WR 2)', helper: 'Optionale Entitaet, die den kumulierten Netzexport fuer den aktuellen Tag (WR 2) meldet.' },
-          show_daily_grid: { label: 'Tages-Netzwerte anzeigen', helper: 'Zeigt die taeglichen Import-/Exporttotalen unter dem aktuellen Netzfluss an, wenn aktiviert.' },
-          grid_daily_font_size: { label: 'Schriftgroesse Tagesnetz (px)', helper: 'Optional: ueberschreibt die Schriftgroesse der taeglichen Import/Export-Werte. Standard: Schriftgroesse Netz.' },
-          grid_current_odometer: { label: 'Odometer: Netz aktuell', helper: 'Animiert den aktuellen Netz-Wert mit einem Ziffern-Roll-Effekt.' },
-          grid_current_odometer_duration: { label: 'Odometer Dauer (ms)', helper: 'Animationsdauer in Millisekunden. Standard 350.' },
-          show_grid_flow_label: { label: 'Netz Import/Export Text anzeigen', helper: 'Fuegt "Importieren"/"Exportieren" vor dem Netzwert ein, wenn aktiviert.' },
-          enable_echo_alive: { label: 'Enable Echo Alive', helper: 'Enables an invisible iframe to keep the Silk browser open on Echo Show. The button will be positioned in a corner of the card.' },
-          pv_primary_color: { label: 'PV 1 Flussfarbe', helper: 'Farbe fuer die primaere PV-Animationslinie.' },
-          pv_tot_color: { label: 'PV Gesamt Farbe', helper: 'Farbe fuer die PV Gesamt Zeile.' },
-          pv_secondary_color: { label: 'PV 2 Flussfarbe', helper: 'Farbe fuer die zweite PV-Linie (falls vorhanden).' },
-          load_flow_color: { label: 'Lastflussfarbe', helper: 'Farbe fuer die Hausverbrauch-Animationslinie.' },
-          load_text_color: { label: 'Last Textfarbe', helper: 'Farbe fuer den Hausverbrauchstext, wenn keine Schwellen aktiv sind.' },
-          house_total_color: { label: 'House Total Farbe', helper: 'Farbe fuer HOUSE TOT Text/Fluss.' },
-          inv1_color: { label: 'Wechselrichter 1 zu Haus Farbe', helper: 'Farbe auf den Fluss von Wechselrichter 1 zum Haus angewendet.' },
-          inv2_color: { label: 'Wechselrichter 2 zu Haus Farbe', helper: 'Farbe auf den Fluss von Wechselrichter 2 zum Haus angewendet.' },
-          load_threshold_warning: { label: 'Last Warnschwelle', helper: 'Farbe wechseln, wenn der Verbrauch diese Magnitude erreicht. Verwendet die ausgewaehlte Anzeigeeinheit.' },
-          load_warning_color: { label: 'Last Warnfarbe', helper: 'Farbe bei Erreichen der Warnschwelle des Hausverbrauchs.' },
-          load_threshold_critical: { label: 'Last Kritische Schwelle', helper: 'Farbe wechseln, wenn der Verbrauch diese kritische Magnitude erreicht. Verwendet die ausgewaehlte Anzeigeeinheit.' },
-          load_critical_color: { label: 'Last Kritische Farbe', helper: 'Farbe bei Erreichen der kritischen Hausverbrauchsschwelle.' },
-          battery_soc_color: { label: 'Batterie SOC Farbe', helper: 'Farbe fÃ¼r den Batterie-SOC-Prozenttext.' },
-          battery_charge_color: { label: 'Batterie Ladeflussfarbe', helper: 'Farbe wenn Energie in die Batterie fliesst.' },
-          battery_discharge_color: { label: 'Batterie Entladeflussfarbe', helper: 'Farbe wenn Energie aus der Batterie fliesst.' },
-          grid_import_color: { label: 'Netzimport Flussfarbe (WR 1)', helper: 'Basisfarbe (vor Schwellwerten) beim Netzimport von WR 1.' },
-          grid_export_color: { label: 'Netzexport Flussfarbe (WR 1)', helper: 'Basisfarbe (vor Schwellwerten) beim Netzexport von WR 1.' },
-          grid2_import_color: { label: 'Netzimport Flussfarbe (WR 2)', helper: 'Basisfarbe (vor Schwellwerten) beim Netzimport von WR 2.' },
-          grid2_export_color: { label: 'Netzexport Flussfarbe (WR 2)', helper: 'Basisfarbe (vor Schwellwerten) beim Netzexport von WR 2.' },
-          car_flow_color: { label: 'EV Flussfarbe', helper: 'Farbe fuer die EV-Animationslinie.' },
-          battery_fill_high_color: { label: 'Batterie Fuellfarbe (normal)', helper: 'Fluessigkeitsfarbe wenn die Batterie-SOC ueber dem niedrigen Schwellwert liegt.' },
-          battery_fill_low_color: { label: 'Batterie Fuellfarbe (niedrig)', helper: 'Fluessigkeitsfarbe wenn die Batterie-SOC dem niedrigen Schwellwert entspricht oder darunter liegt.' },
-          battery_fill_low_threshold: { label: 'Niedriger SOC-Schwellenwert (%)', helper: 'Verwende die niedrige Fuellfarbe, wenn die Batterie-SOC diesen Prozentsatz erreicht oder unterschreitet.' },
-          battery_fill_opacity: { label: 'Batterie Fuellstand Deckkraft', helper: 'Deckkraft fuer den Batterie-Fuellstand (0-1).' },
-          grid_activity_threshold: { label: 'Netz Animationsschwelle (W)', helper: 'Ignoriere Netzfluesse mit geringerer Absolutleistung, bevor animiert wird.' },
-          grid_power_only: { label: 'Nur Netzleistung', helper: 'Blendt Wechselrichter-/Batteriefluesse aus und zeigt einen direkten Netz-zu-Haus-Flow.' },
-          grid_threshold_warning: { label: 'Netz Warnschwelle (WR 1)', helper: 'Farbe wechseln, wenn diese Magnitude fuer WR 1 erreicht wird. Verwendet die ausgewaehlte Anzeigeeinheit.' },
-          grid_warning_color: { label: 'Netz Warnfarbe (WR 1)', helper: 'Farbe bei Erreichen der Warnschwelle fuer WR 1.' },
-          grid_threshold_critical: { label: 'Netz Kritische Schwelle (WR 1)', helper: 'Farbe wechseln, wenn diese Magnitude fuer WR 1 erreicht wird. Verwendet die ausgewaehlte Anzeigeeinheit.' },
-          grid_critical_color: { label: 'Netz Kritische Farbe (WR 1)', helper: 'Farbe bei Erreichen der kritischen Schwelle fuer WR 1.' },
-          grid2_threshold_warning: { label: 'Netz Warnschwelle (WR 2)', helper: 'Farbe wechseln, wenn diese Magnitude fuer WR 2 erreicht wird. Verwendet die ausgewaehlte Anzeigeeinheit.' },
-          grid2_warning_color: { label: 'Netz Warnfarbe (WR 2)', helper: 'Farbe bei Erreichen der Warnschwelle fuer WR 2.' },
-          grid2_threshold_critical: { label: 'Netz Kritische Schwelle (WR 2)', helper: 'Farbe wechseln, wenn diese Magnitude fuer WR 2 erreicht wird. Verwendet die ausgewaehlte Anzeigeeinheit.' },
-          grid2_critical_color: { label: 'Netz Kritische Farbe (WR 2)', helper: 'Farbe bei Erreichen der kritischen Schwelle fuer WR 2.' },
-          invert_grid: { label: 'Netzwerte invertieren', helper: 'Aktivieren, wenn Import/Export vertauscht ist.' },
-          invert_battery: { label: 'Batterie-Werte invertieren', helper: 'Aktivieren, wenn Lade-/Entlade-PolaritÃ¤t vertauscht ist.' },
-          invert_bat1: { label: 'Batterie 1 invertieren', helper: 'Aktivieren, wenn die Lade-/Entlade-PolaritÃ¤t von Batterie 1 vertauscht ist.' },
-          invert_bat2: { label: 'Batterie 2 invertieren', helper: 'Aktivieren, wenn die Lade-/Entlade-PolaritÃ¤t von Batterie 2 vertauscht ist.' },
-          invert_bat3: { label: 'Batterie 3 invertieren', helper: 'Aktivieren, wenn die Lade-/Entlade-PolaritÃ¤t von Batterie 3 vertauscht ist.' },
-          sensor_car_power: { label: 'Fahrzeugleistung Sensor 1' },
-          sensor_car_soc: { label: 'Fahrzeug SOC Sensor 1' },
-          car_soc: { label: 'Fahrzeug SOC', helper: 'Sensor fÃ¼r EV-Batterie SOC.' },
-          car_range: { label: 'Fahrzeug Reichweite', helper: 'Sensor fÃ¼r EV-Reichweite.' },
-          car_efficiency: { label: 'Fahrzeug Effizienz', helper: 'Sensor fÃ¼r EV-Effizienz.' },
-          car_charger_power: { label: 'Fahrzeug LadegerÃ¤t Leistung', helper: 'Sensor fÃ¼r EV-LadegerÃ¤t Leistung.' },
-          car1_label: { label: 'Bezeichnung Fahrzeug 1', helper: 'Text neben den Werten des ersten EV.' },
-          sensor_car2_power: { label: 'Fahrzeugleistung Sensor 2' },
-          sensor_car2_soc: { label: 'Fahrzeug SOC Sensor 2' },
-          car2_soc: { label: 'Fahrzeug 2 SOC', helper: 'Sensor fÃ¼r EV 2-Batterie SOC.' },
-          car2_range: { label: 'Fahrzeug 2 Reichweite', helper: 'Sensor fÃ¼r EV 2-Reichweite.' },
-          car2_efficiency: { label: 'Fahrzeug 2 Effizienz', helper: 'Sensor fÃ¼r EV 2-Effizienz.' },
-          car2_charger_power: { label: 'Fahrzeug 2 LadegerÃ¤t Leistung', helper: 'Sensor fÃ¼r EV 2-LadegerÃ¤t Leistung.' },
-          car2_power: { label: 'Fahrzeug 2 Leistung', helper: 'Sensor fÃ¼r EV 2-Lade-/Entladeleistung.' },
-          car2_label: { label: 'Bezeichnung Fahrzeug 2', helper: 'Text neben den Werten des zweiten EV.' },
-          car_headlight_flash: { label: 'Scheinwerferblitz beim Laden', helper: 'Aktivieren, um die Fahrzeugscheinwerfer waehrend des Ladevorgangs blinken zu lassen.' },
-          car1_glow_brightness: { label: 'Auto-Glow-Effekt', helper: 'Prozentsatz, wie stark der Auto-Fluss-Effekt angezeigt wird, wenn nicht geladen wird.' },
-          car2_glow_brightness: { label: 'Auto-Glow-Effekt', helper: 'Prozentsatz, wie stark der Auto-Fluss-Effekt angezeigt wird, wenn nicht geladen wird.' },
-          car_pct_color: { label: 'Farbe fuer SOC', helper: 'Hex Farbe fuer EV SOC Text (z. B. #00FFFF).' },
-          car2_pct_color: { label: 'Farbe SOC Auto 2', helper: 'Hex Farbe fuer SOC Text des zweiten Fahrzeugs (faellt auf Car SOC zurueck).' },
-          car1_name_color: { label: 'Farbe Name Auto 1', helper: 'Farbe fuer die Bezeichnung von Fahrzeug 1.' },
-          car2_name_color: { label: 'Farbe Name Auto 2', helper: 'Farbe fuer die Bezeichnung von Fahrzeug 2.' },
-          car1_color: { label: 'Farbe Auto 1', helper: 'Farbe fuer die Leistungsanzeige von Fahrzeug 1.' },
-          car2_color: { label: 'Farbe Auto 2', helper: 'Farbe fuer die Leistungsanzeige von Fahrzeug 2.' },
-          heat_pump_flow_color: { label: 'Waermepumpenfluss Farbe', helper: 'Farbe fuer die Waermepumpenfluss Animation.' },
-          heat_pump_text_color: { label: 'Waermepumpentext Farbe', helper: 'Farbe fuer den Waermepumpenleistungstext.' },
-          pool_flow_color: { label: 'Poolfluss Farbe', helper: 'Farbe fuer die Poolfluss Animation.' },
-          pool_text_color: { label: 'Pooltext Farbe', helper: 'Farbe fuer den Poolleistungstext.' },
-          washing_machine_text_color: { label: 'Waschmaschine Textfarbe', helper: 'Farbe fuer den Waschmaschinen-Leistungstext.' },
-          dryer_text_color: { label: 'Trockner Textfarbe', helper: 'Farbe fuer den Trockner-Leistungstext.' },
-          refrigerator_text_color: { label: 'Kuehlschrank Textfarbe', helper: 'Farbe fuer den Kuehlschrank-Leistungstext.' },
-          windmill_flow_color: { label: 'Windmill Flow Color', helper: 'Farbe fuer den Windmill-Flow (data-flow-key="windmill-inverter1" / "windmill-inverter2").' },
-          windmill_text_color: { label: 'Windmill Text Color', helper: 'Farbe fuer den Windmill-Leistungstext (data-role="windmill-power").' },
-          header_font_size: { label: 'Schriftgroesse Titel (px)', helper: 'Standard 16' },
-          daily_label_font_size: { label: 'Schriftgroesse Tageslabel (px)', helper: 'Standard 12' },
-          daily_value_font_size: { label: 'Schriftgroesse Tageswert (px)', helper: 'Standard 20' },
-          pv_font_size: { label: 'Schriftgroesse PV Text (px)', helper: 'Standard 16' },
-          windmill_power_font_size: { label: 'Windmill Power Font Size (px)', helper: 'Standard 16' },
-          battery_soc_font_size: { label: 'Schriftgroesse Batterie SOC (px)', helper: 'Standard 20' },
-          battery_power_font_size: { label: 'Schriftgroesse Batterie Leistung (px)', helper: 'Standard 16' },
-          load_font_size: { label: 'Schriftgroesse Last (px)', helper: 'Standard 15' },
-          inv1_power_font_size: { label: 'Schriftgroesse INV 1 Leistung (px)', helper: 'Schriftgroesse fuer die INV 1 Leistungszeile. Standard ist die Last-Schriftgroesse.' },
-          inv2_power_font_size: { label: 'Schriftgroesse INV 2 Leistung (px)', helper: 'Schriftgroesse fuer die INV 2 Leistungszeile. Standard ist die Last-Schriftgroesse.' },
-          heat_pump_font_size: { label: 'Schriftgroesse Waermepumpe (px)', helper: 'Standard 16' },
-          pool_font_size: { label: 'Schriftgroesse Pool (px)', helper: 'Standard 16' },
-          washing_machine_font_size: { label: 'Schriftgroesse Waschmaschine (px)', helper: 'Standard 16' },
-          dryer_font_size: { label: 'Schriftgroesse Trockner (px)', helper: 'Standard 16' },
-          refrigerator_font_size: { label: 'Schriftgroesse Kuehlschrank (px)', helper: 'Standard 16' },
-          grid_font_size: { label: 'Schriftgroesse Netz (px)', helper: 'Standard 15' },
-          car_power_font_size: { label: 'Schriftgroesse Fahrzeugleistung (px)', helper: 'Standard 15' },
-          car_soc_font_size: { label: 'Schriftgroesse Fahrzeug SOC (px)', helper: 'Standard 12' },
-          sensor_popup_pv_1: { label: 'PV Popup 1', helper: 'Entitaet fuer PV Popup Zeile 1.' },
-          sensor_popup_pv_2: { label: 'PV Popup 2', helper: 'Entitaet fuer PV Popup Zeile 2.' },
-          sensor_popup_pv_3: { label: 'PV Popup 3', helper: 'Entitaet fuer PV Popup Zeile 3.' },
-          sensor_popup_pv_4: { label: 'PV Popup 4', helper: 'Entitaet fuer PV Popup Zeile 4.' },
-          sensor_popup_pv_5: { label: 'PV Popup 5', helper: 'Entitaet fuer PV Popup Zeile 5.' },
-          sensor_popup_pv_6: { label: 'PV Popup 6', helper: 'Entitaet fuer PV Popup Zeile 6.' },
-          sensor_popup_pv_1_name: { label: 'Name PV Popup 1', helper: 'Optionaler benutzerdefinierter Name fuer PV Popup Zeile 1. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_pv_2_name: { label: 'Name PV Popup 2', helper: 'Optionaler benutzerdefinierter Name fuer PV Popup Zeile 2. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_pv_3_name: { label: 'Name PV Popup 3', helper: 'Optionaler benutzerdefinierter Name fuer PV Popup Zeile 3. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_pv_4_name: { label: 'Name PV Popup 4', helper: 'Optionaler benutzerdefinierter Name fuer PV Popup Zeile 4. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_pv_5_name: { label: 'Name PV Popup 5', helper: 'Optionaler benutzerdefinierter Name fuer PV Popup Zeile 5. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_pv_6_name: { label: 'Name PV Popup 6', helper: 'Optionaler benutzerdefinierter Name fuer PV Popup Zeile 6. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_pv_1_color: { label: 'Farbe PV Popup 1', helper: 'Farbe fuer PV Popup Zeile 1 Text.' },
-          sensor_popup_pv_2_color: { label: 'Farbe PV Popup 2', helper: 'Farbe fuer PV Popup Zeile 2 Text.' },
-          sensor_popup_pv_3_color: { label: 'Farbe PV Popup 3', helper: 'Farbe fuer PV Popup Zeile 3 Text.' },
-          sensor_popup_pv_4_color: { label: 'Farbe PV Popup 4', helper: 'Farbe fuer PV Popup Zeile 4 Text.' },
-          sensor_popup_pv_5_color: { label: 'Farbe PV Popup 5', helper: 'Farbe fuer PV Popup Zeile 5 Text.' },
-          sensor_popup_pv_6_color: { label: 'Farbe PV Popup 6', helper: 'Farbe fuer PV Popup Zeile 6 Text.' },
-          sensor_popup_pv_1_font_size: { label: 'Schriftgroesse PV Popup 1 (px)', helper: 'Schriftgroesse fuer PV Popup Zeile 1. Standard 16' },
-          sensor_popup_pv_2_font_size: { label: 'Schriftgroesse PV Popup 2 (px)', helper: 'Schriftgroesse fuer PV Popup Zeile 2. Standard 16' },
-          sensor_popup_pv_3_font_size: { label: 'Schriftgroesse PV Popup 3 (px)', helper: 'Schriftgroesse fuer PV Popup Zeile 3. Standard 16' },
-          sensor_popup_pv_4_font_size: { label: 'Schriftgroesse PV Popup 4 (px)', helper: 'Schriftgroesse fuer PV Popup Zeile 4. Standard 16' },
-          sensor_popup_pv_5_font_size: { label: 'Schriftgroesse PV Popup 5 (px)', helper: 'Schriftgroesse fuer PV Popup Zeile 5. Standard 16' },
-          sensor_popup_pv_6_font_size: { label: 'Schriftgroesse PV Popup 6 (px)', helper: 'Schriftgroesse fuer PV Popup Zeile 6. Standard 16' },
-          sensor_popup_house_1: { label: 'House Popup 1', helper: 'Entitaet fuer House Popup Zeile 1.' },
-          sensor_popup_house_1_name: { label: 'Name House Popup 1', helper: 'Optionaler benutzerdefinierter Name fuer House Popup Zeile 1. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_house_1_color: { label: 'Farbe House Popup 1', helper: 'Farbe fuer House Popup Zeile 1 Text.' },
-          sensor_popup_house_1_font_size: { label: 'Schriftgroesse House Popup 1 (px)', helper: 'Schriftgroesse fuer House Popup Zeile 1. Standard 16' },
-          sensor_popup_house_2: { label: 'House Popup 2', helper: 'Entitaet fuer House Popup Zeile 2.' },
-          sensor_popup_house_2_name: { label: 'Name House Popup 2', helper: 'Optionaler benutzerdefinierter Name fuer House Popup Zeile 2. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_house_2_color: { label: 'Farbe House Popup 2', helper: 'Farbe fuer House Popup Zeile 2 Text.' },
-          sensor_popup_house_2_font_size: { label: 'Schriftgroesse House Popup 2 (px)', helper: 'Schriftgroesse fuer House Popup Zeile 2. Standard 16' },
-          sensor_popup_house_3: { label: 'House Popup 3', helper: 'Entitaet fuer House Popup Zeile 3.' },
-          sensor_popup_house_3_name: { label: 'Name House Popup 3', helper: 'Optionaler benutzerdefinierter Name fuer House Popup Zeile 3. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_house_3_color: { label: 'Farbe House Popup 3', helper: 'Farbe fuer House Popup Zeile 3 Text.' },
-          sensor_popup_house_3_font_size: { label: 'Schriftgroesse House Popup 3 (px)', helper: 'Schriftgroesse fuer House Popup Zeile 3. Standard 16' },
-          sensor_popup_house_4: { label: 'House Popup 4', helper: 'Entitaet fuer House Popup Zeile 4.' },
-          sensor_popup_house_4_name: { label: 'Name House Popup 4', helper: 'Optionaler benutzerdefinierter Name fuer House Popup Zeile 4. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_house_4_color: { label: 'Farbe House Popup 4', helper: 'Farbe fuer House Popup Zeile 4 Text.' },
-          sensor_popup_house_4_font_size: { label: 'Schriftgroesse House Popup 4 (px)', helper: 'Schriftgroesse fuer House Popup Zeile 4. Standard 16' },
-          sensor_popup_house_5: { label: 'House Popup 5', helper: 'Entitaet fuer House Popup Zeile 5.' },
-          sensor_popup_house_5_name: { label: 'Name House Popup 5', helper: 'Optionaler benutzerdefinierter Name fuer House Popup Zeile 5. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_house_5_color: { label: 'Farbe House Popup 5', helper: 'Farbe fuer House Popup Zeile 5 Text.' },
-          sensor_popup_house_5_font_size: { label: 'Schriftgroesse House Popup 5 (px)', helper: 'Schriftgroesse fuer House Popup Zeile 5. Standard 16' },
-          sensor_popup_house_6: { label: 'House Popup 6', helper: 'Entitaet fuer House Popup Zeile 6.' },
-          sensor_popup_house_6_name: { label: 'Name House Popup 6', helper: 'Optionaler benutzerdefinierter Name fuer House Popup Zeile 6. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_house_6_color: { label: 'Farbe House Popup 6', helper: 'Farbe fuer House Popup Zeile 6 Text.' },
-          sensor_popup_house_6_font_size: { label: 'Schriftgroesse House Popup 6 (px)', helper: 'Schriftgroesse fuer House Popup Zeile 6. Standard 16' },
-          sensor_popup_bat_1: { label: 'Battery Popup 1', helper: 'Entitaet fuer Battery Popup Zeile 1.' },
-          sensor_popup_bat_1_name: { label: 'Name Battery Popup 1', helper: 'Optionaler benutzerdefinierter Name fuer Battery Popup Zeile 1. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_bat_1_color: { label: 'Farbe Battery Popup 1', helper: 'Farbe fuer Battery Popup Zeile 1 Text.' },
-          sensor_popup_bat_1_font_size: { label: 'Schriftgroesse Battery Popup 1 (px)', helper: 'Schriftgroesse fuer Battery Popup Zeile 1. Standard 16' },
-          sensor_popup_bat_2: { label: 'Battery Popup 2', helper: 'Entitaet fuer Battery Popup Zeile 2.' },
-          sensor_popup_bat_2_name: { label: 'Name Battery Popup 2', helper: 'Optionaler benutzerdefinierter Name fuer Battery Popup Zeile 2. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_bat_2_color: { label: 'Farbe Battery Popup 2', helper: 'Farbe fuer Battery Popup Zeile 2 Text.' },
-          sensor_popup_bat_2_font_size: { label: 'Schriftgroesse Battery Popup 2 (px)', helper: 'Schriftgroesse fuer Battery Popup Zeile 2. Standard 16' },
-          sensor_popup_bat_3: { label: 'Battery Popup 3', helper: 'Entitaet fuer Battery Popup Zeile 3.' },
-          sensor_popup_bat_3_name: { label: 'Name Battery Popup 3', helper: 'Optionaler benutzerdefinierter Name fuer Battery Popup Zeile 3. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_bat_3_color: { label: 'Farbe Battery Popup 3', helper: 'Farbe fuer Battery Popup Zeile 3 Text.' },
-          sensor_popup_bat_3_font_size: { label: 'Schriftgroesse Battery Popup 3 (px)', helper: 'Schriftgroesse fuer Battery Popup Zeile 3. Standard 16' },
-          sensor_popup_bat_4: { label: 'Battery Popup 4', helper: 'Entitaet fuer Battery Popup Zeile 4.' },
-          sensor_popup_bat_4_name: { label: 'Name Battery Popup 4', helper: 'Optionaler benutzerdefinierter Name fuer Battery Popup Zeile 4. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_bat_4_color: { label: 'Farbe Battery Popup 4', helper: 'Farbe fuer Battery Popup Zeile 4 Text.' },
-          sensor_popup_bat_4_font_size: { label: 'Schriftgroesse Battery Popup 4 (px)', helper: 'Schriftgroesse fuer Battery Popup Zeile 4. Standard 16' },
-          sensor_popup_bat_5: { label: 'Battery Popup 5', helper: 'Entitaet fuer Battery Popup Zeile 5.' },
-          sensor_popup_bat_5_name: { label: 'Name Battery Popup 5', helper: 'Optionaler benutzerdefinierter Name fuer Battery Popup Zeile 5. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_bat_5_color: { label: 'Farbe Battery Popup 5', helper: 'Farbe fuer Battery Popup Zeile 5 Text.' },
-          sensor_popup_bat_5_font_size: { label: 'Schriftgroesse Battery Popup 5 (px)', helper: 'Schriftgroesse fuer Battery Popup Zeile 5. Standard 16' },
-          sensor_popup_bat_6: { label: 'Battery Popup 6', helper: 'Entitaet fuer Battery Popup Zeile 6.' },
-          sensor_popup_bat_6_name: { label: 'Name Battery Popup 6', helper: 'Optionaler benutzerdefinierter Name fuer Battery Popup Zeile 6. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_bat_6_color: { label: 'Farbe Battery Popup 6', helper: 'Farbe fuer Battery Popup Zeile 6 Text.' },
-          sensor_popup_bat_6_font_size: { label: 'Schriftgroesse Battery Popup 6 (px)', helper: 'Schriftgroesse fuer Battery Popup Zeile 6. Standard 16' },
-          sensor_popup_grid_1: { label: 'Grid Popup 1', helper: 'Entitaet fuer Grid Popup Zeile 1.' },
-          sensor_popup_grid_1_name: { label: 'Name Grid Popup 1', helper: 'Optionaler benutzerdefinierter Name fuer Grid Popup Zeile 1. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_grid_1_color: { label: 'Farbe Grid Popup 1', helper: 'Farbe fuer Grid Popup Zeile 1 Text.' },
-          sensor_popup_grid_1_font_size: { label: 'Schriftgroesse Grid Popup 1 (px)', helper: 'Schriftgroesse fuer Grid Popup Zeile 1. Standard 16' },
-          sensor_popup_grid_2: { label: 'Grid Popup 2', helper: 'Entitaet fuer Grid Popup Zeile 2.' },
-          sensor_popup_grid_2_name: { label: 'Name Grid Popup 2', helper: 'Optionaler benutzerdefinierter Name fuer Grid Popup Zeile 2. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_grid_2_color: { label: 'Farbe Grid Popup 2', helper: 'Farbe fuer Grid Popup Zeile 2 Text.' },
-          sensor_popup_grid_2_font_size: { label: 'Schriftgroesse Grid Popup 2 (px)', helper: 'Schriftgroesse fuer Grid Popup Zeile 2. Standard 16' },
-          sensor_popup_grid_3: { label: 'Grid Popup 3', helper: 'Entitaet fuer Grid Popup Zeile 3.' },
-          sensor_popup_grid_3_name: { label: 'Name Grid Popup 3', helper: 'Optionaler benutzerdefinierter Name fuer Grid Popup Zeile 3. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_grid_3_color: { label: 'Farbe Grid Popup 3', helper: 'Farbe fuer Grid Popup Zeile 3 Text.' },
-          sensor_popup_grid_3_font_size: { label: 'Schriftgroesse Grid Popup 3 (px)', helper: 'Schriftgroesse fuer Grid Popup Zeile 3. Standard 16' },
-          sensor_popup_grid_4: { label: 'Grid Popup 4', helper: 'Entitaet fuer Grid Popup Zeile 4.' },
-          sensor_popup_grid_4_name: { label: 'Name Grid Popup 4', helper: 'Optionaler benutzerdefinierter Name fuer Grid Popup Zeile 4. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_grid_4_color: { label: 'Farbe Grid Popup 4', helper: 'Farbe fuer Grid Popup Zeile 4 Text.' },
-          sensor_popup_grid_4_font_size: { label: 'Schriftgroesse Grid Popup 4 (px)', helper: 'Schriftgroesse fuer Grid Popup Zeile 4. Standard 16' },
-          sensor_popup_grid_5: { label: 'Grid Popup 5', helper: 'Entitaet fuer Grid Popup Zeile 5.' },
-          sensor_popup_grid_5_name: { label: 'Name Grid Popup 5', helper: 'Optionaler benutzerdefinierter Name fuer Grid Popup Zeile 5. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_grid_5_color: { label: 'Farbe Grid Popup 5', helper: 'Farbe fuer Grid Popup Zeile 5 Text.' },
-          sensor_popup_grid_5_font_size: { label: 'Schriftgroesse Grid Popup 5 (px)', helper: 'Schriftgroesse fuer Grid Popup Zeile 5. Standard 16' },
-          sensor_popup_grid_6: { label: 'Grid Popup 6', helper: 'Entitaet fuer Grid Popup Zeile 6.' },
-          sensor_popup_grid_6_name: { label: 'Name Grid Popup 6', helper: 'Optionaler benutzerdefinierter Name fuer Grid Popup Zeile 6. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_grid_6_color: { label: 'Farbe Grid Popup 6', helper: 'Farbe fuer Grid Popup Zeile 6 Text.' },
-          sensor_popup_grid_6_font_size: { label: 'Schriftgroesse Grid Popup 6 (px)', helper: 'Schriftgroesse fuer Grid Popup Zeile 6. Standard 16' },
-          sensor_popup_inverter_1: { label: 'Inverter Popup 1', helper: 'Entitaet fuer Inverter Popup Zeile 1.' },
-          sensor_popup_inverter_1_name: { label: 'Name Inverter Popup 1', helper: 'Optionaler benutzerdefinierter Name fuer Inverter Popup Zeile 1. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_inverter_1_color: { label: 'Farbe Inverter Popup 1', helper: 'Farbe fuer Inverter Popup Zeile 1 Text.' },
-          sensor_popup_inverter_1_font_size: { label: 'Schriftgroesse Inverter Popup 1 (px)', helper: 'Schriftgroesse fuer Inverter Popup Zeile 1. Standard 16' },
-          sensor_popup_inverter_2: { label: 'Inverter Popup 2', helper: 'Entitaet fuer Inverter Popup Zeile 2.' },
-          sensor_popup_inverter_2_name: { label: 'Name Inverter Popup 2', helper: 'Optionaler benutzerdefinierter Name fuer Inverter Popup Zeile 2. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_inverter_2_color: { label: 'Farbe Inverter Popup 2', helper: 'Farbe fuer Inverter Popup Zeile 2 Text.' },
-          sensor_popup_inverter_2_font_size: { label: 'Schriftgroesse Inverter Popup 2 (px)', helper: 'Schriftgroesse fuer Inverter Popup Zeile 2. Standard 16' },
-          sensor_popup_inverter_3: { label: 'Inverter Popup 3', helper: 'Entitaet fuer Inverter Popup Zeile 3.' },
-          sensor_popup_inverter_3_name: { label: 'Name Inverter Popup 3', helper: 'Optionaler benutzerdefinierter Name fuer Inverter Popup Zeile 3. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_inverter_3_color: { label: 'Farbe Inverter Popup 3', helper: 'Farbe fuer Inverter Popup Zeile 3 Text.' },
-          sensor_popup_inverter_3_font_size: { label: 'Schriftgroesse Inverter Popup 3 (px)', helper: 'Schriftgroesse fuer Inverter Popup Zeile 3. Standard 16' },
-          sensor_popup_inverter_4: { label: 'Inverter Popup 4', helper: 'Entitaet fuer Inverter Popup Zeile 4.' },
-          sensor_popup_inverter_4_name: { label: 'Name Inverter Popup 4', helper: 'Optionaler benutzerdefinierter Name fuer Inverter Popup Zeile 4. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_inverter_4_color: { label: 'Farbe Inverter Popup 4', helper: 'Farbe fuer Inverter Popup Zeile 4 Text.' },
-          sensor_popup_inverter_4_font_size: { label: 'Schriftgroesse Inverter Popup 4 (px)', helper: 'Schriftgroesse fuer Inverter Popup Zeile 4. Standard 16' },
-          sensor_popup_inverter_5: { label: 'Inverter Popup 5', helper: 'Entitaet fuer Inverter Popup Zeile 5.' },
-          sensor_popup_inverter_5_name: { label: 'Name Inverter Popup 5', helper: 'Optionaler benutzerdefinierter Name fuer Inverter Popup Zeile 5. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_inverter_5_color: { label: 'Farbe Inverter Popup 5', helper: 'Farbe fuer Inverter Popup Zeile 5 Text.' },
-          sensor_popup_inverter_5_font_size: { label: 'Schriftgroesse Inverter Popup 5 (px)', helper: 'Schriftgroesse fuer Inverter Popup Zeile 5. Standard 16' },
-          sensor_popup_inverter_6: { label: 'Inverter Popup 6', helper: 'Entitaet fuer Inverter Popup Zeile 6.' },
-          sensor_popup_inverter_6_name: { label: 'Name Inverter Popup 6', helper: 'Optionaler benutzerdefinierter Name fuer Inverter Popup Zeile 6. Leer lassen, um den Entitaetsnamen zu verwenden.' },
-          sensor_popup_inverter_6_color: { label: 'Farbe Inverter Popup 6', helper: 'Farbe fuer Inverter Popup Zeile 6 Text.' },
-          sensor_popup_inverter_6_font_size: { label: 'Schriftgroesse Inverter Popup 6 (px)', helper: 'Schriftgroesse fuer Inverter Popup Zeile 6. Standard 16' }
+          card_title: { label: 'Kartentitel', helper: 'Titel displayed at the top of the card. Leer lassen to disable.' },
+          title_text_color: { label: 'Titel Textfarbe', helper: 'Overrides the fill color for [data-role="title-text"]. Leer lassen to keep the SVG styling.' },
+          title_bg_color: { label: 'Titel Hintergrundfarbe', helper: 'Overrides the fill color for [data-role="title-bg"]. Leer lassen to keep the SVG styling.' },
+          font_family: { label: 'Schriftfamilie', helper: 'CSS font-family used for all SVG text (e.g., sans-serif, Roboto, "Segoe UI").' },
+          odometer_font_family: { label: 'Odometer Schriftfamilie (Monospace)', helper: 'Font family used only for odometer-animated values. Leer lassen to reuse Schriftfamilie. Tip: pick a monospace variant (e.g., "Roboto Mono" or "Space Mono").' },
+          background_day: { label: 'Hintergrund (Tag)', helper: 'Path to the day background SVG (e.g., /local/community/advanced-energy-card/advanced_background_day.svg).' },
+          background_night: { label: 'Hintergrund (Nacht)', helper: 'Path to the night background SVG (e.g., /local/community/advanced-energy-card/advanced_background_night.svg).' },
+          night_mode: { label: 'Tag/Nacht-Modus', helper: 'Wähle Day, Night, or Auto. Auto uses sun.sun: above_horizon = Day, below_horizon = Night.' },
+          language: { label: 'Sprache', helper: 'Wähle the editor language.' },
+          display_unit: { label: 'Anzeigeeinheit', helper: 'Unit used when formatting power values.' },
+          update_interval: { label: 'Aktualisierungsintervall', helper: 'Refresh cadence for card updates (0 disables throttling).' },
+          initial_configuration: { label: 'Erstkonfiguration', helper: 'Show the Erstkonfiguration section in the editor.' },
+          initial_has_pv: { label: 'Do you have Solar/PV Leistung?', helper: 'Wähle Yes if you have solar production to configure.' },
+          initial_inverters: { label: 'How many inverters do you have?', helper: 'Shown only when Solar/PV is enabled.' },
+          initial_has_battery: { label: 'Do you have Batterie storage?', helper: '' },
+          initial_battery_count: { label: 'How many Batteries do you have? Maximum 4', helper: '' },
+          initial_has_grid: { label: 'Do you have Netz supplied electricity?', helper: '' },
+          initial_can_export: { label: 'Can you export excess electricity to the grid?', helper: '' },
+          initial_has_windmill: { label: 'Do you have a Windrad?', helper: '' },
+          initial_has_ev: { label: 'Do you have Electric Vehicles/EV\'s?', helper: '' },
+          initial_ev_count: { label: 'How many do you have?', helper: '' },
+          initial_config_items_title: { label: 'Erforderlich configuration items', helper: '' },
+          initial_config_items_helper: { label: 'These items become relevant based on your answers above.', helper: '' },
+          initial_config_items_empty: { label: 'No items to show yet.', helper: '' },
+          initial_config_complete_helper: { label: 'This completes the last required minimum configuration. Once clicking on the Complete button, please review all menus to check for additional items and popup configurations. This initial configuration can be re-enabled in the General menu.', helper: '' },
+          initial_config_complete_button: { label: 'Complete', helper: '' },
+          array_helper_text: { label: 'Each Array must have at minimum a combined Solar/PV total sensor which is the total power output of that Array or individual string values which are added together to get the total power output of the array. Täglich production can be supplied and can be shown in a Täglich production card.', helper: '' },
+          animation_speed_factor: { label: 'Animationsgeschwindigkeitsfaktor', helper: 'Adjust animation speed multiplier (-3x to 3x). Set 0 to pause; negatives reverse direction.' },
+          animation_style: { label: 'Animationsstil (Tag)', helper: 'Flow animation style used when the card is in Day mode.' },
+          night_animation_style: { label: 'Animationsstil (Nacht)', helper: 'Flow animation style used when the card is in Night mode. Leer lassen to use the Day style.' },
+          dashes_glow_intensity: { label: 'Leuchtintensität (Striche)', helper: 'Controls glow strength for "Dashes + Glow" (0 disables glow).' },
+          fluid_flow_outer_glow: { label: 'Äußeres Leuchten (Fließend)', helper: 'Aktivieren the extra outer haze/glow layer for animation_style: fluid_flow.' },
+          flow_stroke_width: { label: 'Flow Stroke Width ((px))', helper: 'Optional override for the animated flow stroke width (no SVG edits). Leer lassen to keep SVG defaults.' },
+          fluid_flow_stroke_width: { label: 'Fluid Flow Stroke Width ((px))', helper: 'Base stroke width for animation_style: fluid_flow. Overlay/mask widths are derived from this (default 5).' },
+          sensor_pv_total: { label: 'PV-Gesamtsensor', helper: 'Optional aggregate production sensor displayed as the combined line.' },
+          sensor_pv_total_secondary: { label: 'PV-Gesamtsensor (Wechselrichter 2)', helper: 'Optional second inverter total; added to the PV total when provided.' },
+          sensor_windmill_total: { label: 'Windrad Total', helper: 'Leistung sensor for the windmill generator (W). When not configured the windmill SVG group is hidden.' },
+          sensor_windmill_daily: { label: 'Täglich Windrad Ertrag', helper: 'Optional sensor reporting daily windmill production totals.' },
+          sensor_pv1: { label: 'PV String 1 (Array 1)', helper: 'Array 1 solar production sensor for string 1.' },
+          sensor_pv2: { label: 'PV String 2 (Array 1)', helper: 'Array 1 solar production sensor for string 2.' },
+          sensor_pv3: { label: 'PV String 3 (Array 1)', helper: 'Array 1 solar production sensor for string 3.' },
+          sensor_pv4: { label: 'PV String 4 (Array 1)', helper: 'Array 1 solar production sensor for string 4.' },
+          sensor_pv5: { label: 'PV String 5 (Array 1)', helper: 'Array 1 solar production sensor for string 5.' },
+          sensor_pv6: { label: 'PV String 6 (Array 1)', helper: 'Array 1 solar production sensor for string 6.' },
+          sensor_pv_array2_1: { label: 'PV String 1 (Array 2)', helper: 'Array 2 solar production sensor for string 1.' },
+          sensor_pv_array2_2: { label: 'PV String 2 (Array 2)', helper: 'Array 2 solar production sensor for string 2.' },
+          sensor_pv_array2_3: { label: 'PV String 3 (Array 2)', helper: 'Array 2 solar production sensor for string 3.' },
+          sensor_pv_array2_4: { label: 'PV String 4 (Array 2)', helper: 'Array 2 solar production sensor for string 4.' },
+          sensor_pv_array2_5: { label: 'PV String 5 (Array 2)', helper: 'Array 2 solar production sensor for string 5.' },
+          sensor_pv_array2_6: { label: 'PV String 6 (Array 2)', helper: 'Array 2 solar production sensor for string 6.' },
+          sensor_daily: { label: 'Täglich Ertrag Sensor', helper: 'Sensor reporting daily production totals. Either the PV total sensor or your PV string arrays need to be specified as a minimum.' },
+          sensor_daily_array2: { label: 'Täglich Ertrag Sensor (Array 2)', helper: 'Sensor reporting daily production totals for Array 2.' },
+          sensor_bat1_soc: { label: 'Batterie 1 SOC', helper: 'Ladezustand sensor for Batterie 1 (percentage).' },
+          sensor_bat1_power: { label: 'Batterie 1 Leistung', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batterie 1 becomes active.' },
+          sensor_bat1_charge_power: { label: 'Batterie 1 Laden Leistung', helper: 'Sensor for Batterie 1 charging power.' },
+          sensor_bat1_discharge_power: { label: 'Batterie 1 Entladen Leistung', helper: 'Sensor for Batterie 1 discharging power.' },
+          sensor_bat2_soc: { label: 'Batterie 2 SOC', helper: 'Ladezustand sensor for Batterie 2 (percentage).' },
+          sensor_bat2_power: { label: 'Batterie 2 Leistung', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batterie 2 becomes active.' },
+          sensor_bat2_charge_power: { label: 'Batterie 2 Laden Leistung', helper: 'Sensor for Batterie 2 charging power.' },
+          sensor_bat2_discharge_power: { label: 'Batterie 2 Entladen Leistung', helper: 'Sensor for Batterie 2 discharging power.' },
+          sensor_bat3_soc: { label: 'Batterie 3 SOC', helper: 'Ladezustand sensor for Batterie 3 (percentage).' },
+          sensor_bat3_power: { label: 'Batterie 3 Leistung', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batterie 3 becomes active.' },
+          sensor_bat3_charge_power: { label: 'Batterie 3 Laden Leistung', helper: 'Sensor for Batterie 3 charging power.' },
+          sensor_bat3_discharge_power: { label: 'Batterie 3 Entladen Leistung' },
+          sensor_bat4_soc: { label: 'Batterie 4 SOC', helper: 'Ladezustand sensor for Batterie 4 (percentage).' },
+          sensor_bat4_power: { label: 'Batterie 4 Leistung', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batterie 4 becomes active.' },
+          sensor_bat4_charge_power: { label: 'Batterie 4 Laden Leistung', helper: 'Sensor for Batterie 4 charging power.' },
+          sensor_bat4_discharge_power: { label: 'Batterie 4 Entladen Leistung', helper: 'Sensor for Batterie 4 discharging power.' },
+          sensor_home_load: { label: 'Home Load/Consumption (Erforderlich)', helper: 'Total household consumption sensor.' },
+          sensor_home_load_secondary: { label: 'Home Load (Wechselrichter 2)', helper: 'Optional house load sensor for the second inverter.' },
+          sensor_heat_pump_consumption: { label: 'Heat Pump Consumption', helper: 'Sensor for heat pump energy consumption.' },
+          sensor_hot_water_consumption: { label: 'Water Heating', helper: 'Sensor for Hot Water Heating Load.' },
+          sensor_pool_consumption: { label: 'Pool', helper: 'Sensor for pool power/consumption.' },
+          sensor_washing_machine_consumption: { label: 'Washing Machine', helper: 'Sensor for washing machine power/consumption.' },
+          sensor_dishwasher_consumption: { label: 'Dish Washer', helper: 'Sensor for Dish Washer Load.' },
+          sensor_dryer_consumption: { label: 'Dryer', helper: 'Sensor for dryer power/consumption.' },
+          sensor_refrigerator_consumption: { label: 'Refrigerator', helper: 'Sensor for refrigerator power/consumption.' },
+          hot_water_text_color: { label: 'Water Heating Textfarbe', helper: 'Farbe applied to the hot water power text.' },
+          dishwasher_text_color: { label: 'Dish Washer Textfarbe', helper: 'Farbe applied to the dish washer power text.' },
+          hot_water_font_size: { label: 'Water Heating Font Size ((px))', helper: 'Standard 8' },
+          dishwasher_font_size: { label: 'Dish Washer Font Size ((px))', helper: 'Standard 8' },
+          sensor_grid_power: { label: 'Netz Wechselrichter 1 Leistung', helper: 'Positive/negative grid flow sensor for inverter 1. Specify either this sensor or both Netz Wechselrichter 1 Import Sensor and Netz Wechselrichter 1 Export Sensor.' },
+          sensor_grid_import: { label: 'Netz Wechselrichter 1 Import Sensor', helper: 'Optional entity reporting inverter 1 grid import (positive) power.' },
+          sensor_grid_export: { label: 'Netz Wechselrichter 1 Export Sensor', helper: 'Optional entity reporting inverter 1 grid export (positive) power.' },
+          sensor_grid_import_daily: { label: 'Täglich Netz Wechselrichter 1 Import Sensor', helper: 'Optional entity reporting cumulative inverter 1 grid import for the current day.' },
+          sensor_grid_export_daily: { label: 'Täglich Netz Wechselrichter 1 Export Sensor', helper: 'Optional entity reporting cumulative inverter 1 grid export for the current day.' },
+          sensor_grid2_power: { label: 'Netz Wechselrichter 2 Leistung', helper: 'Positive/negative grid flow sensor for inverter 2. Specify either this sensor or both Netz Wechselrichter 2 Import Sensor and Netz Wechselrichter 2 Export Sensor.' },
+          sensor_grid2_import: { label: 'Netz Wechselrichter 2 Import Sensor', helper: 'Optional entity reporting inverter 2 grid import (positive) power.' },
+          sensor_grid2_export: { label: 'Netz Wechselrichter 2 Export Sensor', helper: 'Optional entity reporting inverter 2 grid export (positive) power.' },
+          sensor_grid2_import_daily: { label: 'Täglich Netz Wechselrichter 2 Import Sensor', helper: 'Optional entity reporting cumulative inverter 2 grid import for the current day.' },
+          sensor_grid2_export_daily: { label: 'Täglich Netz Wechselrichter 2 Export Sensor', helper: 'Optional entity reporting cumulative inverter 2 grid export for the current day.' },
+          show_daily_grid: { label: 'Show Täglich Netz Values', helper: 'Show the daily import/export totals under the current grid flow when enabled.' },
+          grid_daily_font_size: { label: 'Täglich Netz Font Size ((px))', helper: 'Optional override for daily grid import/export text. Standards to Netz Font Size.' },
+          grid_current_odometer: { label: 'Odometer: Netz Current', helper: 'Animate Netz Current with a per-digit rolling effect.' },
+          grid_current_odometer_duration: { label: 'Odometer Dauer ((ms))', helper: 'Animation duration in milliseconds. Standard 350.' },
+          show_grid_flow_label: { label: 'Show Netz Import/Export Name', helper: 'Prepend the importing/exporting label before the grid value when enabled.' },
+          enable_echo_alive: { label: 'Aktivieren Echo Alive', helper: 'Aktivierens an invisible iframe to keep the Silk browser open on Echo Show. The button will be positioned in a corner of the card.' },
+          pv_tot_color: { label: 'PV Total Farbe', helper: 'Colour applied to the PV TOTAL text line.' },
+          pv_primary_color: { label: 'PV 1 Flow Farbe', helper: 'Colour used for the primary PV animation line.' },
+          pv_secondary_color: { label: 'PV 2 Flow Farbe', helper: 'Colour used for the secondary PV animation line when available.' },
+          load_flow_color: { label: 'Load Flow Farbe', helper: 'Colour applied to the home load animation line.' },
+          load_text_color: { label: 'Load Textfarbe', helper: 'Colour applied to the home load text when thresholds are inactive.' },
+          house_total_color: { label: 'Haus Total Farbe', helper: 'Colour applied to the HOUSE TOT text/flow.' },
+          inv1_color: { label: 'Wechselrichter 1 to Haus Farbe', helper: 'Farbe applied to the flow from Wechselrichter 1 to the house.' },
+          inv2_color: { label: 'Wechselrichter 2 to Haus Farbe', helper: 'Farbe applied to the flow from Wechselrichter 2 to the house.' },
+          load_threshold_warning: { label: 'Load Warning Schwellenwert', helper: 'Change load color when magnitude equals or exceeds this value. Uses the selected display unit.' },
+          load_warning_color: { label: 'Load Warning Farbe', helper: 'Hex or CSS color applied at the load warning threshold.' },
+          load_threshold_critical: { label: 'Load Critical Schwellenwert', helper: 'Change load color when magnitude equals or exceeds this value. Uses the selected display unit.' },
+          load_critical_color: { label: 'Load Critical Farbe', helper: 'Hex or CSS color applied at the load critical threshold.' },
+          battery_soc_color: { label: 'Batterie SOC Farbe', helper: 'Hex color applied to the battery SOC percentage text.' },
+          battery_charge_color: { label: 'Batterie Laden Flow Farbe', helper: 'Colour used when energy is flowing into the battery.' },
+          battery_discharge_color: { label: 'Batterie Entladen Flow Farbe', helper: 'Colour used when energy is flowing from the battery.' },
+          grid_import_color: { label: 'Wechselrichter 1 Netz Import Flow Farbe', helper: 'Base colour before thresholds when inverter 1 is importing from the grid.' },
+          grid_export_color: { label: 'Wechselrichter 1 Netz Export Flow Farbe', helper: 'Base colour before thresholds when inverter 1 is exporting to the grid.' },
+          grid2_import_color: { label: 'Wechselrichter 2 Netz Import Flow Farbe', helper: 'Base colour before thresholds when inverter 2 is importing from the grid.' },
+          grid2_export_color: { label: 'Wechselrichter 2 Netz Export Flow Farbe', helper: 'Base colour before thresholds when inverter 2 is exporting to the grid.' },
+          car_flow_color: { label: 'EV Flow Farbe', helper: 'Colour applied to the electric vehicle animation line.' },
+          battery_fill_high_color: { label: 'Batterie Fill (Normal) Farbe', helper: 'Liquid fill colour when the battery SOC is above the low threshold.' },
+          battery_fill_low_color: { label: 'Batterie Fill (Low) Farbe', helper: 'Liquid fill colour when the battery SOC is at or below the low threshold.' },
+          battery_fill_low_threshold: { label: 'Batterie Low Fill Schwellenwert (%)', helper: 'Use the low fill colour when SOC is at or below this percentage.' },
+          battery_fill_opacity: { label: 'Batterie Fill Opacity', helper: 'Opacity for the battery fill level (0-1).' },
+          grid_activity_threshold: { label: 'Netz Animation Schwellenwert (W)', helper: 'Ignore grid flows whose absolute value is below this wattage before animating.' },
+          grid_power_only: { label: 'Netz Leistung Only', helper: 'Hide inverter/battery flows and show a direct grid-to-house flow.' },
+          grid_threshold_warning: { label: 'Wechselrichter 1 Netz Warning Schwellenwert', helper: 'Change inverter 1 grid color when magnitude equals or exceeds this value. Uses the selected display unit.' },
+          grid_warning_color: { label: 'Wechselrichter 1 Netz Warning Farbe', helper: 'Hex or CSS color applied at the inverter 1 warning threshold.' },
+          grid_threshold_critical: { label: 'Wechselrichter 1 Netz Critical Schwellenwert', helper: 'Change inverter 1 grid color when magnitude equals or exceeds this value. Uses the selected display unit.' },
+          grid_critical_color: { label: 'Wechselrichter 1 Netz Critical Farbe', helper: 'Hex or CSS color applied at the inverter 1 critical threshold.' },
+          grid2_threshold_warning: { label: 'Wechselrichter 2 Netz Warning Schwellenwert', helper: 'Change inverter 2 grid color when magnitude equals or exceeds this value. Uses the selected display unit.' },
+          grid2_warning_color: { label: 'Wechselrichter 2 Netz Warning Farbe', helper: 'Hex or CSS color applied at the inverter 2 warning threshold.' },
+          grid2_threshold_critical: { label: 'Wechselrichter 2 Netz Critical Schwellenwert', helper: 'Change inverter 2 grid color when magnitude equals or exceeds this value. Uses the selected display unit.' },
+          grid2_critical_color: { label: 'Wechselrichter 2 Netz Critical Farbe', helper: 'Hex or CSS color applied at the inverter 2 critical threshold.' },
+          invert_grid: { label: 'Invert Netz Values', helper: 'Aktivieren if import/export polarity is reversed.' },
+          invert_battery: { label: 'Invert Batterie Values', helper: 'Aktivieren if charge/discharge polarity is reversed.' },
+          invert_bat1: { label: 'Invert Batterie 1 Values', helper: 'Aktivieren if Batterie 1 charge/discharge polarity is reversed.' },
+          invert_bat2: { label: 'Invert Batterie 2 Values', helper: 'Aktivieren if Batterie 2 charge/discharge polarity is reversed.' },
+          invert_bat3: { label: 'Invert Batterie 3 Values', helper: 'Aktivieren if Batterie 3 charge/discharge polarity is reversed.' },
+          sensor_car_power: { label: 'Auto 1 Leistung Sensor', helper: 'Sensor for EV charge/discharge power.' },
+          sensor_car_soc: { label: 'Auto 1 SOC Sensor', helper: 'Ladezustand sensor for EV 1 (percentage).' },
+          car_soc: { label: 'Auto SOC', helper: 'Sensor for EV battery SOC (percentage).' },
+          car_charger_power: { label: 'Auto Charger Leistung', helper: 'Sensor for EV charger power.' },
+          car1_label: { label: 'Auto 1 Bezeichnung', helper: 'Text displayed next to the first EV values.' },
+          sensor_car2_power: { label: 'Auto 2 Leistung Sensor', helper: 'Sensor for EV 2 charge/discharge power.' },
+          car2_power: { label: 'Auto 2 Leistung', helper: 'Sensor for EV 2 charge/discharge power.' },
+          sensor_car2_soc: { label: 'Auto 2 SOC Sensor', helper: 'Ladezustand sensor for EV 2 (percentage).' },
+          car2_soc: { label: 'Auto 2 SOC', helper: 'Sensor for EV 2 battery SOC (percentage).' },
+          car2_charger_power: { label: 'Auto 2 Charger Leistung', helper: 'Sensor for EV 2 charger power.' },
+          car2_label: { label: 'Auto 2 Bezeichnung', helper: 'Text displayed next to the second EV values.' },
+          car_headlight_flash: { label: 'Headlight Flash While Charging', helper: 'Aktivieren to flash the EV headlights whenever charging is detected.' },
+          car1_glow_brightness: { label: 'Auto Glow Effect', helper: 'Percentage the car flow effects show while not charging.' },
+          car2_glow_brightness: { label: 'Auto Glow Effect', helper: 'Percentage the car flow effects show while not charging.' },
+          car_pct_color: { label: 'Auto SOC Farbe', helper: 'Hex color for EV SOC text (e.g., #00FFFF).' },
+          car2_pct_color: { label: 'Auto 2 SOC Farbe', helper: 'Hex color for second EV SOC text (falls back to Auto SOC Farbe).' },
+          car1_name_color: { label: 'Auto 1 Name Farbe', helper: 'Farbe applied to the Auto 1 name label.' },
+          car2_name_color: { label: 'Auto 2 Name Farbe', helper: 'Farbe applied to the Auto 2 name label.' },
+          car1_color: { label: 'Auto 1 Farbe', helper: 'Farbe applied to Auto 1 power value.' },
+          car2_color: { label: 'Auto 2 Farbe', helper: 'Farbe applied to Auto 2 power value.' },
+          heat_pump_label: { label: 'Heat Pump Bezeichnung', helper: 'Custom label for the heat pump/AC line (defaults to "Heat Pump/AC").' },
+          heat_pump_flow_color: { label: 'Heat Pump Flow Farbe', helper: 'Farbe applied to the heat pump flow animation.' },
+          heat_pump_text_color: { label: 'Heat Pump Textfarbe', helper: 'Farbe applied to the heat pump power text.' },
+          pool_flow_color: { label: 'Pool Flow Farbe', helper: 'Farbe applied to the pool flow animation.' },
+          pool_text_color: { label: 'Pool Textfarbe', helper: 'Farbe applied to the pool power text.' },
+          washing_machine_text_color: { label: 'Washing Machine Textfarbe', helper: 'Farbe applied to the washing machine power text.' },
+          dryer_text_color: { label: 'Dryer Textfarbe', helper: 'Farbe applied to the dryer power text.' },
+          refrigerator_text_color: { label: 'Refrigerator Textfarbe', helper: 'Farbe applied to the refrigerator power text.' },
+          windmill_flow_color: { label: 'Windrad Flow Farbe', helper: 'Farbe applied to the windmill flow (data-flow-key="windmill-inverter1" / "windmill-inverter2").' },
+          windmill_text_color: { label: 'Windrad Textfarbe', helper: 'Farbe applied to the windmill power text (data-role="windmill-power").' },
+          header_font_size: { label: 'Header Font Size ((px))', helper: 'Standard 8' },
+          daily_label_font_size: { label: 'Täglich Bezeichnung Font Size ((px))', helper: 'Standard 8' },
+          daily_value_font_size: { label: 'Täglich Value Font Size ((px))', helper: 'Standard 20' },
+          pv_font_size: { label: 'PV Text Font Size ((px))', helper: 'Standard 8' },
+          windmill_power_font_size: { label: 'Windrad Leistung Font Size ((px))', helper: 'Standard 8' },
+          battery_soc_font_size: { label: 'Batterie SOC Font Size ((px))', helper: 'Standard 20' },
+          battery_power_font_size: { label: 'Batterie Leistung Font Size ((px))', helper: 'Standard 8' },
+          load_font_size: { label: 'Load Font Size ((px))', helper: 'Standard 8' },
+          inv1_power_font_size: { label: 'INV 1 Leistung Font Size ((px))', helper: 'Font size for the INV 1 power line. Standard uses Load Font Size.' },
+          inv2_power_font_size: { label: 'INV 2 Leistung Font Size ((px))', helper: 'Font size for the INV 2 power line. Standard uses Load Font Size.' },
+          heat_pump_font_size: { label: 'Heat Pump Font Size ((px))', helper: 'Standard 8' },
+          pool_font_size: { label: 'Pool Font Size ((px))', helper: 'Standard 8' },
+          washing_machine_font_size: { label: 'Washing Machine Font Size ((px))', helper: 'Standard 8' },
+          dryer_font_size: { label: 'Dryer Font Size ((px))', helper: 'Standard 8' },
+          refrigerator_font_size: { label: 'Refrigerator Font Size ((px))', helper: 'Standard 8' },
+          grid_font_size: { label: 'Netz Font Size ((px))', helper: 'Standard 8' },
+          car_power_font_size: { label: 'Auto Leistung Font Size ((px))', helper: 'Standard 8' },
+          car2_power_font_size: { label: 'Auto 2 Leistung Font Size ((px))', helper: 'Standard 8' },
+          car_name_font_size: { label: 'Auto Name Font Size ((px))', helper: 'Standard 8' },
+          car2_name_font_size: { label: 'Auto 2 Name Font Size ((px))', helper: 'Standard 8' },
+          car_soc_font_size: { label: 'Auto SOC Font Size ((px))', helper: 'Standard 8' },
+          car2_soc_font_size: { label: 'Auto 2 SOC Font Size ((px))', helper: 'Standard 8' },
+          sensor_popup_pv_1: { label: 'PV Popup 1', helper: 'Entity for PV popup line 1.' },
+          sensor_popup_pv_2: { label: 'PV Popup 2', helper: 'Entity for PV popup line 2.' },
+          sensor_popup_pv_3: { label: 'PV Popup 3', helper: 'Entity for PV popup line 3.' },
+          sensor_popup_pv_4: { label: 'PV Popup 4', helper: 'Entity for PV popup line 4.' },
+          sensor_popup_pv_5: { label: 'PV Popup 5', helper: 'Entity for PV popup line 5.' },
+          sensor_popup_pv_6: { label: 'PV Popup 6', helper: 'Entity for PV popup line 6.' },
+          sensor_popup_pv_1_name: { label: 'PV Popup 1 Name', helper: 'Optional custom name for PV popup line 1. Leer lassen to use entity name.' },
+          sensor_popup_pv_2_name: { label: 'PV Popup 2 Name', helper: 'Optional custom name for PV popup line 2. Leer lassen to use entity name.' },
+          sensor_popup_pv_3_name: { label: 'PV Popup 3 Name', helper: 'Optional custom name for PV popup line 3. Leer lassen to use entity name.' },
+          sensor_popup_pv_4_name: { label: 'PV Popup 4 Name', helper: 'Optional custom name for PV popup line 4. Leer lassen to use entity name.' },
+          sensor_popup_pv_5_name: { label: 'PV Popup 5 Name', helper: 'Optional custom name for PV popup line 5. Leer lassen to use entity name.' },
+          sensor_popup_pv_6_name: { label: 'PV Popup 6 Name', helper: 'Optional custom name for PV popup line 6. Leer lassen to use entity name.' },
+          sensor_popup_pv_1_color: { label: 'PV Popup 1 Farbe', helper: 'Farbe for PV popup line 1 text.' },
+          sensor_popup_pv_2_color: { label: 'PV Popup 2 Farbe', helper: 'Farbe for PV popup line 2 text.' },
+          sensor_popup_pv_3_color: { label: 'PV Popup 3 Farbe', helper: 'Farbe for PV popup line 3 text.' },
+          sensor_popup_pv_4_color: { label: 'PV Popup 4 Farbe', helper: 'Farbe for PV popup line 4 text.' },
+          sensor_popup_pv_5_color: { label: 'PV Popup 5 Farbe', helper: 'Farbe for PV popup line 5 text.' },
+          sensor_popup_pv_6_color: { label: 'PV Popup 6 Farbe', helper: 'Farbe for PV popup line 6 text.' },
+          sensor_popup_pv_1_font_size: { label: 'PV Popup 1 Font Size ((px))', helper: 'Font size for PV popup line 1. Standard 8' },
+          sensor_popup_pv_2_font_size: { label: 'PV Popup 2 Font Size ((px))', helper: 'Font size for PV popup line 2. Standard 8' },
+          sensor_popup_pv_3_font_size: { label: 'PV Popup 3 Font Size ((px))', helper: 'Font size for PV popup line 3. Standard 8' },
+          sensor_popup_pv_4_font_size: { label: 'PV Popup 4 Font Size ((px))', helper: 'Font size for PV popup line 4. Standard 8' },
+          sensor_popup_pv_5_font_size: { label: 'PV Popup 5 Font Size ((px))', helper: 'Font size for PV popup line 5. Standard 8' },
+          sensor_popup_pv_6_font_size: { label: 'PV Popup 6 Font Size ((px))', helper: 'Font size for PV popup line 6. Standard 8' },
+          sensor_popup_house_1: { label: 'Haus Popup 1', helper: 'Entity for house popup line 1.' },
+          sensor_popup_house_1_name: { label: 'Haus Popup 1 Name', helper: 'Optional custom name for house popup line 1. Leer lassen to use entity name.' },
+          sensor_popup_house_1_color: { label: 'Haus Popup 1 Farbe', helper: 'Farbe for house popup line 1 text.' },
+          sensor_popup_house_1_font_size: { label: 'Haus Popup 1 Font Size ((px))', helper: 'Font size for house popup line 1. Standard 8' },
+          sensor_popup_house_2: { label: 'Haus Popup 2', helper: 'Entity for house popup line 2.' },
+          sensor_popup_house_2_name: { label: 'Haus Popup 2 Name', helper: 'Optional custom name for house popup line 2. Leer lassen to use entity name.' },
+          sensor_popup_house_2_color: { label: 'Haus Popup 2 Farbe', helper: 'Farbe for house popup line 2 text.' },
+          sensor_popup_house_2_font_size: { label: 'Haus Popup 2 Font Size ((px))', helper: 'Font size for house popup line 2. Standard 8' },
+          sensor_popup_house_3: { label: 'Haus Popup 3', helper: 'Entity for house popup line 3.' },
+          sensor_popup_house_3_name: { label: 'Haus Popup 3 Name', helper: 'Optional custom name for house popup line 3. Leer lassen to use entity name.' },
+          sensor_popup_house_3_color: { label: 'Haus Popup 3 Farbe', helper: 'Farbe for house popup line 3 text.' },
+          sensor_popup_house_3_font_size: { label: 'Haus Popup 3 Font Size ((px))', helper: 'Font size for house popup line 3. Standard 8' },
+          sensor_popup_house_4: { label: 'Haus Popup 4', helper: 'Entity for house popup line 4.' },
+          sensor_popup_house_4_name: { label: 'Haus Popup 4 Name', helper: 'Optional custom name for house popup line 4. Leer lassen to use entity name.' },
+          sensor_popup_house_4_color: { label: 'Haus Popup 4 Farbe', helper: 'Farbe for house popup line 4 text.' },
+          sensor_popup_house_4_font_size: { label: 'Haus Popup 4 Font Size ((px))', helper: 'Font size for house popup line 4. Standard 8' },
+          sensor_popup_house_5: { label: 'Haus Popup 5', helper: 'Entity for house popup line 5.' },
+          sensor_popup_house_5_name: { label: 'Haus Popup 5 Name', helper: 'Optional custom name for house popup line 5. Leer lassen to use entity name.' },
+          sensor_popup_house_5_color: { label: 'Haus Popup 5 Farbe', helper: 'Farbe for house popup line 5 text.' },
+          sensor_popup_house_5_font_size: { label: 'Haus Popup 5 Font Size ((px))', helper: 'Font size for house popup line 5. Standard 8' },
+          sensor_popup_house_6: { label: 'Haus Popup 6', helper: 'Entity for house popup line 6.' },
+          sensor_popup_house_6_name: { label: 'Haus Popup 6 Name', helper: 'Optional custom name for house popup line 6. Leer lassen to use entity name.' },
+          sensor_popup_house_6_color: { label: 'Haus Popup 6 Farbe', helper: 'Farbe for house popup line 6 text.' },
+          sensor_popup_house_6_font_size: { label: 'Haus Popup 6 Font Size ((px))', helper: 'Font size for house popup line 6. Standard 8' },
+          sensor_popup_bat_1: { label: 'Batterie Popup 1', helper: 'Entity for battery popup line 1.' },
+          sensor_popup_bat_1_name: { label: 'Batterie Popup 1 Name', helper: 'Optional custom name for battery popup line 1. Leer lassen to use entity name.' },
+          sensor_popup_bat_1_color: { label: 'Batterie Popup 1 Farbe', helper: 'Farbe for battery popup line 1 text.' },
+          sensor_popup_bat_1_font_size: { label: 'Batterie Popup 1 Font Size ((px))', helper: 'Font size for battery popup line 1. Standard 8' },
+          sensor_popup_bat_2: { label: 'Batterie Popup 2', helper: 'Entity for battery popup line 2.' },
+          sensor_popup_bat_2_name: { label: 'Batterie Popup 2 Name', helper: 'Optional custom name for battery popup line 2. Leer lassen to use entity name.' },
+          sensor_popup_bat_2_color: { label: 'Batterie Popup 2 Farbe', helper: 'Farbe for battery popup line 2 text.' },
+          sensor_popup_bat_2_font_size: { label: 'Batterie Popup 2 Font Size ((px))', helper: 'Font size for battery popup line 2. Standard 8' },
+          sensor_popup_bat_3: { label: 'Batterie Popup 3', helper: 'Entity for battery popup line 3.' },
+          sensor_popup_bat_3_name: { label: 'Batterie Popup 3 Name', helper: 'Optional custom name for battery popup line 3. Leer lassen to use entity name.' },
+          sensor_popup_bat_3_color: { label: 'Batterie Popup 3 Farbe', helper: 'Farbe for battery popup line 3 text.' },
+          sensor_popup_bat_3_font_size: { label: 'Batterie Popup 3 Font Size ((px))', helper: 'Font size for battery popup line 3. Standard 8' },
+          sensor_popup_bat_4: { label: 'Batterie Popup 4', helper: 'Entity for battery popup line 4.' },
+          sensor_popup_bat_4_name: { label: 'Batterie Popup 4 Name', helper: 'Optional custom name for battery popup line 4. Leer lassen to use entity name.' },
+          sensor_popup_bat_4_color: { label: 'Batterie Popup 4 Farbe', helper: 'Farbe for battery popup line 4 text.' },
+          sensor_popup_bat_4_font_size: { label: 'Batterie Popup 4 Font Size ((px))', helper: 'Font size for battery popup line 4. Standard 8' },
+          sensor_popup_bat_5: { label: 'Batterie Popup 5', helper: 'Entity for battery popup line 5.' },
+          sensor_popup_bat_5_name: { label: 'Batterie Popup 5 Name', helper: 'Optional custom name for battery popup line 5. Leer lassen to use entity name.' },
+          sensor_popup_bat_5_color: { label: 'Batterie Popup 5 Farbe', helper: 'Farbe for battery popup line 5 text.' },
+          sensor_popup_bat_5_font_size: { label: 'Batterie Popup 5 Font Size ((px))', helper: 'Font size for battery popup line 5. Standard 8' },
+          sensor_popup_bat_6: { label: 'Batterie Popup 6', helper: 'Entity for battery popup line 6.' },
+          sensor_popup_bat_6_name: { label: 'Batterie Popup 6 Name', helper: 'Optional custom name for battery popup line 6. Leer lassen to use entity name.' },
+          sensor_popup_bat_6_color: { label: 'Batterie Popup 6 Farbe', helper: 'Farbe for battery popup line 6 text.' },
+          sensor_popup_bat_6_font_size: { label: 'Batterie Popup 6 Font Size ((px))', helper: 'Font size for battery popup line 6. Standard 8' },
+          sensor_popup_grid_1: { label: 'Netz Popup 1', helper: 'Entity for grid popup line 1.' },
+          sensor_popup_grid_1_name: { label: 'Netz Popup 1 Name', helper: 'Optional custom name for grid popup line 1. Leer lassen to use entity name.' },
+          sensor_popup_grid_1_color: { label: 'Netz Popup 1 Farbe', helper: 'Farbe for grid popup line 1 text.' },
+          sensor_popup_grid_1_font_size: { label: 'Netz Popup 1 Font Size ((px))', helper: 'Font size for grid popup line 1. Standard 8' },
+          sensor_popup_grid_2: { label: 'Netz Popup 2', helper: 'Entity for grid popup line 2.' },
+          sensor_popup_grid_2_name: { label: 'Netz Popup 2 Name', helper: 'Optional custom name for grid popup line 2. Leer lassen to use entity name.' },
+          sensor_popup_grid_2_color: { label: 'Netz Popup 2 Farbe', helper: 'Farbe for grid popup line 2 text.' },
+          sensor_popup_grid_2_font_size: { label: 'Netz Popup 2 Font Size ((px))', helper: 'Font size for grid popup line 2. Standard 8' },
+          sensor_popup_grid_3: { label: 'Netz Popup 3', helper: 'Entity for grid popup line 3.' },
+          sensor_popup_grid_3_name: { label: 'Netz Popup 3 Name', helper: 'Optional custom name for grid popup line 3. Leer lassen to use entity name.' },
+          sensor_popup_grid_3_color: { label: 'Netz Popup 3 Farbe', helper: 'Farbe for grid popup line 3 text.' },
+          sensor_popup_grid_3_font_size: { label: 'Netz Popup 3 Font Size ((px))', helper: 'Font size for grid popup line 3. Standard 8' },
+          sensor_popup_grid_4: { label: 'Netz Popup 4', helper: 'Entity for grid popup line 4.' },
+          sensor_popup_grid_4_name: { label: 'Netz Popup 4 Name', helper: 'Optional custom name for grid popup line 4. Leer lassen to use entity name.' },
+          sensor_popup_grid_4_color: { label: 'Netz Popup 4 Farbe', helper: 'Farbe for grid popup line 4 text.' },
+          sensor_popup_grid_4_font_size: { label: 'Netz Popup 4 Font Size ((px))', helper: 'Font size for grid popup line 4. Standard 8' },
+          sensor_popup_grid_5: { label: 'Netz Popup 5', helper: 'Entity for grid popup line 5.' },
+          sensor_popup_grid_5_name: { label: 'Netz Popup 5 Name', helper: 'Optional custom name for grid popup line 5. Leer lassen to use entity name.' },
+          sensor_popup_grid_5_color: { label: 'Netz Popup 5 Farbe', helper: 'Farbe for grid popup line 5 text.' },
+          sensor_popup_grid_5_font_size: { label: 'Netz Popup 5 Font Size ((px))', helper: 'Font size for grid popup line 5. Standard 8' },
+          sensor_popup_grid_6: { label: 'Netz Popup 6', helper: 'Entity for grid popup line 6.' },
+          sensor_popup_grid_6_name: { label: 'Netz Popup 6 Name', helper: 'Optional custom name for grid popup line 6. Leer lassen to use entity name.' },
+          sensor_popup_grid_6_color: { label: 'Netz Popup 6 Farbe', helper: 'Farbe for grid popup line 6 text.' },
+          sensor_popup_grid_6_font_size: { label: 'Netz Popup 6 Font Size ((px))', helper: 'Font size for grid popup line 6. Standard 8' },
+          sensor_popup_inverter_1: { label: 'Wechselrichter Popup 1', helper: 'Entity for inverter popup line 1.' },
+          sensor_popup_inverter_1_name: { label: 'Wechselrichter Popup 1 Name', helper: 'Optional custom name for inverter popup line 1. Leer lassen to use entity name.' },
+          sensor_popup_inverter_1_color: { label: 'Wechselrichter Popup 1 Farbe', helper: 'Farbe for inverter popup line 1 text.' },
+          sensor_popup_inverter_1_font_size: { label: 'Wechselrichter Popup 1 Font Size ((px))', helper: 'Font size for inverter popup line 1. Standard 8' },
+          sensor_popup_inverter_2: { label: 'Wechselrichter Popup 2', helper: 'Entity for inverter popup line 2.' },
+          sensor_popup_inverter_2_name: { label: 'Wechselrichter Popup 2 Name', helper: 'Optional custom name for inverter popup line 2. Leer lassen to use entity name.' },
+          sensor_popup_inverter_2_color: { label: 'Wechselrichter Popup 2 Farbe', helper: 'Farbe for inverter popup line 2 text.' },
+          sensor_popup_inverter_2_font_size: { label: 'Wechselrichter Popup 2 Font Size ((px))', helper: 'Font size for inverter popup line 2. Standard 8' },
+          sensor_popup_inverter_3: { label: 'Wechselrichter Popup 3', helper: 'Entity for inverter popup line 3.' },
+          sensor_popup_inverter_3_name: { label: 'Wechselrichter Popup 3 Name', helper: 'Optional custom name for inverter popup line 3. Leer lassen to use entity name.' },
+          sensor_popup_inverter_3_color: { label: 'Wechselrichter Popup 3 Farbe', helper: 'Farbe for inverter popup line 3 text.' },
+          sensor_popup_inverter_3_font_size: { label: 'Wechselrichter Popup 3 Font Size ((px))', helper: 'Font size for inverter popup line 3. Standard 8' },
+          sensor_popup_inverter_4: { label: 'Wechselrichter Popup 4', helper: 'Entity for inverter popup line 4.' },
+          sensor_popup_inverter_4_name: { label: 'Wechselrichter Popup 4 Name', helper: 'Optional custom name for inverter popup line 4. Leer lassen to use entity name.' },
+          sensor_popup_inverter_4_color: { label: 'Wechselrichter Popup 4 Farbe', helper: 'Farbe for inverter popup line 4 text.' },
+          sensor_popup_inverter_4_font_size: { label: 'Wechselrichter Popup 4 Font Size ((px))', helper: 'Font size for inverter popup line 4. Standard 8' },
+          sensor_popup_inverter_5: { label: 'Wechselrichter Popup 5', helper: 'Entity for inverter popup line 5.' },
+          sensor_popup_inverter_5_name: { label: 'Wechselrichter Popup 5 Name', helper: 'Optional custom name for inverter popup line 5. Leer lassen to use entity name.' },
+          sensor_popup_inverter_5_color: { label: 'Wechselrichter Popup 5 Farbe', helper: 'Farbe for inverter popup line 5 text.' },
+          sensor_popup_inverter_5_font_size: { label: 'Wechselrichter Popup 5 Font Size ((px))', helper: 'Font size for inverter popup line 5. Standard 8' },
+          sensor_popup_inverter_6: { label: 'Wechselrichter Popup 6', helper: 'Entity for inverter popup line 6.' },
+          sensor_popup_inverter_6_name: { label: 'Wechselrichter Popup 6 Name', helper: 'Optional custom name for inverter popup line 6. Leer lassen to use entity name.' },
+          sensor_popup_inverter_6_color: { label: 'Wechselrichter Popup 6 Farbe', helper: 'Farbe for inverter popup line 6 text.' },
+          sensor_popup_inverter_6_font_size: { label: 'Wechselrichter Popup 6 Font Size ((px))', helper: 'Font size for inverter popup line 6. Standard 8' }
         },
         options: {
           languages: [
             { value: 'en', label: 'Englisch' },
             { value: 'it', label: 'Italienisch' },
             { value: 'de', label: 'Deutsch' },
-            { value: 'fr', label: 'FranzÃ¶sisch' },
-            { value: 'nl', label: 'NiederlÃ¤ndisch' }
+            { value: 'fr', label: 'Französisch' },
+            { value: 'nl', label: 'Niederländisch' },
+            { value: 'es', label: 'Spanisch' }
           ],
           display_units: [
             { value: 'W', label: 'Watt (W)' },
@@ -11080,7 +12034,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           animation_styles: [
             { value: 'dashes', label: 'Striche (Standard)' },
             { value: 'dashes_glow', label: 'Striche + Leuchten' },
-            { value: 'fluid_flow', label: 'Fluessiger Fluss' },
+            { value: 'fluid_flow', label: 'Fließend' },
             { value: 'dots', label: 'Punkte' },
             { value: 'arrows', label: 'Pfeile' }
           ],
@@ -11094,355 +12048,361 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           initial_batteries_4: '4',
           initial_evs_1: '1',
           initial_evs_2: '2'
+        },
+        view: {
+          daily: 'TAGESERTRAG', pv_tot: 'PV GESAMT', car1: 'AUTO 1', car2: 'AUTO 2', importing: 'IMPORT', exporting: 'EXPORT'
         }
-      ,
-      view: {
-        daily: 'TAGESERTRAG',
-        pv_tot: 'PV GESAMT',
-        car1: 'FAHRZEUG 1',
-        car2: 'FAHRZEUG 2',
-        importing: 'IMPORTIEREN',
-        exporting: 'EXPORTIEREN'
-      }
       },
       fr: {
         sections: {
-          general: { title: 'ParamÃ¨tres gÃ©nÃ©raux', helper: 'MÃ©tadonnÃ©es de la carte, arriÃ¨re-plan, langue et frÃ©quence de mise Ã  jour.' },
-          initialConfig: { title: 'Configuration initiale', helper: 'Questions guidÃ©es pour la premiÃ¨re configuration.' },
-          pvCommon: { title: 'Solaire/PV Commun', helper: 'ParamÃ¨tres Solaire/PV partagÃ©s entre les arrays.' },
-          array1: { title: 'Solaire/PV Array 1', helper: 'Configurer les entitÃ©s de l Array PV 1.' },
-          array2: { title: 'Solaire/PV Array 2', helper: 'If PV Total Sensor (Inverter 2) is set or the PV String values are provided, Array 2 will become active and enable the second inverter. You must also enable Daily Production Sensor (Array 2) and Home Load (Inverter 2).' },
-          windmill: { title: 'Windmill', helper: 'Configurer les capteurs et le style du gÃ©nÃ©rateur Ã©olien.' },
-          battery: { title: 'Batterie', helper: 'Configurer les entitÃ©s de la batterie.' },
-          grid: { title: 'RÃ©seau', helper: 'Configurer les entitÃ©s du rÃ©seau.' },
-          car: { title: 'Voiture', helper: 'Configurer les entitÃ©s EV.' },
-          other: { title: 'Maison', helper: 'Capteurs supplÃ©mentaires et options avancÃ©es.' },
-          entities: { title: 'SÃ©lection d entitÃ©s', helper: 'Choisissez les entitÃ©s PV, batterie, rÃ©seau, charge et EV utilisÃ©es par la carte. Soit le capteur PV total, soit vos tableaux de chaÃ®nes PV doivent Ãªtre spÃ©cifiÃ©s au minimum.' },
-          pvPopup: { title: 'Popup PV', helper: 'Configurer les entitÃ©s pour l\'affichage du popup PV.' },
-          housePopup: { title: 'Popup Maison', helper: 'Configurer les entitÃ©s pour l\'affichage du popup maison.' },
-          batteryPopup: { title: 'Popup Batterie', helper: 'Configurer l\'affichage du popup batterie.' },
-          gridPopup: { title: 'Popup RÃ©seau', helper: 'Configurer les entitÃ©s pour l\'affichage du popup rÃ©seau.' },
-          inverterPopup: { title: 'Popup Inverter', helper: 'Configurer les entitÃ©s pour l\'affichage du popup inverter.' },
-          colors: { title: 'Couleurs & Seuils', helper: 'Configurez les seuils rÃ©seau et les couleurs d accent pour les flux et l affichage EV.' },
-          typography: { title: 'Typographie', helper: 'Ajustez les tailles de police utilisÃ©es dans la carte.' },
-          about: { title: 'Ã€ propos', helper: 'CrÃ©dits, version et liens utiles.' }
+          general: { title: 'General Settings', helper: 'carte metadata, background, language, and update cadence.' },
+          initialConfig: { title: 'Configuration initiale', helper: 'First-time setup checklist and starter options.' },
+          pvCommon: { title: 'Solar/PV Common', helper: 'Common Solar/PV settings shared across arrays.' },
+          array1: { title: 'Solar/PV Array 1', helper: 'Choisissez the PV, battery, grid, load, and VE entities used by the card. Either the PV total sensor or your PV string arrays need to be specified as a minimum.' },
+          array2: { title: 'Solar/PV Array 2', helper: 'If Capteur PV total (Onduleur 2) is set or the PV String values are provided, Array 2 will become active and enable the second inverter. You must also enable Journalier production capteur (Array 2) and Home Load (Onduleur 2).' },
+          windmill: { title: 'Éolienne', helper: 'Configurez windmill generator sensors and display styling.' },
+          battery: { title: 'Batterie', helper: 'Configurez battery entities.' },
+          grid: { title: 'Réseau', helper: 'Configurez grid entities.' },
+          car: { title: 'Voiture', helper: 'Configurez VE entities.' },
+          other: { title: 'Maison', helper: 'Additional sensors and advanced toggles.' },
+          pvPopup: { title: 'PV Popup', helper: 'Configurez entities for the PV popup display.' },
+          housePopup: { title: 'Maison Popup', helper: 'Configurez entities for the house popup display.' },
+          batteryPopup: { title: 'Batterie Popup', helper: 'Configurez battery popup display.' },
+          gridPopup: { title: 'Réseau Popup', helper: 'Configurez entities for the grid popup display.' },
+          inverterPopup: { title: 'Onduleur Popup', helper: 'Configurez entities for the inverter popup display.' },
+          colors: { title: 'Couleur & Thresholds', helper: 'Configurez grid thresholds and accent colours for flows and VE display.' },
+          typography: { title: 'Typography', helper: 'Fine tune the font sizes used across the card.' },
+          about: { title: 'About', helper: 'Credits, version, and helpful links.' }
         },
         fields: {
-          card_title: { label: 'Titre de la carte', helper: 'Titre affichÃ© en haut de la carte. Laisser vide pour dÃ©sactiver.' },
-          language: { label: 'Langue', helper: 'Choisissez la langue de l Ã©diteur.' },
-          display_unit: { label: 'UnitÃ© d affichage', helper: 'UnitÃ© utilisÃ©e pour formater les valeurs de puissance.' },
-          update_interval: { label: 'Intervalle de mise Ã  jour', helper: 'FrÃ©quence de rafraÃ®chissement des mises Ã  jour de la carte (0 dÃ©sactive le throttling).' },
-          initial_configuration: { label: 'Configuration initiale', helper: 'Afficher la section Configuration initiale dans l Ã©diteur.' },
-          initial_has_pv: { label: 'Avez-vous de l Ã©nergie solaire/PV ?', helper: 'SÃ©lectionnez Oui si vous avez une production solaire Ã  configurer.' },
-          initial_inverters: { label: 'Combien d onduleurs avez-vous ?', helper: 'AffichÃ© uniquement si le solaire/PV est activÃ©.' },
-          initial_has_battery: { label: 'Avez-vous un stockage de batteries ?', helper: '' },
-          initial_battery_count: { label: 'Combien de batteries avez-vous ? Maximum 4', helper: '' },
-          initial_has_grid: { label: 'Avez-vous de l\'électricité du réseau ?', helper: '' },
-          initial_can_export: { label: 'Pouvez-vous exporter l\'électricité excédentaire vers le réseau ?', helper: '' },
-          initial_has_windmill: { label: 'Avez-vous une éolienne ?', helper: '' },
-          initial_has_ev: { label: 'Avez-vous des véhicules électriques/EV ?', helper: '' },
-          initial_ev_count: { label: 'Combien en avez-vous ?', helper: '' },
-          initial_battery_dual_inverter_helper: { label: 'Omdat je 2 omvormers hebt geselecteerd, zijn minimaal 2 batterijen vereist. Batterijen 1 en 2 worden toegewezen aan Omvormer 1 en batterijen 3 en 4 aan Omvormer 2.', helper: '' },
-          initial_config_items_title: { label: 'Ã‰lÃ©ments de configuration requis', helper: '' },
-          initial_config_items_helper: { label: 'Ces Ã©lÃ©ments dÃ©pendent de vos rÃ©ponses ci-dessus.', helper: '' },
-          initial_config_items_empty: { label: 'Aucun Ã©lÃ©ment Ã  afficher pour le moment.', helper: '' },
-          initial_config_complete_helper: { label: 'Ceci termine la configuration minimale requise. AprÃ¨s avoir cliquÃ© sur le bouton Terminer, veuillez consulter tous les menus pour d\'autres Ã©lÃ©ments et les configurations de popup. Cette configuration initiale peut Ãªtre rÃ©activÃ©e dans le menu GÃ©nÃ©ral.', helper: '' },
-          initial_config_complete_button: { label: 'Terminer', helper: '' },
-          array_helper_text: { label: 'Chaque array doit avoir au minimum un capteur Solar/PV total combinÃ© reprÃ©sentant la puissance totale de cet array, ou des valeurs de chaÃ®nes individuelles additionnÃ©es pour obtenir la puissance totale de l\'array. La production journaliÃ¨re peut Ãªtre fournie et affichÃ©e dans une carte de production journaliÃ¨re.', helper: '' },
-          animation_speed_factor: { label: 'Facteur de vitesse d animation', helper: 'Ajuste le multiplicateur de vitesse d animation (-3x Ã  3x). Mettre 0 pour pause; les nÃ©gatifs inversent la direction.' },
-          animation_style: { label: 'Style d animation (Jour)', helper: 'Style des flux utilisÃ© en mode Jour.' },
-          night_animation_style: { label: 'Style d animation (Nuit)', helper: 'Style des flux utilisÃ© en mode Nuit. Laisser vide pour utiliser le style Jour.' },
-          dashes_glow_intensity: { label: 'IntensitÃ© de lueur (tirets)', helper: 'ContrÃ´le la lueur pour "Tirets + Lueur" (0 dÃ©sactive).' },
-          fluid_flow_outer_glow: { label: 'Lueur externe fluid flow', helper: 'Active la couche externe de lueur/haze pour animation_style: fluid_flow.' },
-          flow_stroke_width: { label: 'Epaisseur flux (px)', helper: 'Override optionnel de l epaisseur des flux animÃ©s (sans modifier le SVG). Laisser vide pour garder les valeurs SVG.' },
-          fluid_flow_stroke_width: { label: 'Epaisseur fluid flow (px)', helper: 'Epaisseur de base pour animation_style: fluid_flow. Les largeurs overlay/masque en dÃ©rivent (dÃ©faut 5).' },
-          sensor_pv_total: { label: 'Capteur PV total', helper: 'Capteur de production agrÃ©gÃ© optionnel affichÃ© comme ligne combinÃ©e.' },
-          sensor_pv_total_secondary: { label: 'Capteur PV total (Inverseur 2)', helper: 'Second capteur d onduleur optionnel; ajoutÃ© au total PV s il est fourni.' },
-          sensor_windmill_total: { label: 'Windmill Total', helper: 'Capteur de puissance du gÃ©nÃ©rateur Ã©olien (W). S il n est pas configurÃ©, le groupe SVG windmill est masquÃ©.' },
-          sensor_windmill_daily: { label: 'Daily Windmill Production', helper: 'Capteur optionnel de production quotidienne windmill.' },
-          sensor_pv1: { label: 'ChaÃ®ne PV 1 (Array 1)', helper: 'Capteur principal de production solaire.' },
-          sensor_pv2: { label: 'ChaÃ®ne PV 2 (Array 1)' },
-          sensor_pv3: { label: 'ChaÃ®ne PV 3 (Array 1)' },
-          sensor_pv4: { label: 'ChaÃ®ne PV 4 (Array 1)' },
-          sensor_pv5: { label: 'ChaÃ®ne PV 5 (Array 1)' },
-          sensor_pv6: { label: 'ChaÃ®ne PV 6 (Array 1)' },
-          sensor_pv_array2_1: { label: 'ChaÃ®ne PV 1 (Array 2)', helper: 'Capteur de production solaire de l Array 2.' },
-          sensor_pv_array2_2: { label: 'ChaÃ®ne PV 2 (Array 2)', helper: 'Capteur de production solaire de l Array 2.' },
-          sensor_pv_array2_3: { label: 'ChaÃ®ne PV 3 (Array 2)', helper: 'Capteur de production solaire de l Array 2.' },
-          sensor_pv_array2_4: { label: 'ChaÃ®ne PV 4 (Array 2)', helper: 'Capteur de production solaire de l Array 2.' },
-          sensor_pv_array2_5: { label: 'ChaÃ®ne PV 5 (Array 2)', helper: 'Capteur de production solaire de l Array 2.' },
-          sensor_pv_array2_6: { label: 'ChaÃ®ne PV 6 (Array 2)', helper: 'Capteur de production solaire de l Array 2.' },
-          sensor_daily: { label: 'Capteur production quotidienne (Requis)', helper: 'Capteur indiquant les totaux de production journaliers. Soit le capteur PV total, soit vos tableaux de chaÃ®nes PV doivent Ãªtre spÃ©cifiÃ©s au minimum.' },
-          sensor_daily_array2: { label: 'Capteur production quotidienne (Array 2)', helper: 'Capteur pour les totaux de production journaliers de l Array 2.' },
-          sensor_bat1_soc: { label: 'SOC Batterie 1' },
-          sensor_bat1_power: { label: 'Puissance Batterie 1', helper: 'Renseignez ce capteur de puissance combinÃ©e ou les capteurs de charge et de dÃ©charge afin d\'activer la Batterie 1.' },
-          sensor_bat1_charge_power: { label: 'Puissance de charge Batterie 1' },
-          sensor_bat1_discharge_power: { label: 'Puissance de dÃ©charge Batterie 1' },
-          sensor_bat2_soc: { label: 'SOC Batterie 2' },
-          sensor_bat2_power: { label: 'Puissance Batterie 2', helper: 'Renseignez ce capteur de puissance combinÃ©e ou les capteurs de charge et de dÃ©charge afin d\'activer la Batterie 2.' },
-          sensor_bat2_charge_power: { label: 'Puissance de charge Batterie 2' },
-          sensor_bat2_discharge_power: { label: 'Puissance de dÃ©charge Batterie 2' },
-          sensor_bat3_soc: { label: 'SOC Batterie 3' },
-          sensor_bat3_power: { label: 'Puissance Batterie 3', helper: 'Renseignez ce capteur de puissance combinÃ©e ou les capteurs de charge et de dÃ©charge afin d\'activer la Batterie 3.' },
-          sensor_bat3_charge_power: { label: 'Puissance de charge Batterie 3' },
-          sensor_bat3_discharge_power: { label: 'Puissance de dÃ©charge Batterie 3' },
-          sensor_bat4_soc: { label: 'SOC Batterie 4' },
-          sensor_bat4_power: { label: 'Puissance Batterie 4', helper: 'Renseignez ce capteur de puissance combinÃ©e ou les capteurs de charge et de dÃ©charge afin d\'activer la Batterie 4.' },
-          sensor_bat4_charge_power: { label: 'Puissance de charge Batterie 4' },
-          sensor_bat4_discharge_power: { label: 'Puissance de dÃ©charge Batterie 4' },
-          sensor_home_load: { label: 'Charge domestique/consommation (Requis)', helper: 'Capteur de consommation totale du foyer.' },
-          sensor_home_load_secondary: { label: 'Charge domestique (Inverseur 2)', helper: 'Capteur de charge domestique optionnel pour le second onduleur.' },
-          sensor_heat_pump_consumption: { label: 'Consommation pompe Ã  chaleur', helper: 'Capteur de consommation Ã©nergÃ©tique de la pompe Ã  chaleur.' },
-          sensor_pool_consumption: { label: 'Piscine', helper: 'Capteur de puissance/consommation de la piscine.' },
-          sensor_washing_machine_consumption: { label: 'Lave-linge', helper: 'Capteur de puissance/consommation du lave-linge.' },
-          sensor_dryer_consumption: { label: 'SÃ¨che-linge', helper: 'Capteur de puissance/consommation du sÃ¨che-linge.' },
-          sensor_refrigerator_consumption: { label: 'RÃ©frigÃ©rateur', helper: 'Capteur de puissance/consommation du rÃ©frigÃ©rateur.' },
-          sensor_grid_power: { label: 'Puissance rÃ©seau (Onduleur 1)', helper: 'Capteur de flux rÃ©seau positif/nÃ©gatif pour l onduleur 1. SpÃ©cifiez soit ce capteur soit les capteurs Import/Export rÃ©seau (Onduleur 1).' },
-          sensor_grid_import: { label: 'Capteur import rÃ©seau (Onduleur 1)', helper: 'EntitÃ© optionnelle rapportant l import rÃ©seau (valeurs positives) pour l onduleur 1.' },
-          sensor_grid_export: { label: 'Capteur export rÃ©seau (Onduleur 1)', helper: 'EntitÃ© optionnelle rapportant l export rÃ©seau (valeurs positives) pour l onduleur 1.' },
-          sensor_grid_import_daily: { label: 'Capteur import rÃ©seau journalier (Onduleur 1)', helper: 'EntitÃ© optionnelle rapportant l import cumulatif rÃ©seau pour la journÃ©e en cours (Onduleur 1).' },
-          sensor_grid_export_daily: { label: 'Capteur export rÃ©seau journalier (Onduleur 1)', helper: 'EntitÃ© optionnelle rapportant l export cumulatif rÃ©seau pour la journÃ©e en cours (Onduleur 1).' },
-          sensor_grid2_power: { label: 'Puissance rÃ©seau (Onduleur 2)', helper: 'Capteur de flux rÃ©seau positif/nÃ©gatif pour l onduleur 2. SpÃ©cifiez soit ce capteur soit les capteurs Import/Export rÃ©seau (Onduleur 2).' },
-          sensor_grid2_import: { label: 'Capteur import rÃ©seau (Onduleur 2)', helper: 'EntitÃ© optionnelle rapportant l import rÃ©seau (valeurs positives) pour l onduleur 2.' },
-          sensor_grid2_export: { label: 'Capteur export rÃ©seau (Onduleur 2)', helper: 'EntitÃ© optionnelle rapportant l export rÃ©seau (valeurs positives) pour l onduleur 2.' },
-          sensor_grid2_import_daily: { label: 'Capteur import rÃ©seau journalier (Onduleur 2)', helper: 'EntitÃ© optionnelle rapportant l import cumulatif rÃ©seau pour la journÃ©e en cours (Onduleur 2).' },
-          sensor_grid2_export_daily: { label: 'Capteur export rÃ©seau journalier (Onduleur 2)', helper: 'EntitÃ© optionnelle rapportant l export cumulatif rÃ©seau pour la journÃ©e en cours (Onduleur 2).' },
-                    grid2_import_color: { label: 'Couleur import rÃ©seau (Onduleur 2)', helper: 'Couleur de base (avant seuils) lors de l import rÃ©seau pour l onduleur 2.' },
-                    grid2_export_color: { label: 'Couleur export rÃ©seau (Onduleur 2)', helper: 'Couleur de base (avant seuils) lors de l export rÃ©seau pour l onduleur 2.' },
-                    grid2_threshold_warning: { label: 'Seuil avertissement rÃ©seau (Onduleur 2)', helper: 'Changer la couleur rÃ©seau (onduleur 2) lorsque la magnitude atteint cette valeur. Utilise l unitÃ© d affichage sÃ©lectionnÃ©e.' },
-                    grid2_warning_color: { label: 'Couleur avertissement rÃ©seau (Onduleur 2)', helper: 'Couleur appliquÃ©e au seuil d avertissement (onduleur 2).' },
-                    grid2_threshold_critical: { label: 'Seuil critique rÃ©seau (Onduleur 2)', helper: 'Changer la couleur rÃ©seau (onduleur 2) lorsque la magnitude atteint cette valeur. Utilise l unitÃ© d affichage sÃ©lectionnÃ©e.' },
-                    grid2_critical_color: { label: 'Couleur critique rÃ©seau (Onduleur 2)', helper: 'Couleur appliquÃ©e au seuil critique (onduleur 2).' },
-          show_daily_grid: { label: 'Afficher les valeurs rÃ©seau journaliÃ¨res', helper: 'Affiche les totaux import/export journaliers sous le flux rÃ©seau actuel lorsqu activÃ©.' },
-          grid_daily_font_size: { label: 'Taille police rÃ©seau journalier (px)', helper: 'Optionnel : remplace la taille du texte import/export journalier. Par dÃ©faut : taille police rÃ©seau.' },
-          grid_current_odometer: { label: 'Compteur : RÃ©seau actuel', helper: 'Anime la valeur rÃ©seau actuel avec un effet de dÃ©filement par chiffre.' },
-          grid_current_odometer_duration: { label: 'DurÃ©e compteur (ms)', helper: 'DurÃ©e de lâ€™animation en millisecondes. DÃ©faut 350.' },
-          show_grid_flow_label: { label: 'Afficher le libellÃ© import/export rÃ©seau', helper: 'Ajoute "Importation"/"Exportation" avant la valeur rÃ©seau lorsqu activÃ©.' },
-          enable_echo_alive: { label: 'Enable Echo Alive', helper: 'Enables an invisible iframe to keep the Silk browser open on Echo Show. The button will be positioned in a corner of the card.' },
-          pv_tot_color: { label: 'Couleur PV totale', helper: 'Couleur appliquÃ©e Ã  la ligne/texte PV TOTAL.' },
-          pv_primary_color: { label: 'Couleur flux PV 1', helper: 'Couleur utilisÃ©e pour la ligne d animation PV primaire.' },
-          pv_secondary_color: { label: 'Couleur flux PV 2', helper: 'Couleur utilisÃ©e pour la ligne d animation PV secondaire si disponible.' },
-          load_flow_color: { label: 'Couleur flux charge', helper: 'Couleur appliquÃ©e Ã  la ligne d animation de la charge domestique.' },
-          load_text_color: { label: 'Couleur texte charge', helper: 'Couleur appliquÃ©e au texte de charge lorsque aucun seuil n est actif.' },
-          house_total_color: { label: 'Couleur HOUSE TOT', helper: 'Couleur appliquÃ©e au texte/flux HOUSE TOT.' },
-          inv1_color: { label: 'Couleur onduleur 1 vers maison', helper: 'Couleur appliquÃ©e au flux de l onduleur 1 vers la maison.' },
-          inv2_color: { label: 'Couleur onduleur 2 vers maison', helper: 'Couleur appliquÃ©e au flux de l onduleur 2 vers la maison.' },
-          load_threshold_warning: { label: 'Seuil avertissement charge', helper: 'Changer la couleur du chargeur lorsque la magnitude atteint ou dÃ©passe cette valeur. Utilise l unitÃ© d affichage sÃ©lectionnÃ©e.' },
-          load_warning_color: { label: 'Couleur avertissement charge', helper: 'Couleur hex ou CSS appliquÃ©e au seuil d avertissement de charge.' },
-          load_threshold_critical: { label: 'Seuil critique charge', helper: 'Changer la couleur lorsque la magnitude atteint ou dÃ©passe cette valeur. Utilise l unitÃ© d affichage sÃ©lectionnÃ©e.' },
-          load_critical_color: { label: 'Couleur critique charge', helper: 'Couleur hex ou CSS appliquÃ©e au seuil critique de charge.' },
-          battery_soc_color: { label: 'Couleur SOC batterie', helper: 'Couleur appliquÃ©e au texte du pourcentage SOC batterie.' },
-          battery_charge_color: { label: 'Couleur flux charge batterie', helper: 'Couleur utilisÃ©e lorsque l Ã©nergie entre dans la batterie.' },
-          battery_discharge_color: { label: 'Couleur flux dÃ©charge batterie', helper: 'Couleur utilisÃ©e lorsque l Ã©nergie sort de la batterie.' },
-          battery_fill_high_color: { label: 'Couleur remplissage batterie (normale)', helper: 'Couleur du liquide lorsque le SOC de la batterie est au-dessus du seuil bas.' },
-          battery_fill_low_color: { label: 'Couleur remplissage batterie (faible)', helper: 'Couleur du liquide lorsque le SOC est Ã©gal ou infÃ©rieur au seuil bas.' },
-          battery_fill_low_threshold: { label: 'Seuil remplissage batterie bas (%)', helper: 'Utiliser la couleur basse lorsque le SOC est Ã©gal ou infÃ©rieur Ã  ce pourcentage.' },
-          battery_fill_opacity: { label: 'OpacitÃ© remplissage batterie', helper: 'OpacitÃ© du niveau de remplissage batterie (0-1).' },
-          grid_activity_threshold: { label: 'Seuil animation rÃ©seau (W)', helper: 'Ignorer les flux rÃ©seau dont la valeur absolue est infÃ©rieure Ã  cette puissance avant d animer.' },
-          grid_power_only: { label: 'RÃ©seau uniquement', helper: 'Masque les flux onduleur/batterie et affiche un flux direct rÃ©seau-maison.' },
-          grid_threshold_warning: { label: 'Seuil avertissement rÃ©seau', helper: 'Changer la couleur rÃ©seau lorsque la magnitude atteint cette valeur. Utilise l unitÃ© d affichage sÃ©lectionnÃ©e.' },
-          grid_warning_color: { label: 'Couleur avertissement rÃ©seau', helper: 'Couleur hex appliquÃ©e au seuil d avertissement.' },
-          grid_threshold_critical: { label: 'Seuil critique rÃ©seau', helper: 'Changer la couleur rÃ©seau lorsque la magnitude atteint cette valeur. Utilise l unitÃ© d affichage sÃ©lectionnÃ©e.' },
-          grid_critical_color: { label: 'Couleur critique rÃ©seau', helper: 'Couleur appliquÃ©e au seuil critique.' },
-          invert_grid: { label: 'Inverser valeurs rÃ©seau', helper: 'Activer si la polaritÃ© import/export est inversÃ©e.' },
-          invert_battery: { label: 'Inverser valeurs batterie', helper: 'Activer si la polaritÃ© charge/dÃ©charge est inversÃ©e.' },
-          invert_bat1: { label: 'Inverser Batterie 1', helper: 'Activer si la polaritÃ© charge/dÃ©charge de la Batterie 1 est inversÃ©e.' },
-          invert_bat2: { label: 'Inverser Batterie 2', helper: 'Activer si la polaritÃ© charge/dÃ©charge de la Batterie 2 est inversÃ©e.' },
-          invert_bat3: { label: 'Inverser Batterie 3', helper: 'Activer si la polaritÃ© charge/dÃ©charge de la Batterie 3 est inversÃ©e.' },
-          sensor_car_power: { label: 'Capteur puissance VÃ©hicule 1' },
-          sensor_car_soc: { label: 'Capteur SOC VÃ©hicule 1' },
-          car_soc: { label: 'SOC VÃ©hicule', helper: 'Capteur pour SOC batterie EV.' },
-          car_range: { label: 'Autonomie VÃ©hicule', helper: 'Capteur pour autonomie EV.' },
-          car_efficiency: { label: 'EfficacitÃ© VÃ©hicule', helper: 'Capteur pour efficacitÃ© EV.' },
-          car_charger_power: { label: 'Puissance Chargeur VÃ©hicule', helper: 'Capteur pour puissance chargeur EV.' },
-          car1_label: { label: 'LibellÃ© VÃ©hicule 1', helper: 'Texte affichÃ© Ã  cÃ´tÃ© des valeurs du premier EV.' },
-          sensor_car2_power: { label: 'Capteur puissance VÃ©hicule 2' },
-          sensor_car2_soc: { label: 'Capteur SOC VÃ©hicule 2' },
-          car2_soc: { label: 'SOC VÃ©hicule 2', helper: 'Capteur pour SOC batterie EV 2.' },
-          car2_range: { label: 'Autonomie VÃ©hicule 2', helper: 'Capteur pour autonomie EV 2.' },
-          car2_efficiency: { label: 'EfficacitÃ© VÃ©hicule 2', helper: 'Capteur pour efficacitÃ© EV 2.' },
-          car2_charger_power: { label: 'Puissance Chargeur VÃ©hicule 2', helper: 'Capteur pour puissance chargeur EV 2.' },
-          car2_power: { label: 'Puissance VÃ©hicule 2', helper: 'Capteur pour puissance charge/dÃ©charge EV 2.' },
-          car2_label: { label: 'LibellÃ© VÃ©hicule 2', helper: 'Texte affichÃ© Ã  cÃ´tÃ© des valeurs du second EV.' },
-          car_headlight_flash: { label: 'Clignotement des phares en charge', helper: 'Activer pour faire clignoter les phares du vÃ©hicule pendant la charge.' },
-          car1_glow_brightness: { label: 'Effet glow voiture', helper: 'Pourcentage d\'effet de flux voiture affichÃ© hors charge.' },
-          car2_glow_brightness: { label: 'Effet glow voiture', helper: 'Pourcentage d\'effet de flux voiture affichÃ© hors charge.' },
-          car_pct_color: { label: 'Couleur SOC VÃ©hicule', helper: 'Couleur hex pour le texte SOC EV (ex. #00FFFF).' },
-          car2_pct_color: { label: 'Couleur SOC VÃ©hicule 2', helper: 'Couleur hex pour le SOC du second EV (retourne sur Car SOC si vide).' },
-          car1_name_color: { label: 'Couleur nom VÃ©hicule 1', helper: 'Couleur appliquÃ©e au libellÃ© du nom du VÃ©hicule 1.' },
-          car2_name_color: { label: 'Couleur nom VÃ©hicule 2', helper: 'Couleur appliquÃ©e au libellÃ© du nom du VÃ©hicule 2.' },
-          car1_color: { label: 'Couleur VÃ©hicule 1', helper: 'Couleur appliquÃ©e Ã  la valeur de puissance du VÃ©hicule 1.' },
-          car2_color: { label: 'Couleur VÃ©hicule 2', helper: 'Couleur appliquÃ©e Ã  la valeur de puissance du VÃ©hicule 2.' },
-          heat_pump_flow_color: { label: 'Couleur flux pompe Ã  chaleur', helper: 'Couleur appliquÃ©e Ã  l animation du flux de la pompe Ã  chaleur.' },
-          heat_pump_text_color: { label: 'Couleur texte pompe Ã  chaleur', helper: 'Couleur appliquÃ©e au texte de puissance de la pompe Ã  chaleur.' },
-          pool_flow_color: { label: 'Couleur flux piscine', helper: 'Couleur appliquÃ©e Ã  l animation du flux de la piscine.' },
-          pool_text_color: { label: 'Couleur texte piscine', helper: 'Couleur appliquÃ©e au texte de puissance de la piscine.' },
-          washing_machine_text_color: { label: 'Couleur texte lave-linge', helper: 'Couleur appliquÃ©e au texte de puissance du lave-linge.' },
-          dryer_text_color: { label: 'Couleur texte sÃ¨che-linge', helper: 'Couleur appliquÃ©e au texte de puissance du sÃ¨che-linge.' },
-          refrigerator_text_color: { label: 'Couleur texte rÃ©frigÃ©rateur', helper: 'Couleur appliquÃ©e au texte de puissance du rÃ©frigÃ©rateur.' },
-          windmill_flow_color: { label: 'Windmill Flow Color', helper: 'Couleur appliquÃ©e au flux windmill (data-flow-key="windmill-inverter1" / "windmill-inverter2").' },
-          windmill_text_color: { label: 'Windmill Text Color', helper: 'Couleur appliquÃ©e au texte puissance windmill (data-role="windmill-power").' },
-          header_font_size: { label: 'Taille police en-tÃªte (px)', helper: 'Par dÃ©faut 16' },
-          daily_label_font_size: { label: 'Taille Ã©tiquette quotidienne (px)', helper: 'Par dÃ©faut 12' },
-          daily_value_font_size: { label: 'Taille valeur quotidienne (px)', helper: 'Par dÃ©faut 20' },
-          pv_font_size: { label: 'Taille police PV (px)', helper: 'Par dÃ©faut 16' },
-          windmill_power_font_size: { label: 'Windmill Power Font Size (px)', helper: 'Par dÃ©faut 16' },
-          battery_soc_font_size: { label: 'Taille SOC batterie (px)', helper: 'Par dÃ©faut 20' },
-          battery_power_font_size: { label: 'Taille puissance batterie (px)', helper: 'Par dÃ©faut 16' },
-          load_font_size: { label: 'Taille police charge (px)', helper: 'Par dÃ©faut 15' },
-          inv1_power_font_size: { label: 'Taille police puissance INV 1 (px)', helper: 'Taille de police pour la ligne de puissance INV 1. Par dÃ©faut utilise la taille de charge.' },
-          inv2_power_font_size: { label: 'Taille police puissance INV 2 (px)', helper: 'Taille de police pour la ligne de puissance INV 2. Par dÃ©faut utilise la taille de charge.' },
-          heat_pump_font_size: { label: 'Taille police pompe Ã  chaleur (px)', helper: 'Par dÃ©faut 16' },
-          pool_font_size: { label: 'Taille police piscine (px)', helper: 'Par dÃ©faut 16' },
-          washing_machine_font_size: { label: 'Taille police lave-linge (px)', helper: 'Par dÃ©faut 16' },
-          dryer_font_size: { label: 'Taille police sÃ¨che-linge (px)', helper: 'Par dÃ©faut 16' },
-          refrigerator_font_size: { label: 'Taille police rÃ©frigÃ©rateur (px)', helper: 'Par dÃ©faut 16' },
-          grid_font_size: { label: 'Taille police rÃ©seau (px)', helper: 'Par dÃ©faut 15' },
-          car_power_font_size: { label: 'Taille puissance vÃ©hicule (px)', helper: 'Par dÃ©faut 15' },
-          car2_power_font_size: { label: 'Taille puissance VÃ©hicule 2 (px)', helper: 'Par dÃ©faut 15' },
-          car_name_font_size: { label: 'Taille nom VÃ©hicule (px)', helper: 'Par dÃ©faut 15' },
-          car2_name_font_size: { label: 'Taille nom VÃ©hicule 2 (px)', helper: 'Par dÃ©faut 15' },
-          car_soc_font_size: { label: 'Taille SOC vÃ©hicule (px)', helper: 'Par dÃ©faut 12' },
-          car2_soc_font_size: { label: 'Taille SOC VÃ©hicule 2 (px)', helper: 'Par dÃ©faut 12' },
-          sensor_popup_pv_1: { label: 'Popup PV 1', helper: 'EntitÃ© pour la ligne 1 du popup PV.' },
-          sensor_popup_pv_2: { label: 'Popup PV 2', helper: 'EntitÃ© pour la ligne 2 du popup PV.' },
-          sensor_popup_pv_3: { label: 'Popup PV 3', helper: 'EntitÃ© pour la ligne 3 du popup PV.' },
-          sensor_popup_pv_4: { label: 'Popup PV 4', helper: 'EntitÃ© pour la ligne 4 du popup PV.' },
-          sensor_popup_pv_5: { label: 'Popup PV 5', helper: 'EntitÃ© pour la ligne 5 du popup PV.' },
-          sensor_popup_pv_6: { label: 'Popup PV 6', helper: 'EntitÃ© pour la ligne 6 du popup PV.' },
-          sensor_popup_pv_1_name: { label: 'Nom Popup PV 1', helper: 'Nom personnalisÃ© optionnel pour la ligne 1 du popup PV. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_pv_2_name: { label: 'Nom Popup PV 2', helper: 'Nom personnalisÃ© optionnel pour la ligne 2 du popup PV. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_pv_3_name: { label: 'Nom Popup PV 3', helper: 'Nom personnalisÃ© optionnel pour la ligne 3 du popup PV. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_pv_4_name: { label: 'Nom Popup PV 4', helper: 'Nom personnalisÃ© optionnel pour la ligne 4 du popup PV. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_pv_5_name: { label: 'Nom Popup PV 5', helper: 'Nom personnalisÃ© optionnel pour la ligne 5 du popup PV. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_pv_6_name: { label: 'Nom Popup PV 6', helper: 'Nom personnalisÃ© optionnel pour la ligne 6 du popup PV. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_pv_1_color: { label: 'Couleur Popup PV 1', helper: 'Couleur pour le texte de la ligne 1 du popup PV.' },
-          sensor_popup_pv_2_color: { label: 'Couleur Popup PV 2', helper: 'Couleur pour le texte de la ligne 2 du popup PV.' },
-          sensor_popup_pv_3_color: { label: 'Couleur Popup PV 3', helper: 'Couleur pour le texte de la ligne 3 du popup PV.' },
-          sensor_popup_pv_4_color: { label: 'Couleur Popup PV 4', helper: 'Couleur pour le texte de la ligne 4 du popup PV.' },
-          sensor_popup_pv_5_color: { label: 'Couleur Popup PV 5', helper: 'Couleur pour le texte de la ligne 5 du popup PV.' },
-          sensor_popup_pv_6_color: { label: 'Couleur Popup PV 6', helper: 'Couleur pour le texte de la ligne 6 du popup PV.' },
-          sensor_popup_pv_1_font_size: { label: 'Taille police Popup PV 1 (px)', helper: 'Taille de police pour la ligne 1 du popup PV. Par dÃ©faut 16' },
-          sensor_popup_pv_2_font_size: { label: 'Taille police Popup PV 2 (px)', helper: 'Taille de police pour la ligne 2 du popup PV. Par dÃ©faut 16' },
-          sensor_popup_pv_3_font_size: { label: 'Taille police Popup PV 3 (px)', helper: 'Taille de police pour la ligne 3 du popup PV. Par dÃ©faut 16' },
-          sensor_popup_pv_4_font_size: { label: 'Taille police Popup PV 4 (px)', helper: 'Taille de police pour la ligne 4 du popup PV. Par dÃ©faut 16' },
-                    sensor_popup_pv_5_font_size: { label: 'Taille police Popup PV 5 (px)', helper: 'Taille de police pour la ligne 5 du popup PV. Par dÃ©faut 16' },
-          sensor_popup_pv_6_font_size: { label: 'Taille police Popup PV 6 (px)', helper: 'Taille de police pour la ligne 6 du popup PV. Par dÃ©faut 16' },
-          sensor_popup_house_1: { label: 'Popup Maison 1', helper: 'EntitÃ© pour la ligne 1 du popup maison.' },
-          sensor_popup_house_1_name: { label: 'Nom Popup Maison 1', helper: 'Nom personnalisÃ© optionnel pour la ligne 1 du popup maison. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_house_1_color: { label: 'Couleur Popup Maison 1', helper: 'Couleur pour le texte de la ligne 1 du popup maison.' },
-          sensor_popup_house_1_font_size: { label: 'Taille police Popup Maison 1 (px)', helper: 'Taille de police pour la ligne 1 du popup maison. Par dÃ©faut 16' },
-          sensor_popup_house_2: { label: 'Popup Maison 2', helper: 'EntitÃ© pour la ligne 2 du popup maison.' },
-          sensor_popup_house_2_name: { label: 'Nom Popup Maison 2', helper: 'Nom personnalisÃ© optionnel pour la ligne 2 du popup maison. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_house_2_color: { label: 'Couleur Popup Maison 2', helper: 'Couleur pour le texte de la ligne 2 du popup maison.' },
-          sensor_popup_house_2_font_size: { label: 'Taille police Popup Maison 2 (px)', helper: 'Taille de police pour la ligne 2 du popup maison. Par dÃ©faut 16' },
-          sensor_popup_house_3: { label: 'Popup Maison 3', helper: 'EntitÃ© pour la ligne 3 du popup maison.' },
-          sensor_popup_house_3_name: { label: 'Nom Popup Maison 3', helper: 'Nom personnalisÃ© optionnel pour la ligne 3 du popup maison. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_house_3_color: { label: 'Couleur Popup Maison 3', helper: 'Couleur pour le texte de la ligne 3 du popup maison.' },
-          sensor_popup_house_3_font_size: { label: 'Taille police Popup Maison 3 (px)', helper: 'Taille de police pour la ligne 3 du popup maison. Par dÃ©faut 16' },
-          sensor_popup_house_4: { label: 'Popup Maison 4', helper: 'EntitÃ© pour la ligne 4 du popup maison.' },
-          sensor_popup_house_4_name: { label: 'Nom Popup Maison 4', helper: 'Nom personnalisÃ© optionnel pour la ligne 4 du popup maison. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_house_4_color: { label: 'Couleur Popup Maison 4', helper: 'Couleur pour le texte de la ligne 4 du popup maison.' },
-          sensor_popup_house_4_font_size: { label: 'Taille police Popup Maison 4 (px)', helper: 'Taille de police pour la ligne 4 du popup maison. Par dÃ©faut 16' },
-          sensor_popup_house_5: { label: 'Popup Maison 5', helper: 'EntitÃ© pour la ligne 5 du popup maison.' },
-          sensor_popup_house_5_name: { label: 'Nom Popup Maison 5', helper: 'Nom personnalisÃ© optionnel pour la ligne 5 du popup maison. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_house_5_color: { label: 'Couleur Popup Maison 5', helper: 'Couleur pour le texte de la ligne 5 du popup maison.' },
-          sensor_popup_house_5_font_size: { label: 'Taille police Popup Maison 5 (px)', helper: 'Taille de police pour la ligne 5 du popup maison. Par dÃ©faut 16' },
-          sensor_popup_house_6: { label: 'Popup Maison 6', helper: 'EntitÃ© pour la ligne 6 du popup maison.' },
-          sensor_popup_house_6_name: { label: 'Nom Popup Maison 6', helper: 'Nom personnalisÃ© optionnel pour la ligne 6 du popup maison. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_house_6_color: { label: 'Couleur Popup Maison 6', helper: 'Couleur pour le texte de la ligne 6 du popup maison.' },
-          sensor_popup_house_6_font_size: { label: 'Taille police Popup Maison 6 (px)', helper: 'Taille de police pour la ligne 6 du popup maison. Par dÃ©faut 16' },
-          sensor_popup_bat_1: { label: 'Popup Batterie 1', helper: 'EntitÃ© pour la ligne 1 du popup batterie.' },
-          sensor_popup_bat_1_name: { label: 'Nom Popup Batterie 1', helper: 'Nom personnalisÃ© optionnel pour la ligne 1 du popup batterie. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_bat_1_color: { label: 'Couleur Popup Batterie 1', helper: 'Couleur pour le texte de la ligne 1 du popup batterie.' },
-          sensor_popup_bat_1_font_size: { label: 'Taille police Popup Batterie 1 (px)', helper: 'Taille de police pour la ligne 1 du popup batterie. Par dÃ©faut 16' },
-          sensor_popup_bat_2: { label: 'Popup Batterie 2', helper: 'EntitÃ© pour la ligne 2 du popup batterie.' },
-          sensor_popup_bat_2_name: { label: 'Nom Popup Batterie 2', helper: 'Nom personnalisÃ© optionnel pour la ligne 2 du popup batterie. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_bat_2_color: { label: 'Couleur Popup Batterie 2', helper: 'Couleur pour le texte de la ligne 2 du popup batterie.' },
-          sensor_popup_bat_2_font_size: { label: 'Taille police Popup Batterie 2 (px)', helper: 'Taille de police pour la ligne 2 du popup batterie. Par dÃ©faut 16' },
-          sensor_popup_bat_3: { label: 'Popup Batterie 3', helper: 'EntitÃ© pour la ligne 3 du popup batterie.' },
-          sensor_popup_bat_3_name: { label: 'Nom Popup Batterie 3', helper: 'Nom personnalisÃ© optionnel pour la ligne 3 du popup batterie. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_bat_3_color: { label: 'Couleur Popup Batterie 3', helper: 'Couleur pour le texte de la ligne 3 du popup batterie.' },
-          sensor_popup_bat_3_font_size: { label: 'Taille police Popup Batterie 3 (px)', helper: 'Taille de police pour la ligne 3 du popup batterie. Par dÃ©faut 16' },
-          sensor_popup_bat_4: { label: 'Popup Batterie 4', helper: 'EntitÃ© pour la ligne 4 du popup batterie.' },
-          sensor_popup_bat_4_name: { label: 'Nom Popup Batterie 4', helper: 'Nom personnalisÃ© optionnel pour la ligne 4 du popup batterie. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_bat_4_color: { label: 'Couleur Popup Batterie 4', helper: 'Couleur pour le texte de la ligne 4 du popup batterie.' },
-          sensor_popup_bat_4_font_size: { label: 'Taille police Popup Batterie 4 (px)', helper: 'Taille de police pour la ligne 4 du popup batterie. Par dÃ©faut 16' },
-          sensor_popup_bat_5: { label: 'Popup Batterie 5', helper: 'EntitÃ© pour la ligne 5 du popup batterie.' },
-          sensor_popup_bat_5_name: { label: 'Nom Popup Batterie 5', helper: 'Nom personnalisÃ© optionnel pour la ligne 5 du popup batterie. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_bat_5_color: { label: 'Couleur Popup Batterie 5', helper: 'Couleur pour le texte de la ligne 5 du popup batterie.' },
-          sensor_popup_bat_5_font_size: { label: 'Taille police Popup Batterie 5 (px)', helper: 'Taille de police pour la ligne 5 du popup batterie. Par dÃ©faut 16' },
-          sensor_popup_bat_6: { label: 'Popup Batterie 6', helper: 'EntitÃ© pour la ligne 6 du popup batterie.' },
-          sensor_popup_bat_6_name: { label: 'Nom Popup Batterie 6', helper: 'Nom personnalisÃ© optionnel pour la ligne 6 du popup batterie. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_bat_6_color: { label: 'Couleur Popup Batterie 6', helper: 'Couleur pour le texte de la ligne 6 du popup batterie.' },
-          sensor_popup_bat_6_font_size: { label: 'Taille police Popup Batterie 6 (px)', helper: 'Taille de police pour la ligne 6 du popup batterie. Par dÃ©faut 16' },
-          sensor_popup_grid_1: { label: 'Popup RÃ©seau 1', helper: 'EntitÃ© pour la ligne 1 du popup rÃ©seau.' },
-          sensor_popup_grid_1_name: { label: 'Nom Popup RÃ©seau 1', helper: 'Nom personnalisÃ© optionnel pour la ligne 1 du popup rÃ©seau. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_grid_1_color: { label: 'Couleur Popup RÃ©seau 1', helper: 'Couleur pour le texte de la ligne 1 du popup rÃ©seau.' },
-          sensor_popup_grid_1_font_size: { label: 'Taille police Popup RÃ©seau 1 (px)', helper: 'Taille de police pour la ligne 1 du popup rÃ©seau. Par dÃ©faut 16' },
-          sensor_popup_grid_2: { label: 'Popup RÃ©seau 2', helper: 'EntitÃ© pour la ligne 2 du popup rÃ©seau.' },
-          sensor_popup_grid_2_name: { label: 'Nom Popup RÃ©seau 2', helper: 'Nom personnalisÃ© optionnel pour la ligne 2 du popup rÃ©seau. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_grid_2_color: { label: 'Couleur Popup RÃ©seau 2', helper: 'Couleur pour le texte de la ligne 2 du popup rÃ©seau.' },
-          sensor_popup_grid_2_font_size: { label: 'Taille police Popup RÃ©seau 2 (px)', helper: 'Taille de police pour la ligne 2 du popup rÃ©seau. Par dÃ©faut 16' },
-          sensor_popup_grid_3: { label: 'Popup RÃ©seau 3', helper: 'EntitÃ© pour la ligne 3 du popup rÃ©seau.' },
-          sensor_popup_grid_3_name: { label: 'Nom Popup RÃ©seau 3', helper: 'Nom personnalisÃ© optionnel pour la ligne 3 du popup rÃ©seau. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_grid_3_color: { label: 'Couleur Popup RÃ©seau 3', helper: 'Couleur pour le texte de la ligne 3 du popup rÃ©seau.' },
-          sensor_popup_grid_3_font_size: { label: 'Taille police Popup RÃ©seau 3 (px)', helper: 'Taille de police pour la ligne 3 du popup rÃ©seau. Par dÃ©faut 16' },
-          sensor_popup_grid_4: { label: 'Popup RÃ©seau 4', helper: 'EntitÃ© pour la ligne 4 du popup rÃ©seau.' },
-          sensor_popup_grid_4_name: { label: 'Nom Popup RÃ©seau 4', helper: 'Nom personnalisÃ© optionnel pour la ligne 4 du popup rÃ©seau. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_grid_4_color: { label: 'Couleur Popup RÃ©seau 4', helper: 'Couleur pour le texte de la ligne 4 du popup rÃ©seau.' },
-          sensor_popup_grid_4_font_size: { label: 'Taille police Popup RÃ©seau 4 (px)', helper: 'Taille de police pour la ligne 4 du popup rÃ©seau. Par dÃ©faut 16' },
-          sensor_popup_grid_5: { label: 'Popup RÃ©seau 5', helper: 'EntitÃ© pour la ligne 5 du popup rÃ©seau.' },
-          sensor_popup_grid_5_name: { label: 'Nom Popup RÃ©seau 5', helper: 'Nom personnalisÃ© optionnel pour la ligne 5 du popup rÃ©seau. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_grid_5_color: { label: 'Couleur Popup RÃ©seau 5', helper: 'Couleur pour le texte de la ligne 5 du popup rÃ©seau.' },
-          sensor_popup_grid_5_font_size: { label: 'Taille police Popup RÃ©seau 5 (px)', helper: 'Taille de police pour la ligne 5 du popup rÃ©seau. Par dÃ©faut 16' },
-          sensor_popup_grid_6: { label: 'Popup RÃ©seau 6', helper: 'EntitÃ© pour la ligne 6 du popup rÃ©seau.' },
-          sensor_popup_grid_6_name: { label: 'Nom Popup RÃ©seau 6', helper: 'Nom personnalisÃ© optionnel pour la ligne 6 du popup rÃ©seau. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_grid_6_color: { label: 'Couleur Popup RÃ©seau 6', helper: 'Couleur pour le texte de la ligne 6 du popup rÃ©seau.' },
-          sensor_popup_grid_6_font_size: { label: 'Taille police Popup RÃ©seau 6 (px)', helper: 'Taille de police pour la ligne 6 du popup rÃ©seau. Par dÃ©faut 16' },
-          sensor_popup_inverter_1: { label: 'Popup Inverter 1', helper: 'EntitÃ© pour la ligne 1 du popup Inverter.' },
-          sensor_popup_inverter_1_name: { label: 'Nom Popup Inverter 1', helper: 'Nom personnalisÃ© optionnel pour la ligne 1 du popup Inverter. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_inverter_1_color: { label: 'Couleur Popup Inverter 1', helper: 'Couleur pour le texte de la ligne 1 du popup Inverter.' },
-          sensor_popup_inverter_1_font_size: { label: 'Taille police Popup Inverter 1 (px)', helper: 'Taille de police pour la ligne 1 du popup Inverter. Par dÃ©faut 16' },
-          sensor_popup_inverter_2: { label: 'Popup Inverter 2', helper: 'EntitÃ© pour la ligne 2 du popup Inverter.' },
-          sensor_popup_inverter_2_name: { label: 'Nom Popup Inverter 2', helper: 'Nom personnalisÃ© optionnel pour la ligne 2 du popup Inverter. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_inverter_2_color: { label: 'Couleur Popup Inverter 2', helper: 'Couleur pour le texte de la ligne 2 du popup Inverter.' },
-          sensor_popup_inverter_2_font_size: { label: 'Taille police Popup Inverter 2 (px)', helper: 'Taille de police pour la ligne 2 du popup Inverter. Par dÃ©faut 16' },
-          sensor_popup_inverter_3: { label: 'Popup Inverter 3', helper: 'EntitÃ© pour la ligne 3 du popup Inverter.' },
-          sensor_popup_inverter_3_name: { label: 'Nom Popup Inverter 3', helper: 'Nom personnalisÃ© optionnel pour la ligne 3 du popup Inverter. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_inverter_3_color: { label: 'Couleur Popup Inverter 3', helper: 'Couleur pour le texte de la ligne 3 du popup Inverter.' },
-          sensor_popup_inverter_3_font_size: { label: 'Taille police Popup Inverter 3 (px)', helper: 'Taille de police pour la ligne 3 du popup Inverter. Par dÃ©faut 16' },
-          sensor_popup_inverter_4: { label: 'Popup Inverter 4', helper: 'EntitÃ© pour la ligne 4 du popup Inverter.' },
-          sensor_popup_inverter_4_name: { label: 'Nom Popup Inverter 4', helper: 'Nom personnalisÃ© optionnel pour la ligne 4 du popup Inverter. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_inverter_4_color: { label: 'Couleur Popup Inverter 4', helper: 'Couleur pour le texte de la ligne 4 du popup Inverter.' },
-          sensor_popup_inverter_4_font_size: { label: 'Taille police Popup Inverter 4 (px)', helper: 'Taille de police pour la ligne 4 du popup Inverter. Par dÃ©faut 16' },
-          sensor_popup_inverter_5: { label: 'Popup Inverter 5', helper: 'EntitÃ© pour la ligne 5 du popup Inverter.' },
-          sensor_popup_inverter_5_name: { label: 'Nom Popup Inverter 5', helper: 'Nom personnalisÃ© optionnel pour la ligne 5 du popup Inverter. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_inverter_5_color: { label: 'Couleur Popup Inverter 5', helper: 'Couleur pour le texte de la ligne 5 du popup Inverter.' },
-          sensor_popup_inverter_5_font_size: { label: 'Taille police Popup Inverter 5 (px)', helper: 'Taille de police pour la ligne 5 du popup Inverter. Par dÃ©faut 16' },
-          sensor_popup_inverter_6: { label: 'Popup Inverter 6', helper: 'EntitÃ© pour la ligne 6 du popup Inverter.' },
-          sensor_popup_inverter_6_name: { label: 'Nom Popup Inverter 6', helper: 'Nom personnalisÃ© optionnel pour la ligne 6 du popup Inverter. Laisser vide pour utiliser le nom de l\'entitÃ©.' },
-          sensor_popup_inverter_6_color: { label: 'Couleur Popup Inverter 6', helper: 'Couleur pour le texte de la ligne 6 du popup Inverter.' },
-          sensor_popup_inverter_6_font_size: { label: 'Taille police Popup Inverter 6 (px)', helper: 'Taille de police pour la ligne 6 du popup Inverter. Par dÃ©faut 16' }
+          card_title: { label: 'Titre de la carte', helper: 'Titre displayed at the top of the card. Laissez vide to disable.' },
+          title_text_color: { label: 'Titre Couleur du texte', helper: 'Overrides the fill color for [data-role="title-text"]. Laissez vide to keep the SVG styling.' },
+          title_bg_color: { label: 'Titre Couleur d’arrière-plan', helper: 'Overrides the fill color for [data-role="title-bg"]. Laissez vide to keep the SVG styling.' },
+          font_family: { label: 'Police', helper: 'CSS font-family used for all SVG text (e.g., sans-serif, Roboto, "Segoe UI").' },
+          odometer_font_family: { label: 'Odomètre Police (Monospace)', helper: 'Font family used only for odometer-animated values. Laissez vide to reuse Police. Tip: pick a monospace variant (e.g., "Roboto Mono" or "Space Mono").' },
+          background_day: { label: 'Arrière-plan (jour)', helper: 'Path to the day background SVG (e.g., /local/community/advanced-energy-card/advanced_background_day.svg).' },
+          background_night: { label: 'Arrière-plan (nuit)', helper: 'Path to the night background SVG (e.g., /local/community/advanced-energy-card/advanced_background_night.svg).' },
+          night_mode: { label: 'Mode jour/nuit', helper: 'Sélectionnez Day, Night, or Auto. Auto uses sun.sun: above_horizon = Day, below_horizon = Night.' },
+          language: { label: 'Langue', helper: 'Choisissez the editor language.' },
+          display_unit: { label: 'Unité d’affichage', helper: 'Unit used when formatting power values.' },
+          update_interval: { label: 'Intervalle de mise à jour', helper: 'Refresh cadence for card updates (0 disables throttling).' },
+          initial_configuration: { label: 'Configuration initiale', helper: 'Show the Configuration initiale section in the editor.' },
+          initial_has_pv: { label: 'Do you have Solar/PV puissance?', helper: 'Sélectionnez Yes if you have solar production to configure.' },
+          initial_inverters: { label: 'How many inverters do you have?', helper: 'Shown only when Solar/PV is enabled.' },
+          initial_has_battery: { label: 'Do you have Batterie storage?', helper: '' },
+          initial_battery_count: { label: 'How many Batteries do you have? Maximum 4', helper: '' },
+          initial_has_grid: { label: 'Do you have Réseau supplied electricity?', helper: '' },
+          initial_can_export: { label: 'Can you export excess electricity to the grid?', helper: '' },
+          initial_has_windmill: { label: 'Do you have a Éolienne?', helper: '' },
+          initial_has_ev: { label: 'Do you have Electric Vehicles/VE\'s?', helper: '' },
+          initial_ev_count: { label: 'How many do you have?', helper: '' },
+          initial_config_items_title: { label: 'Requis configuration items', helper: '' },
+          initial_config_items_helper: { label: 'These items become relevant based on your answers above.', helper: '' },
+          initial_config_items_empty: { label: 'No items to show yet.', helper: '' },
+          initial_config_complete_helper: { label: 'This completes the last required minimum configuration. Once clicking on the Complete button, please review all menus to check for additional items and popup configurations. This initial configuration can be re-enabled in the General menu.', helper: '' },
+          initial_config_complete_button: { label: 'Complete', helper: '' },
+          array_helper_text: { label: 'Each Array must have at minimum a combined Solar/PV total sensor which is the total power output of that Array or individual string values which are added together to get the total power output of the array. Journalier production can be supplied and can be shown in a Journalier production card.', helper: '' },
+          animation_speed_factor: { label: 'Facteur de vitesse d’animation', helper: 'Adjust animation speed multiplier (-3x to 3x). Set 0 to pause; negatives reverse direction.' },
+          animation_style: { label: 'Style d’animation (jour)', helper: 'Flow animation style used when the card is in Day mode.' },
+          night_animation_style: { label: 'Style d’animation (nuit)', helper: 'Flow animation style used when the card is in Night mode. Laissez vide to use the Day style.' },
+          dashes_glow_intensity: { label: 'Intensité de lueur (tirets)', helper: 'Controls glow strength for "Dashes + Glow" (0 disables glow).' },
+          fluid_flow_outer_glow: { label: 'Lueur externe (flux fluide)', helper: 'Activer the extra outer haze/glow layer for animation_style: fluid_flow.' },
+          flow_stroke_width: { label: 'Flow Stroke Width (px)', helper: 'Optionnel override for the animated flow stroke width (no SVG edits). Laissez vide to keep SVG defaults.' },
+          fluid_flow_stroke_width: { label: 'Fluid Flow Stroke Width (px)', helper: 'Base stroke width for animation_style: fluid_flow. Overlay/mask widths are derived from this (default 5).' },
+          sensor_pv_total: { label: 'Capteur PV total', helper: 'Optionnel aggregate production sensor displayed as the combined line.' },
+          sensor_pv_total_secondary: { label: 'Capteur PV total (Onduleur 2)', helper: 'Optionnel second inverter total; added to the PV total when provided.' },
+          sensor_windmill_total: { label: 'Éolienne Total', helper: 'puissance sensor for the windmill generator (W). When not configured the windmill SVG group is hidden.' },
+          sensor_windmill_daily: { label: 'Journalier Éolienne production', helper: 'Optionnel sensor reporting daily windmill production totals.' },
+          sensor_pv1: { label: 'PV String 1 (Array 1)', helper: 'Array 1 solar production sensor for string 1.' },
+          sensor_pv2: { label: 'PV String 2 (Array 1)', helper: 'Array 1 solar production sensor for string 2.' },
+          sensor_pv3: { label: 'PV String 3 (Array 1)', helper: 'Array 1 solar production sensor for string 3.' },
+          sensor_pv4: { label: 'PV String 4 (Array 1)', helper: 'Array 1 solar production sensor for string 4.' },
+          sensor_pv5: { label: 'PV String 5 (Array 1)', helper: 'Array 1 solar production sensor for string 5.' },
+          sensor_pv6: { label: 'PV String 6 (Array 1)', helper: 'Array 1 solar production sensor for string 6.' },
+          sensor_pv_array2_1: { label: 'PV String 1 (Array 2)', helper: 'Array 2 solar production sensor for string 1.' },
+          sensor_pv_array2_2: { label: 'PV String 2 (Array 2)', helper: 'Array 2 solar production sensor for string 2.' },
+          sensor_pv_array2_3: { label: 'PV String 3 (Array 2)', helper: 'Array 2 solar production sensor for string 3.' },
+          sensor_pv_array2_4: { label: 'PV String 4 (Array 2)', helper: 'Array 2 solar production sensor for string 4.' },
+          sensor_pv_array2_5: { label: 'PV String 5 (Array 2)', helper: 'Array 2 solar production sensor for string 5.' },
+          sensor_pv_array2_6: { label: 'PV String 6 (Array 2)', helper: 'Array 2 solar production sensor for string 6.' },
+          sensor_daily: { label: 'Journalier production capteur', helper: 'capteur reporting daily production totals. Either the PV total sensor or your PV string arrays need to be specified as a minimum.' },
+          sensor_daily_array2: { label: 'Journalier production capteur (Array 2)', helper: 'capteur reporting daily production totals for Array 2.' },
+          sensor_bat1_soc: { label: 'Batterie 1 SOC', helper: 'État de charge sensor for Batterie 1 (percentage).' },
+          sensor_bat1_power: { label: 'Batterie 1 puissance', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batterie 1 becomes active.' },
+          sensor_bat1_charge_power: { label: 'Batterie 1 charge puissance', helper: 'capteur for Batterie 1 charging power.' },
+          sensor_bat1_discharge_power: { label: 'Batterie 1 décharge puissance', helper: 'capteur for Batterie 1 discharging power.' },
+          sensor_bat2_soc: { label: 'Batterie 2 SOC', helper: 'État de charge sensor for Batterie 2 (percentage).' },
+          sensor_bat2_power: { label: 'Batterie 2 puissance', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batterie 2 becomes active.' },
+          sensor_bat2_charge_power: { label: 'Batterie 2 charge puissance', helper: 'capteur for Batterie 2 charging power.' },
+          sensor_bat2_discharge_power: { label: 'Batterie 2 décharge puissance', helper: 'capteur for Batterie 2 discharging power.' },
+          sensor_bat3_soc: { label: 'Batterie 3 SOC', helper: 'État de charge sensor for Batterie 3 (percentage).' },
+          sensor_bat3_power: { label: 'Batterie 3 puissance', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batterie 3 becomes active.' },
+          sensor_bat3_charge_power: { label: 'Batterie 3 charge puissance', helper: 'capteur for Batterie 3 charging power.' },
+          sensor_bat3_discharge_power: { label: 'Batterie 3 décharge puissance' },
+          sensor_bat4_soc: { label: 'Batterie 4 SOC', helper: 'État de charge sensor for Batterie 4 (percentage).' },
+          sensor_bat4_power: { label: 'Batterie 4 puissance', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batterie 4 becomes active.' },
+          sensor_bat4_charge_power: { label: 'Batterie 4 charge puissance', helper: 'capteur for Batterie 4 charging power.' },
+          sensor_bat4_discharge_power: { label: 'Batterie 4 décharge puissance', helper: 'capteur for Batterie 4 discharging power.' },
+          sensor_home_load: { label: 'Home Load/Consumption (Requis)', helper: 'Total household consumption sensor.' },
+          sensor_home_load_secondary: { label: 'Home Load (Onduleur 2)', helper: 'Optionnel house load sensor for the second inverter.' },
+          sensor_heat_pump_consumption: { label: 'Heat Pump Consumption', helper: 'capteur for heat pump energy consumption.' },
+          sensor_hot_water_consumption: { label: 'Water Heating', helper: 'capteur for Hot Water Heating Load.' },
+          sensor_pool_consumption: { label: 'Pool', helper: 'capteur for pool power/consumption.' },
+          sensor_washing_machine_consumption: { label: 'Washing Machine', helper: 'capteur for washing machine power/consumption.' },
+          sensor_dishwasher_consumption: { label: 'Dish Washer', helper: 'capteur for Dish Washer Load.' },
+          sensor_dryer_consumption: { label: 'Dryer', helper: 'capteur for dryer power/consumption.' },
+          sensor_refrigerator_consumption: { label: 'Refrigerator', helper: 'capteur for refrigerator power/consumption.' },
+          hot_water_text_color: { label: 'Water Heating Couleur du texte', helper: 'Couleur applied to the hot water power text.' },
+          dishwasher_text_color: { label: 'Dish Washer Couleur du texte', helper: 'Couleur applied to the dish washer power text.' },
+          hot_water_font_size: { label: 'Water Heating Font Size (px)', helper: 'Par défaut 8' },
+          dishwasher_font_size: { label: 'Dish Washer Font Size (px)', helper: 'Par défaut 8' },
+          sensor_grid_power: { label: 'Réseau Onduleur 1 puissance', helper: 'Positive/negative grid flow sensor for inverter 1. Specify either this sensor or both Réseau Onduleur 1 Import capteur and Réseau Onduleur 1 Export capteur.' },
+          sensor_grid_import: { label: 'Réseau Onduleur 1 Import capteur', helper: 'Optionnel entity reporting inverter 1 grid import (positive) power.' },
+          sensor_grid_export: { label: 'Réseau Onduleur 1 Export capteur', helper: 'Optionnel entity reporting inverter 1 grid export (positive) power.' },
+          sensor_grid_import_daily: { label: 'Journalier Réseau Onduleur 1 Import capteur', helper: 'Optionnel entity reporting cumulative inverter 1 grid import for the current day.' },
+          sensor_grid_export_daily: { label: 'Journalier Réseau Onduleur 1 Export capteur', helper: 'Optionnel entity reporting cumulative inverter 1 grid export for the current day.' },
+          sensor_grid2_power: { label: 'Réseau Onduleur 2 puissance', helper: 'Positive/negative grid flow sensor for inverter 2. Specify either this sensor or both Réseau Onduleur 2 Import capteur and Réseau Onduleur 2 Export capteur.' },
+          sensor_grid2_import: { label: 'Réseau Onduleur 2 Import capteur', helper: 'Optionnel entity reporting inverter 2 grid import (positive) power.' },
+          sensor_grid2_export: { label: 'Réseau Onduleur 2 Export capteur', helper: 'Optionnel entity reporting inverter 2 grid export (positive) power.' },
+          sensor_grid2_import_daily: { label: 'Journalier Réseau Onduleur 2 Import capteur', helper: 'Optionnel entity reporting cumulative inverter 2 grid import for the current day.' },
+          sensor_grid2_export_daily: { label: 'Journalier Réseau Onduleur 2 Export capteur', helper: 'Optionnel entity reporting cumulative inverter 2 grid export for the current day.' },
+          show_daily_grid: { label: 'Show Journalier Réseau Values', helper: 'Show the daily import/export totals under the current grid flow when enabled.' },
+          grid_daily_font_size: { label: 'Journalier Réseau Font Size (px)', helper: 'Optionnel override for daily grid import/export text. Par défauts to Réseau Font Size.' },
+          grid_current_odometer: { label: 'Odomètre: Réseau Current', helper: 'Animate Réseau Current with a per-digit rolling effect.' },
+          grid_current_odometer_duration: { label: 'Odomètre Durée (ms)', helper: 'Animation duration in milliseconds. Par défaut 350.' },
+          show_grid_flow_label: { label: 'Show Réseau Import/Export Nom', helper: 'Prepend the importing/exporting label before the grid value when enabled.' },
+          enable_echo_alive: { label: 'Activer Echo Alive', helper: 'Activers an invisible iframe to keep the Silk browser open on Echo Show. The button will be positioned in a corner of the card.' },
+          pv_tot_color: { label: 'PV Total Couleur', helper: 'Colour applied to the PV TOTAL text line.' },
+          pv_primary_color: { label: 'PV 1 Flow Couleur', helper: 'Colour used for the primary PV animation line.' },
+          pv_secondary_color: { label: 'PV 2 Flow Couleur', helper: 'Colour used for the secondary PV animation line when available.' },
+          load_flow_color: { label: 'Load Flow Couleur', helper: 'Colour applied to the home load animation line.' },
+          load_text_color: { label: 'Load Couleur du texte', helper: 'Colour applied to the home load text when thresholds are inactive.' },
+          house_total_color: { label: 'Maison Total Couleur', helper: 'Colour applied to the HOUSE TOT text/flow.' },
+          inv1_color: { label: 'Onduleur 1 to Maison Couleur', helper: 'Couleur applied to the flow from Onduleur 1 to the house.' },
+          inv2_color: { label: 'Onduleur 2 to Maison Couleur', helper: 'Couleur applied to the flow from Onduleur 2 to the house.' },
+          load_threshold_warning: { label: 'Load Warning Seuil', helper: 'Change load color when magnitude equals or exceeds this value. Uses the selected display unit.' },
+          load_warning_color: { label: 'Load Warning Couleur', helper: 'Hex or CSS color applied at the load warning threshold.' },
+          load_threshold_critical: { label: 'Load Critical Seuil', helper: 'Change load color when magnitude equals or exceeds this value. Uses the selected display unit.' },
+          load_critical_color: { label: 'Load Critical Couleur', helper: 'Hex or CSS color applied at the load critical threshold.' },
+          battery_soc_color: { label: 'Batterie SOC Couleur', helper: 'Hex color applied to the battery SOC percentage text.' },
+          battery_charge_color: { label: 'Batterie charge Flow Couleur', helper: 'Colour used when energy is flowing into the battery.' },
+          battery_discharge_color: { label: 'Batterie décharge Flow Couleur', helper: 'Colour used when energy is flowing from the battery.' },
+          grid_import_color: { label: 'Onduleur 1 Réseau Import Flow Couleur', helper: 'Base colour before thresholds when inverter 1 is importing from the grid.' },
+          grid_export_color: { label: 'Onduleur 1 Réseau Export Flow Couleur', helper: 'Base colour before thresholds when inverter 1 is exporting to the grid.' },
+          grid2_import_color: { label: 'Onduleur 2 Réseau Import Flow Couleur', helper: 'Base colour before thresholds when inverter 2 is importing from the grid.' },
+          grid2_export_color: { label: 'Onduleur 2 Réseau Export Flow Couleur', helper: 'Base colour before thresholds when inverter 2 is exporting to the grid.' },
+          car_flow_color: { label: 'VE Flow Couleur', helper: 'Colour applied to the electric vehicle animation line.' },
+          battery_fill_high_color: { label: 'Batterie Fill (Normal) Couleur', helper: 'Liquid fill colour when the battery SOC is above the low threshold.' },
+          battery_fill_low_color: { label: 'Batterie Fill (Low) Couleur', helper: 'Liquid fill colour when the battery SOC is at or below the low threshold.' },
+          battery_fill_low_threshold: { label: 'Batterie Low Fill Seuil (%)', helper: 'Use the low fill colour when SOC is at or below this percentage.' },
+          battery_fill_opacity: { label: 'Batterie Fill Opacity', helper: 'Opacity for the battery fill level (0-1).' },
+          grid_activity_threshold: { label: 'Réseau Animation Seuil (W)', helper: 'Ignore grid flows whose absolute value is below this wattage before animating.' },
+          grid_power_only: { label: 'Réseau puissance Only', helper: 'Hide inverter/battery flows and show a direct grid-to-house flow.' },
+          grid_threshold_warning: { label: 'Onduleur 1 Réseau Warning Seuil', helper: 'Change inverter 1 grid color when magnitude equals or exceeds this value. Uses the selected display unit.' },
+          grid_warning_color: { label: 'Onduleur 1 Réseau Warning Couleur', helper: 'Hex or CSS color applied at the inverter 1 warning threshold.' },
+          grid_threshold_critical: { label: 'Onduleur 1 Réseau Critical Seuil', helper: 'Change inverter 1 grid color when magnitude equals or exceeds this value. Uses the selected display unit.' },
+          grid_critical_color: { label: 'Onduleur 1 Réseau Critical Couleur', helper: 'Hex or CSS color applied at the inverter 1 critical threshold.' },
+          grid2_threshold_warning: { label: 'Onduleur 2 Réseau Warning Seuil', helper: 'Change inverter 2 grid color when magnitude equals or exceeds this value. Uses the selected display unit.' },
+          grid2_warning_color: { label: 'Onduleur 2 Réseau Warning Couleur', helper: 'Hex or CSS color applied at the inverter 2 warning threshold.' },
+          grid2_threshold_critical: { label: 'Onduleur 2 Réseau Critical Seuil', helper: 'Change inverter 2 grid color when magnitude equals or exceeds this value. Uses the selected display unit.' },
+          grid2_critical_color: { label: 'Onduleur 2 Réseau Critical Couleur', helper: 'Hex or CSS color applied at the inverter 2 critical threshold.' },
+          invert_grid: { label: 'Invert Réseau Values', helper: 'Activer if import/export polarity is reversed.' },
+          invert_battery: { label: 'Invert Batterie Values', helper: 'Activer if charge/discharge polarity is reversed.' },
+          invert_bat1: { label: 'Invert Batterie 1 Values', helper: 'Activer if Batterie 1 charge/discharge polarity is reversed.' },
+          invert_bat2: { label: 'Invert Batterie 2 Values', helper: 'Activer if Batterie 2 charge/discharge polarity is reversed.' },
+          invert_bat3: { label: 'Invert Batterie 3 Values', helper: 'Activer if Batterie 3 charge/discharge polarity is reversed.' },
+          sensor_car_power: { label: 'Voiture 1 puissance capteur', helper: 'capteur for VE charge/discharge power.' },
+          sensor_car_soc: { label: 'Voiture 1 SOC capteur', helper: 'État de charge sensor for VE 1 (percentage).' },
+          car_soc: { label: 'Voiture SOC', helper: 'capteur for VE battery SOC (percentage).' },
+          car_charger_power: { label: 'Voiture Charger puissance', helper: 'capteur for VE charger power.' },
+          car1_label: { label: 'Voiture 1 Libellé', helper: 'Text displayed next to the first VE values.' },
+          sensor_car2_power: { label: 'Voiture 2 puissance capteur', helper: 'capteur for VE 2 charge/discharge power.' },
+          car2_power: { label: 'Voiture 2 puissance', helper: 'capteur for VE 2 charge/discharge power.' },
+          sensor_car2_soc: { label: 'Voiture 2 SOC capteur', helper: 'État de charge sensor for VE 2 (percentage).' },
+          car2_soc: { label: 'Voiture 2 SOC', helper: 'capteur for VE 2 battery SOC (percentage).' },
+          car2_charger_power: { label: 'Voiture 2 Charger puissance', helper: 'capteur for VE 2 charger power.' },
+          car2_label: { label: 'Voiture 2 Libellé', helper: 'Text displayed next to the second VE values.' },
+          car_headlight_flash: { label: 'Headlight Flash While Charging', helper: 'Activer to flash the VE headlights whenever charging is detected.' },
+          car1_glow_brightness: { label: 'Voiture Glow Effect', helper: 'Percentage the car flow effects show while not charging.' },
+          car2_glow_brightness: { label: 'Voiture Glow Effect', helper: 'Percentage the car flow effects show while not charging.' },
+          car_pct_color: { label: 'Voiture SOC Couleur', helper: 'Hex color for VE SOC text (e.g., #00FFFF).' },
+          car2_pct_color: { label: 'Voiture 2 SOC Couleur', helper: 'Hex color for second VE SOC text (falls back to Voiture SOC Couleur).' },
+          car1_name_color: { label: 'Voiture 1 Nom Couleur', helper: 'Couleur applied to the Voiture 1 name label.' },
+          car2_name_color: { label: 'Voiture 2 Nom Couleur', helper: 'Couleur applied to the Voiture 2 name label.' },
+          car1_color: { label: 'Voiture 1 Couleur', helper: 'Couleur applied to Voiture 1 power value.' },
+          car2_color: { label: 'Voiture 2 Couleur', helper: 'Couleur applied to Voiture 2 power value.' },
+          heat_pump_label: { label: 'Heat Pump Libellé', helper: 'Custom label for the heat pump/AC line (defaults to "Heat Pump/AC").' },
+          heat_pump_flow_color: { label: 'Heat Pump Flow Couleur', helper: 'Couleur applied to the heat pump flow animation.' },
+          heat_pump_text_color: { label: 'Heat Pump Couleur du texte', helper: 'Couleur applied to the heat pump power text.' },
+          pool_flow_color: { label: 'Pool Flow Couleur', helper: 'Couleur applied to the pool flow animation.' },
+          pool_text_color: { label: 'Pool Couleur du texte', helper: 'Couleur applied to the pool power text.' },
+          washing_machine_text_color: { label: 'Washing Machine Couleur du texte', helper: 'Couleur applied to the washing machine power text.' },
+          dryer_text_color: { label: 'Dryer Couleur du texte', helper: 'Couleur applied to the dryer power text.' },
+          refrigerator_text_color: { label: 'Refrigerator Couleur du texte', helper: 'Couleur applied to the refrigerator power text.' },
+          windmill_flow_color: { label: 'Éolienne Flow Couleur', helper: 'Couleur applied to the windmill flow (data-flow-key="windmill-inverter1" / "windmill-inverter2").' },
+          windmill_text_color: { label: 'Éolienne Couleur du texte', helper: 'Couleur applied to the windmill power text (data-role="windmill-power").' },
+          header_font_size: { label: 'Header Font Size (px)', helper: 'Par défaut 8' },
+          daily_label_font_size: { label: 'Journalier Libellé Font Size (px)', helper: 'Par défaut 8' },
+          daily_value_font_size: { label: 'Journalier Value Font Size (px)', helper: 'Par défaut 20' },
+          pv_font_size: { label: 'PV Text Font Size (px)', helper: 'Par défaut 8' },
+          windmill_power_font_size: { label: 'Éolienne puissance Font Size (px)', helper: 'Par défaut 8' },
+          battery_soc_font_size: { label: 'Batterie SOC Font Size (px)', helper: 'Par défaut 20' },
+          battery_power_font_size: { label: 'Batterie puissance Font Size (px)', helper: 'Par défaut 8' },
+          load_font_size: { label: 'Load Font Size (px)', helper: 'Par défaut 8' },
+          inv1_power_font_size: { label: 'INV 1 puissance Font Size (px)', helper: 'Font size for the INV 1 power line. Par défaut uses Load Font Size.' },
+          inv2_power_font_size: { label: 'INV 2 puissance Font Size (px)', helper: 'Font size for the INV 2 power line. Par défaut uses Load Font Size.' },
+          heat_pump_font_size: { label: 'Heat Pump Font Size (px)', helper: 'Par défaut 8' },
+          pool_font_size: { label: 'Pool Font Size (px)', helper: 'Par défaut 8' },
+          washing_machine_font_size: { label: 'Washing Machine Font Size (px)', helper: 'Par défaut 8' },
+          dryer_font_size: { label: 'Dryer Font Size (px)', helper: 'Par défaut 8' },
+          refrigerator_font_size: { label: 'Refrigerator Font Size (px)', helper: 'Par défaut 8' },
+          grid_font_size: { label: 'Réseau Font Size (px)', helper: 'Par défaut 8' },
+          car_power_font_size: { label: 'Voiture puissance Font Size (px)', helper: 'Par défaut 8' },
+          car2_power_font_size: { label: 'Voiture 2 puissance Font Size (px)', helper: 'Par défaut 8' },
+          car_name_font_size: { label: 'Voiture Nom Font Size (px)', helper: 'Par défaut 8' },
+          car2_name_font_size: { label: 'Voiture 2 Nom Font Size (px)', helper: 'Par défaut 8' },
+          car_soc_font_size: { label: 'Voiture SOC Font Size (px)', helper: 'Par défaut 8' },
+          car2_soc_font_size: { label: 'Voiture 2 SOC Font Size (px)', helper: 'Par défaut 8' },
+          sensor_popup_pv_1: { label: 'PV Popup 1', helper: 'Entity for PV popup line 1.' },
+          sensor_popup_pv_2: { label: 'PV Popup 2', helper: 'Entity for PV popup line 2.' },
+          sensor_popup_pv_3: { label: 'PV Popup 3', helper: 'Entity for PV popup line 3.' },
+          sensor_popup_pv_4: { label: 'PV Popup 4', helper: 'Entity for PV popup line 4.' },
+          sensor_popup_pv_5: { label: 'PV Popup 5', helper: 'Entity for PV popup line 5.' },
+          sensor_popup_pv_6: { label: 'PV Popup 6', helper: 'Entity for PV popup line 6.' },
+          sensor_popup_pv_1_name: { label: 'PV Popup 1 Nom', helper: 'Optionnel custom name for PV popup line 1. Laissez vide to use entity name.' },
+          sensor_popup_pv_2_name: { label: 'PV Popup 2 Nom', helper: 'Optionnel custom name for PV popup line 2. Laissez vide to use entity name.' },
+          sensor_popup_pv_3_name: { label: 'PV Popup 3 Nom', helper: 'Optionnel custom name for PV popup line 3. Laissez vide to use entity name.' },
+          sensor_popup_pv_4_name: { label: 'PV Popup 4 Nom', helper: 'Optionnel custom name for PV popup line 4. Laissez vide to use entity name.' },
+          sensor_popup_pv_5_name: { label: 'PV Popup 5 Nom', helper: 'Optionnel custom name for PV popup line 5. Laissez vide to use entity name.' },
+          sensor_popup_pv_6_name: { label: 'PV Popup 6 Nom', helper: 'Optionnel custom name for PV popup line 6. Laissez vide to use entity name.' },
+          sensor_popup_pv_1_color: { label: 'PV Popup 1 Couleur', helper: 'Couleur for PV popup line 1 text.' },
+          sensor_popup_pv_2_color: { label: 'PV Popup 2 Couleur', helper: 'Couleur for PV popup line 2 text.' },
+          sensor_popup_pv_3_color: { label: 'PV Popup 3 Couleur', helper: 'Couleur for PV popup line 3 text.' },
+          sensor_popup_pv_4_color: { label: 'PV Popup 4 Couleur', helper: 'Couleur for PV popup line 4 text.' },
+          sensor_popup_pv_5_color: { label: 'PV Popup 5 Couleur', helper: 'Couleur for PV popup line 5 text.' },
+          sensor_popup_pv_6_color: { label: 'PV Popup 6 Couleur', helper: 'Couleur for PV popup line 6 text.' },
+          sensor_popup_pv_1_font_size: { label: 'PV Popup 1 Font Size (px)', helper: 'Font size for PV popup line 1. Par défaut 8' },
+          sensor_popup_pv_2_font_size: { label: 'PV Popup 2 Font Size (px)', helper: 'Font size for PV popup line 2. Par défaut 8' },
+          sensor_popup_pv_3_font_size: { label: 'PV Popup 3 Font Size (px)', helper: 'Font size for PV popup line 3. Par défaut 8' },
+          sensor_popup_pv_4_font_size: { label: 'PV Popup 4 Font Size (px)', helper: 'Font size for PV popup line 4. Par défaut 8' },
+          sensor_popup_pv_5_font_size: { label: 'PV Popup 5 Font Size (px)', helper: 'Font size for PV popup line 5. Par défaut 8' },
+          sensor_popup_pv_6_font_size: { label: 'PV Popup 6 Font Size (px)', helper: 'Font size for PV popup line 6. Par défaut 8' },
+          sensor_popup_house_1: { label: 'Maison Popup 1', helper: 'Entity for house popup line 1.' },
+          sensor_popup_house_1_name: { label: 'Maison Popup 1 Nom', helper: 'Optionnel custom name for house popup line 1. Laissez vide to use entity name.' },
+          sensor_popup_house_1_color: { label: 'Maison Popup 1 Couleur', helper: 'Couleur for house popup line 1 text.' },
+          sensor_popup_house_1_font_size: { label: 'Maison Popup 1 Font Size (px)', helper: 'Font size for house popup line 1. Par défaut 8' },
+          sensor_popup_house_2: { label: 'Maison Popup 2', helper: 'Entity for house popup line 2.' },
+          sensor_popup_house_2_name: { label: 'Maison Popup 2 Nom', helper: 'Optionnel custom name for house popup line 2. Laissez vide to use entity name.' },
+          sensor_popup_house_2_color: { label: 'Maison Popup 2 Couleur', helper: 'Couleur for house popup line 2 text.' },
+          sensor_popup_house_2_font_size: { label: 'Maison Popup 2 Font Size (px)', helper: 'Font size for house popup line 2. Par défaut 8' },
+          sensor_popup_house_3: { label: 'Maison Popup 3', helper: 'Entity for house popup line 3.' },
+          sensor_popup_house_3_name: { label: 'Maison Popup 3 Nom', helper: 'Optionnel custom name for house popup line 3. Laissez vide to use entity name.' },
+          sensor_popup_house_3_color: { label: 'Maison Popup 3 Couleur', helper: 'Couleur for house popup line 3 text.' },
+          sensor_popup_house_3_font_size: { label: 'Maison Popup 3 Font Size (px)', helper: 'Font size for house popup line 3. Par défaut 8' },
+          sensor_popup_house_4: { label: 'Maison Popup 4', helper: 'Entity for house popup line 4.' },
+          sensor_popup_house_4_name: { label: 'Maison Popup 4 Nom', helper: 'Optionnel custom name for house popup line 4. Laissez vide to use entity name.' },
+          sensor_popup_house_4_color: { label: 'Maison Popup 4 Couleur', helper: 'Couleur for house popup line 4 text.' },
+          sensor_popup_house_4_font_size: { label: 'Maison Popup 4 Font Size (px)', helper: 'Font size for house popup line 4. Par défaut 8' },
+          sensor_popup_house_5: { label: 'Maison Popup 5', helper: 'Entity for house popup line 5.' },
+          sensor_popup_house_5_name: { label: 'Maison Popup 5 Nom', helper: 'Optionnel custom name for house popup line 5. Laissez vide to use entity name.' },
+          sensor_popup_house_5_color: { label: 'Maison Popup 5 Couleur', helper: 'Couleur for house popup line 5 text.' },
+          sensor_popup_house_5_font_size: { label: 'Maison Popup 5 Font Size (px)', helper: 'Font size for house popup line 5. Par défaut 8' },
+          sensor_popup_house_6: { label: 'Maison Popup 6', helper: 'Entity for house popup line 6.' },
+          sensor_popup_house_6_name: { label: 'Maison Popup 6 Nom', helper: 'Optionnel custom name for house popup line 6. Laissez vide to use entity name.' },
+          sensor_popup_house_6_color: { label: 'Maison Popup 6 Couleur', helper: 'Couleur for house popup line 6 text.' },
+          sensor_popup_house_6_font_size: { label: 'Maison Popup 6 Font Size (px)', helper: 'Font size for house popup line 6. Par défaut 8' },
+          sensor_popup_bat_1: { label: 'Batterie Popup 1', helper: 'Entity for battery popup line 1.' },
+          sensor_popup_bat_1_name: { label: 'Batterie Popup 1 Nom', helper: 'Optionnel custom name for battery popup line 1. Laissez vide to use entity name.' },
+          sensor_popup_bat_1_color: { label: 'Batterie Popup 1 Couleur', helper: 'Couleur for battery popup line 1 text.' },
+          sensor_popup_bat_1_font_size: { label: 'Batterie Popup 1 Font Size (px)', helper: 'Font size for battery popup line 1. Par défaut 8' },
+          sensor_popup_bat_2: { label: 'Batterie Popup 2', helper: 'Entity for battery popup line 2.' },
+          sensor_popup_bat_2_name: { label: 'Batterie Popup 2 Nom', helper: 'Optionnel custom name for battery popup line 2. Laissez vide to use entity name.' },
+          sensor_popup_bat_2_color: { label: 'Batterie Popup 2 Couleur', helper: 'Couleur for battery popup line 2 text.' },
+          sensor_popup_bat_2_font_size: { label: 'Batterie Popup 2 Font Size (px)', helper: 'Font size for battery popup line 2. Par défaut 8' },
+          sensor_popup_bat_3: { label: 'Batterie Popup 3', helper: 'Entity for battery popup line 3.' },
+          sensor_popup_bat_3_name: { label: 'Batterie Popup 3 Nom', helper: 'Optionnel custom name for battery popup line 3. Laissez vide to use entity name.' },
+          sensor_popup_bat_3_color: { label: 'Batterie Popup 3 Couleur', helper: 'Couleur for battery popup line 3 text.' },
+          sensor_popup_bat_3_font_size: { label: 'Batterie Popup 3 Font Size (px)', helper: 'Font size for battery popup line 3. Par défaut 8' },
+          sensor_popup_bat_4: { label: 'Batterie Popup 4', helper: 'Entity for battery popup line 4.' },
+          sensor_popup_bat_4_name: { label: 'Batterie Popup 4 Nom', helper: 'Optionnel custom name for battery popup line 4. Laissez vide to use entity name.' },
+          sensor_popup_bat_4_color: { label: 'Batterie Popup 4 Couleur', helper: 'Couleur for battery popup line 4 text.' },
+          sensor_popup_bat_4_font_size: { label: 'Batterie Popup 4 Font Size (px)', helper: 'Font size for battery popup line 4. Par défaut 8' },
+          sensor_popup_bat_5: { label: 'Batterie Popup 5', helper: 'Entity for battery popup line 5.' },
+          sensor_popup_bat_5_name: { label: 'Batterie Popup 5 Nom', helper: 'Optionnel custom name for battery popup line 5. Laissez vide to use entity name.' },
+          sensor_popup_bat_5_color: { label: 'Batterie Popup 5 Couleur', helper: 'Couleur for battery popup line 5 text.' },
+          sensor_popup_bat_5_font_size: { label: 'Batterie Popup 5 Font Size (px)', helper: 'Font size for battery popup line 5. Par défaut 8' },
+          sensor_popup_bat_6: { label: 'Batterie Popup 6', helper: 'Entity for battery popup line 6.' },
+          sensor_popup_bat_6_name: { label: 'Batterie Popup 6 Nom', helper: 'Optionnel custom name for battery popup line 6. Laissez vide to use entity name.' },
+          sensor_popup_bat_6_color: { label: 'Batterie Popup 6 Couleur', helper: 'Couleur for battery popup line 6 text.' },
+          sensor_popup_bat_6_font_size: { label: 'Batterie Popup 6 Font Size (px)', helper: 'Font size for battery popup line 6. Par défaut 8' },
+          sensor_popup_grid_1: { label: 'Réseau Popup 1', helper: 'Entity for grid popup line 1.' },
+          sensor_popup_grid_1_name: { label: 'Réseau Popup 1 Nom', helper: 'Optionnel custom name for grid popup line 1. Laissez vide to use entity name.' },
+          sensor_popup_grid_1_color: { label: 'Réseau Popup 1 Couleur', helper: 'Couleur for grid popup line 1 text.' },
+          sensor_popup_grid_1_font_size: { label: 'Réseau Popup 1 Font Size (px)', helper: 'Font size for grid popup line 1. Par défaut 8' },
+          sensor_popup_grid_2: { label: 'Réseau Popup 2', helper: 'Entity for grid popup line 2.' },
+          sensor_popup_grid_2_name: { label: 'Réseau Popup 2 Nom', helper: 'Optionnel custom name for grid popup line 2. Laissez vide to use entity name.' },
+          sensor_popup_grid_2_color: { label: 'Réseau Popup 2 Couleur', helper: 'Couleur for grid popup line 2 text.' },
+          sensor_popup_grid_2_font_size: { label: 'Réseau Popup 2 Font Size (px)', helper: 'Font size for grid popup line 2. Par défaut 8' },
+          sensor_popup_grid_3: { label: 'Réseau Popup 3', helper: 'Entity for grid popup line 3.' },
+          sensor_popup_grid_3_name: { label: 'Réseau Popup 3 Nom', helper: 'Optionnel custom name for grid popup line 3. Laissez vide to use entity name.' },
+          sensor_popup_grid_3_color: { label: 'Réseau Popup 3 Couleur', helper: 'Couleur for grid popup line 3 text.' },
+          sensor_popup_grid_3_font_size: { label: 'Réseau Popup 3 Font Size (px)', helper: 'Font size for grid popup line 3. Par défaut 8' },
+          sensor_popup_grid_4: { label: 'Réseau Popup 4', helper: 'Entity for grid popup line 4.' },
+          sensor_popup_grid_4_name: { label: 'Réseau Popup 4 Nom', helper: 'Optionnel custom name for grid popup line 4. Laissez vide to use entity name.' },
+          sensor_popup_grid_4_color: { label: 'Réseau Popup 4 Couleur', helper: 'Couleur for grid popup line 4 text.' },
+          sensor_popup_grid_4_font_size: { label: 'Réseau Popup 4 Font Size (px)', helper: 'Font size for grid popup line 4. Par défaut 8' },
+          sensor_popup_grid_5: { label: 'Réseau Popup 5', helper: 'Entity for grid popup line 5.' },
+          sensor_popup_grid_5_name: { label: 'Réseau Popup 5 Nom', helper: 'Optionnel custom name for grid popup line 5. Laissez vide to use entity name.' },
+          sensor_popup_grid_5_color: { label: 'Réseau Popup 5 Couleur', helper: 'Couleur for grid popup line 5 text.' },
+          sensor_popup_grid_5_font_size: { label: 'Réseau Popup 5 Font Size (px)', helper: 'Font size for grid popup line 5. Par défaut 8' },
+          sensor_popup_grid_6: { label: 'Réseau Popup 6', helper: 'Entity for grid popup line 6.' },
+          sensor_popup_grid_6_name: { label: 'Réseau Popup 6 Nom', helper: 'Optionnel custom name for grid popup line 6. Laissez vide to use entity name.' },
+          sensor_popup_grid_6_color: { label: 'Réseau Popup 6 Couleur', helper: 'Couleur for grid popup line 6 text.' },
+          sensor_popup_grid_6_font_size: { label: 'Réseau Popup 6 Font Size (px)', helper: 'Font size for grid popup line 6. Par défaut 8' },
+          sensor_popup_inverter_1: { label: 'Onduleur Popup 1', helper: 'Entity for inverter popup line 1.' },
+          sensor_popup_inverter_1_name: { label: 'Onduleur Popup 1 Nom', helper: 'Optionnel custom name for inverter popup line 1. Laissez vide to use entity name.' },
+          sensor_popup_inverter_1_color: { label: 'Onduleur Popup 1 Couleur', helper: 'Couleur for inverter popup line 1 text.' },
+          sensor_popup_inverter_1_font_size: { label: 'Onduleur Popup 1 Font Size (px)', helper: 'Font size for inverter popup line 1. Par défaut 8' },
+          sensor_popup_inverter_2: { label: 'Onduleur Popup 2', helper: 'Entity for inverter popup line 2.' },
+          sensor_popup_inverter_2_name: { label: 'Onduleur Popup 2 Nom', helper: 'Optionnel custom name for inverter popup line 2. Laissez vide to use entity name.' },
+          sensor_popup_inverter_2_color: { label: 'Onduleur Popup 2 Couleur', helper: 'Couleur for inverter popup line 2 text.' },
+          sensor_popup_inverter_2_font_size: { label: 'Onduleur Popup 2 Font Size (px)', helper: 'Font size for inverter popup line 2. Par défaut 8' },
+          sensor_popup_inverter_3: { label: 'Onduleur Popup 3', helper: 'Entity for inverter popup line 3.' },
+          sensor_popup_inverter_3_name: { label: 'Onduleur Popup 3 Nom', helper: 'Optionnel custom name for inverter popup line 3. Laissez vide to use entity name.' },
+          sensor_popup_inverter_3_color: { label: 'Onduleur Popup 3 Couleur', helper: 'Couleur for inverter popup line 3 text.' },
+          sensor_popup_inverter_3_font_size: { label: 'Onduleur Popup 3 Font Size (px)', helper: 'Font size for inverter popup line 3. Par défaut 8' },
+          sensor_popup_inverter_4: { label: 'Onduleur Popup 4', helper: 'Entity for inverter popup line 4.' },
+          sensor_popup_inverter_4_name: { label: 'Onduleur Popup 4 Nom', helper: 'Optionnel custom name for inverter popup line 4. Laissez vide to use entity name.' },
+          sensor_popup_inverter_4_color: { label: 'Onduleur Popup 4 Couleur', helper: 'Couleur for inverter popup line 4 text.' },
+          sensor_popup_inverter_4_font_size: { label: 'Onduleur Popup 4 Font Size (px)', helper: 'Font size for inverter popup line 4. Par défaut 8' },
+          sensor_popup_inverter_5: { label: 'Onduleur Popup 5', helper: 'Entity for inverter popup line 5.' },
+          sensor_popup_inverter_5_name: { label: 'Onduleur Popup 5 Nom', helper: 'Optionnel custom name for inverter popup line 5. Laissez vide to use entity name.' },
+          sensor_popup_inverter_5_color: { label: 'Onduleur Popup 5 Couleur', helper: 'Couleur for inverter popup line 5 text.' },
+          sensor_popup_inverter_5_font_size: { label: 'Onduleur Popup 5 Font Size (px)', helper: 'Font size for inverter popup line 5. Par défaut 8' },
+          sensor_popup_inverter_6: { label: 'Onduleur Popup 6', helper: 'Entity for inverter popup line 6.' },
+          sensor_popup_inverter_6_name: { label: 'Onduleur Popup 6 Nom', helper: 'Optionnel custom name for inverter popup line 6. Laissez vide to use entity name.' },
+          sensor_popup_inverter_6_color: { label: 'Onduleur Popup 6 Couleur', helper: 'Couleur for inverter popup line 6 text.' },
+          sensor_popup_inverter_6_font_size: { label: 'Onduleur Popup 6 Font Size (px)', helper: 'Font size for inverter popup line 6. Par défaut 8' }
         },
         options: {
           languages: [
             { value: 'en', label: 'Anglais' },
             { value: 'it', label: 'Italien' },
             { value: 'de', label: 'Allemand' },
-            { value: 'fr', label: 'FranÃ§ais' },
-            { value: 'nl', label: 'NÃ©erlandais' }
+            { value: 'fr', label: 'Français' },
+            { value: 'nl', label: 'Néerlandais' },
+            { value: 'es', label: 'Espagnol' }
           ],
           display_units: [
             { value: 'W', label: 'Watts (W)' },
             { value: 'kW', label: 'Kilowatts (kW)' }
           ],
           animation_styles: [
-            { value: 'dashes', label: 'Tirets (par dÃ©faut)' },
+            { value: 'dashes', label: 'Tirets (par défaut)' },
             { value: 'dashes_glow', label: 'Tirets + Lueur' },
             { value: 'fluid_flow', label: 'Flux fluide' },
             { value: 'dots', label: 'Points' },
-            { value: 'arrows', label: 'FlÃ¨ches' }
+            { value: 'arrows', label: 'Flèches' }
           ],
           initial_yes: 'Oui',
           initial_no: 'Non',
@@ -11454,354 +12414,360 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           initial_batteries_4: '4',
           initial_evs_1: '1',
           initial_evs_2: '2'
+        },
+        view: {
+          daily: 'PRODUCTION JOURNALIÈRE', pv_tot: 'PV TOTAL', car1: 'VOITURE 1', car2: 'VOITURE 2', importing: 'IMPORTATION', exporting: 'EXPORTATION'
         }
-      ,
-      view: {
-        daily: 'PRODUCTION DU JOUR',
-        pv_tot: 'PV TOTAL',
-        car1: 'VÃ‰HICULE 1',
-        car2: 'VÃ‰HICULE 2',
-        importing: 'IMPORTATION',
-        exporting: 'EXPORTATION'
-      }
       },
       nl: {
         sections: {
-          general: { title: 'Algemene instellingen', helper: 'Metadata van de kaart, achtergrond, taal en update frequentie.' },
-          initialConfig: { title: 'InitiÃ«le configuratie', helper: 'Geleide vragen voor de eerste configuratie.' },
-          pvCommon: { title: 'Solar/PV Algemeen', helper: 'Gedeelde Solar/PV instellingen voor beide arrays.' },
-          array1: { title: 'Solar/PV Array 1', helper: 'Configureer PV Array 1 entiteiten.' },
-          array2: { title: 'Solar/PV Array 2', helper: 'If PV Total Sensor (Inverter 2) is set or the PV String values are provided, Array 2 will become active and enable the second inverter. You must also enable Daily Production Sensor (Array 2) and Home Load (Inverter 2).' },
-          windmill: { title: 'Windmill', helper: 'Configureer windmolen generator sensoren en styling.' },
-          battery: { title: 'Batterij', helper: 'Configureer batterij entiteiten.' },
-          grid: { title: 'Grid', helper: 'Configureer grid entiteiten.' },
-          car: { title: 'Auto', helper: 'Configureer EV entiteiten.' },
-          other: { title: 'Huis', helper: 'Aanvullende sensoren en geavanceerde opties.' },
-          entities: { title: 'Entiteit selectie', helper: 'Kies de PV, batterij, grid, load en EV entiteiten gebruikt door de kaart. Of de totale PV sensor, of uw PV string arrays moeten minimaal worden gespecificeerd.' },
-          pvPopup: { title: 'PV Popup', helper: 'Configureer entiteiten voor de PV popup weergave.' },
-          housePopup: { title: 'House Popup', helper: 'Configureer entiteiten voor de House popup weergave.' },
-          batteryPopup: { title: 'Batterij-popup', helper: 'Configureer de batterij popup weergave.' },
-          gridPopup: { title: 'Grid-popup', helper: 'Configureer entiteiten voor de grid popup weergave.' },
-          inverterPopup: { title: 'Inverter-popup', helper: 'Configureer entiteiten voor de inverter popup weergave.' },
-          colors: { title: 'Kleuren & Drempels', helper: 'Configureer netwerkdrempels en accentkleuren voor stromen en EV-weergave.' },
-          typography: { title: 'Typografie', helper: 'Pas de lettergrootte aan gebruikt in de kaart.' },
-          about: { title: 'Over', helper: 'Credits, versie en nuttige links.' }
+          general: { title: 'General Settings', helper: 'kaart metadata, background, language, and update cadence.' },
+          initialConfig: { title: 'Initiële configuratie', helper: 'First-time setup checklist and starter options.' },
+          pvCommon: { title: 'Solar/PV Common', helper: 'Common Solar/PV settings shared across arrays.' },
+          array1: { title: 'Solar/PV Array 1', helper: 'Kies the PV, battery, grid, load, and EV entities used by the card. Either the PV total sensor or your PV string arrays need to be specified as a minimum.' },
+          array2: { title: 'Solar/PV Array 2', helper: 'If PV-totaalsensor (Omvormer 2) is set or the PV String values are provided, Array 2 will become active and enable the second inverter. You must also enable Dagelijks opbrengst sensor (Array 2) and Home Load (Omvormer 2).' },
+          windmill: { title: 'Windmolen', helper: 'Configureer windmill generator sensors and display styling.' },
+          battery: { title: 'Batterij', helper: 'Configureer battery entities.' },
+          grid: { title: 'Net', helper: 'Configureer grid entities.' },
+          car: { title: 'Auto', helper: 'Configureer EV entities.' },
+          other: { title: 'Huis', helper: 'Additional sensors and advanced toggles.' },
+          pvPopup: { title: 'PV Popup', helper: 'Configureer entities for the PV popup display.' },
+          housePopup: { title: 'Huis Popup', helper: 'Configureer entities for the house popup display.' },
+          batteryPopup: { title: 'Batterij Popup', helper: 'Configureer battery popup display.' },
+          gridPopup: { title: 'Net Popup', helper: 'Configureer entities for the grid popup display.' },
+          inverterPopup: { title: 'Omvormer Popup', helper: 'Configureer entities for the inverter popup display.' },
+          colors: { title: 'Kleur & Thresholds', helper: 'Configureer grid thresholds and accent colours for flows and EV display.' },
+          typography: { title: 'Typography', helper: 'Fine tune the font sizes used across the card.' },
+          about: { title: 'About', helper: 'Credits, version, and helpful links.' }
         },
         fields: {
-          card_title: { label: 'Kaart titel', helper: 'Titel weergegeven bovenaan de kaart. Leeg laten om uit te schakelen.' },
-          language: { label: 'Taal', helper: 'Kies de taal van de editor.' },
-          display_unit: { label: 'Weergave eenheid', helper: 'Eenheid gebruikt om kracht waarden te formatteren.' },
-          update_interval: { label: 'Update interval', helper: 'Frequentie van kaart updates verversen (0 schakelt throttling uit).' },
-          initial_configuration: { label: 'InitiÃ«le configuratie', helper: 'Toon de sectie InitiÃ«le configuratie in de editor.' },
-          initial_has_pv: { label: 'Heb je Solar/PV-vermogen?', helper: 'Kies Ja als je zonneproductie wilt configureren.' },
-          initial_inverters: { label: 'Hoeveel omvormers heb je?', helper: 'Alleen zichtbaar als Solar/PV is ingeschakeld.' },
-          initial_has_battery: { label: 'Heb je batterijopslag?', helper: '' },
-          initial_battery_count: { label: 'Hoeveel batterijen heb je? Maximaal 4', helper: '' },
-          initial_has_grid: { label: 'Heb je stroom van het net?', helper: '' },
-          initial_can_export: { label: 'Kun je overtollige elektriciteit terugleveren aan het net?', helper: '' },
-          initial_has_windmill: { label: 'Heb je een windmolen?', helper: '' },
-          initial_has_ev: { label: 'Heb je elektrische voertuigen/EVs?', helper: '' },
-          initial_ev_count: { label: 'Hoeveel heb je er?', helper: '' },
-          initial_battery_dual_inverter_helper: { label: 'As you have 2 Inverters selected, a minimum of 2 batteries is required. Batteries 1 and 2 will be allocated to Inverter 1 and Batteries 3 and 4 will be allocated to Inverter 2', helper: '' },
-          initial_config_items_title: { label: 'Vereiste configuratie-items', helper: '' },
-          initial_config_items_helper: { label: 'Deze items zijn afhankelijk van je antwoorden hierboven.', helper: '' },
-          initial_config_items_empty: { label: 'Nog geen items om te tonen.', helper: '' },
-          initial_config_complete_helper: { label: 'Dit voltooit de minimale vereiste configuratie. Klik op de knop Voltooien en controleer daarna alle menu\'s voor extra items en popup-configuraties. Deze initiÃ«le configuratie kan opnieuw worden ingeschakeld in het menu Algemeen.', helper: '' },
-          initial_config_complete_button: { label: 'Voltooien', helper: '' },
-          array_helper_text: { label: 'Elke array moet minimaal een gecombineerde Solar/PV-totaalsensor hebben die het totale vermogen van die array weergeeft, of individuele stringwaarden die worden opgeteld om het totale arrayvermogen te krijgen. Dagproductie kan worden opgegeven en kan worden getoond in een dagproductiekaart.', helper: '' },
-          animation_speed_factor: { label: 'Animatie snelheid factor', helper: 'Pas de animatie snelheid multiplier aan (-3x tot 3x). Stel in op 0 voor pauze; negatieven keren richting om.' },
-          animation_style: { label: 'Animatie stijl (Dag)', helper: 'Flow-animatie stijl gebruikt in Dag-modus.' },
-          night_animation_style: { label: 'Animatie stijl (Nacht)', helper: 'Flow-animatie stijl gebruikt in Nacht-modus. Laat leeg om Dag-stijl te gebruiken.' },
-          dashes_glow_intensity: { label: 'Strepen gloed intensiteit', helper: 'Regelt de gloed voor "Strepen + Gloed" (0 schakelt uit).' },
-          fluid_flow_outer_glow: { label: 'Fluid flow buiten gloed', helper: 'Schakelt de extra buitenste gloed/haze laag in voor animation_style: fluid_flow.' },
-          flow_stroke_width: { label: 'Flow lijndikte (px)', helper: 'Optionele override voor lijndikte van flow-animaties (zonder SVG aan te passen). Leeg laten om SVG-waarden te gebruiken.' },
-          fluid_flow_stroke_width: { label: 'Fluid flow lijndikte (px)', helper: 'Basis lijndikte voor animation_style: fluid_flow. Overlay/maskerbreedtes worden hiervan afgeleid (standaard 5).' },
-          sensor_pv_total: { label: 'Totale PV sensor', helper: 'Optionele geaggregeerde productie sensor weergegeven als gecombineerde lijn.' },
-          sensor_pv_total_secondary: { label: 'Totale PV sensor (Inverter 2)', helper: 'Tweede optionele inverter sensor; toegevoegd aan totale PV indien opgegeven.' },
-          sensor_windmill_total: { label: 'Windmill Total', helper: 'Vermogenssensor voor de windmolen generator (W). Als niet ingesteld wordt de windmill SVG-groep verborgen.' },
-          sensor_windmill_daily: { label: 'Daily Windmill Production', helper: 'Optionele sensor voor dagelijkse windmill productie.' },
-          sensor_pv1: { label: 'PV String 1 (Array 1)', helper: 'Primaire zonne productie sensor.' },
-          sensor_pv2: { label: 'PV String 2 (Array 1)' },
-          sensor_pv3: { label: 'PV String 3 (Array 1)' },
-          sensor_pv4: { label: 'PV String 4 (Array 1)' },
-          sensor_pv5: { label: 'PV String 5 (Array 1)' },
-          sensor_pv6: { label: 'PV String 6 (Array 1)' },
-          sensor_pv_array2_1: { label: 'PV String 1 (Array 2)', helper: 'Zonne productie sensor voor Array 2.' },
-          sensor_pv_array2_2: { label: 'PV String 2 (Array 2)', helper: 'Zonne productie sensor voor Array 2.' },
-          sensor_pv_array2_3: { label: 'PV String 3 (Array 2)', helper: 'Zonne productie sensor voor Array 2.' },
-          sensor_pv_array2_4: { label: 'PV String 4 (Array 2)', helper: 'Zonne productie sensor voor Array 2.' },
-          sensor_pv_array2_5: { label: 'PV String 5 (Array 2)', helper: 'Zonne productie sensor voor Array 2.' },
-          sensor_pv_array2_6: { label: 'PV String 6 (Array 2)', helper: 'Zonne productie sensor voor Array 2.' },
-          sensor_daily: { label: 'Dagelijkse productie sensor (Vereist)', helper: 'Sensor die dagelijkse productie totalen aangeeft. Of de totale PV sensor, of uw PV string arrays moeten minimaal worden gespecificeerd.' },
-          sensor_daily_array2: { label: 'Dagelijkse productie sensor (Array 2)', helper: 'Sensor voor dagelijkse productie totalen van Array 2.' },
-          sensor_bat1_soc: { label: 'Batterij 1 SOC' },
-          sensor_bat1_power: { label: 'Batterij 1 vermogen', helper: 'Geef deze gecombineerde vermogenssensor op of zowel de laad- als ontlaadsensor zodat Batterij 1 actief wordt.' },
-          sensor_bat1_charge_power: { label: 'Batterij 1 laadvermogen' },
-          sensor_bat1_discharge_power: { label: 'Batterij 1 ontlaadvermogen' },
-          sensor_bat2_soc: { label: 'Batterij 2 SOC' },
-          sensor_bat2_power: { label: 'Batterij 2 vermogen', helper: 'Geef deze gecombineerde vermogenssensor op of zowel de laad- als ontlaadsensor zodat Batterij 2 actief wordt.' },
-          sensor_bat2_charge_power: { label: 'Batterij 2 laadvermogen' },
-          sensor_bat2_discharge_power: { label: 'Batterij 2 ontlaadvermogen' },
-          sensor_bat3_soc: { label: 'Batterij 3 SOC' },
-          sensor_bat3_power: { label: 'Batterij 3 vermogen', helper: 'Geef deze gecombineerde vermogenssensor op of zowel de laad- als ontlaadsensor zodat Batterij 3 actief wordt.' },
-          sensor_bat3_charge_power: { label: 'Batterij 3 laadvermogen' },
-          sensor_bat3_discharge_power: { label: 'Batterij 3 ontlaadvermogen' },
-          sensor_bat4_soc: { label: 'Batterij 4 SOC' },
-          sensor_bat4_power: { label: 'Batterij 4 vermogen', helper: 'Geef deze gecombineerde vermogenssensor op of zowel de laad- als ontlaadsensor zodat Batterij 4 actief wordt.' },
-          sensor_bat4_charge_power: { label: 'Batterij 4 laadvermogen' },
-          sensor_bat4_discharge_power: { label: 'Batterij 4 ontlaadvermogen' },
-          sensor_home_load: { label: 'Huisbelasting/verbruik (Vereist)', helper: 'Sensor voor totale huisverbruik.' },
-          sensor_home_load_secondary: { label: 'Huisbelasting (Inverter 2)', helper: 'Optionele huisbelasting sensor voor de tweede inverter.' },
-          sensor_heat_pump_consumption: { label: 'Warmtepomp verbruik', helper: 'Sensor voor energieverbruik van de warmtepomp.' },
-          sensor_pool_consumption: { label: 'Zwembad', helper: 'Sensor voor zwembadvermogen/verbruik.' },
-          sensor_washing_machine_consumption: { label: 'Wasmachine', helper: 'Sensor voor wasmachine vermogen/verbruik.' },
-          sensor_dryer_consumption: { label: 'Droger', helper: 'Sensor voor droger vermogen/verbruik.' },
-          sensor_refrigerator_consumption: { label: 'Koelkast', helper: 'Sensor voor koelkast vermogen/verbruik.' },
-          sensor_grid_power: { label: 'Grid vermogen (omvormer 1)', helper: 'Sensor voor grid flow positief/negatief voor omvormer 1. Specificeer of deze sensor of de Grid import/export sensoren (omvormer 1).' },
-          sensor_grid_import: { label: 'Grid import sensor (omvormer 1)', helper: 'Optionele entiteit die grid import rapporteert (positieve waarden) voor omvormer 1.' },
-          sensor_grid_export: { label: 'Grid export sensor (omvormer 1)', helper: 'Optionele entiteit die grid export rapporteert (positieve waarden) voor omvormer 1.' },
-          sensor_grid_import_daily: { label: 'Dagelijkse grid import sensor (omvormer 1)', helper: 'Optionele entiteit die cumulatieve grid import voor de huidige dag rapporteert (omvormer 1).' },
-          sensor_grid_export_daily: { label: 'Dagelijkse grid export sensor (omvormer 1)', helper: 'Optionele entiteit die cumulatieve grid export voor de huidige dag rapporteert (omvormer 1).' },
-          sensor_grid2_power: { label: 'Grid vermogen (omvormer 2)', helper: 'Sensor voor grid flow positief/negatief voor omvormer 2. Specificeer of deze sensor of de Grid import/export sensoren (omvormer 2).' },
-          sensor_grid2_import: { label: 'Grid import sensor (omvormer 2)', helper: 'Optionele entiteit die grid import rapporteert (positieve waarden) voor omvormer 2.' },
-          sensor_grid2_export: { label: 'Grid export sensor (omvormer 2)', helper: 'Optionele entiteit die grid export rapporteert (positieve waarden) voor omvormer 2.' },
-          sensor_grid2_import_daily: { label: 'Dagelijkse grid import sensor (omvormer 2)', helper: 'Optionele entiteit die cumulatieve grid import voor de huidige dag rapporteert (omvormer 2).' },
-          sensor_grid2_export_daily: { label: 'Dagelijkse grid export sensor (omvormer 2)', helper: 'Optionele entiteit die cumulatieve grid export voor de huidige dag rapporteert (omvormer 2).' },
-                    grid2_import_color: { label: 'Grid import flow kleur (omvormer 2)', helper: 'Basis kleur (voor drempels) bij grid import voor omvormer 2.' },
-                    grid2_export_color: { label: 'Grid export flow kleur (omvormer 2)', helper: 'Basis kleur (voor drempels) bij grid export voor omvormer 2.' },
-                    grid2_threshold_warning: { label: 'Grid waarschuwingsdrempel (omvormer 2)', helper: 'Verander grid kleur (omvormer 2) wanneer magnitude deze waarde bereikt. Gebruikt geselecteerde weergave eenheid.' },
-                    grid2_warning_color: { label: 'Grid waarschuwingskleur (omvormer 2)', helper: 'Hex kleur toegepast op waarschuwingsdrempel (omvormer 2).' },
-                    grid2_threshold_critical: { label: 'Grid kritieke drempel (omvormer 2)', helper: 'Verander grid kleur (omvormer 2) wanneer magnitude deze waarde bereikt. Gebruikt geselecteerde weergave eenheid.' },
-                    grid2_critical_color: { label: 'Grid kritieke kleur (omvormer 2)', helper: 'Kleur toegepast op kritieke drempel (omvormer 2).' },
-          show_daily_grid: { label: 'Toon dagelijkse grid waarden', helper: 'Toon de dagelijkse import/export totalen onder de huidige grid flow wanneer ingeschakeld.' },
-          grid_daily_font_size: { label: 'Dagelijkse grid lettergrootte (px)', helper: 'Optioneel: overschrijft lettergrootte voor dagelijkse import/export. Standaard: Grid lettergrootte.' },
-          grid_current_odometer: { label: 'Odometer: Huidige grid', helper: 'Animeert de huidige grid-waarde met een per-cijfer rol-effect.' },
-          grid_current_odometer_duration: { label: 'Odometer duur (ms)', helper: 'Animatieduur in milliseconden. Standaard 350.' },
-          show_grid_flow_label: { label: 'Toon net import/export label', helper: 'Voegt "Importeren"/"Exporteren" toe voor de netwaarde wanneer ingeschakeld.' },
-          enable_echo_alive: { label: 'Enable Echo Alive', helper: 'Enables an invisible iframe to keep the Silk browser open on Echo Show. The button will be positioned in a corner of the card.' },
-          pv_tot_color: { label: 'Totale PV kleur', helper: 'Kleur toegepast op de PV TOTAL lijn/tekst.' },
-          pv_primary_color: { label: 'PV Flow 1 kleur', helper: 'Kleur gebruikt voor de primaire PV animatie lijn.' },
-          pv_secondary_color: { label: 'PV Flow 2 kleur', helper: 'Kleur gebruikt voor de secundaire PV animatie lijn indien beschikbaar.' },
-          load_flow_color: { label: 'Belasting flow kleur', helper: 'Kleur toegepast op de huisbelasting animatie lijn.' },
-          load_text_color: { label: 'Belasting tekstkleur', helper: 'Kleur toegepast op de tekst van het huisverbruik wanneer geen drempel actief is.' },
-          house_total_color: { label: 'HOUSE TOT kleur', helper: 'Kleur toegepast op HOUSE TOT tekst/flow.' },
-          inv1_color: { label: 'Omvormer 1 naar huis kleur', helper: 'Kleur toegepast op de flow van omvormer 1 naar het huis.' },
-          inv2_color: { label: 'Omvormer 2 naar huis kleur', helper: 'Kleur toegepast op de flow van omvormer 2 naar het huis.' },
-          load_threshold_warning: { label: 'Belasting waarschuwingsdrempel', helper: 'Verander kleur van lader wanneer magnitude deze waarde bereikt of overschrijdt. Gebruikt geselecteerde weergave eenheid.' },
-          load_warning_color: { label: 'Belasting waarschuwingskleur', helper: 'Hex of CSS kleur toegepast op belasting waarschuwingsdrempel.' },
-          load_threshold_critical: { label: 'Belasting kritieke drempel', helper: 'Verander kleur wanneer magnitude deze waarde bereikt of overschrijdt. Gebruikt geselecteerde weergave eenheid.' },
-          load_critical_color: { label: 'Belasting kritieke kleur', helper: 'Hex of CSS kleur toegepast op kritieke belasting drempel.' },
-          battery_soc_color: { label: 'Batterij SOC kleur', helper: 'Kleur toegepast op de batterij-SOC-percentagetekst.' },
-          battery_charge_color: { label: 'Batterij laad flow kleur', helper: 'Kleur gebruikt wanneer energie de batterij ingaat.' },
-          battery_discharge_color: { label: 'Batterij ontlaad flow kleur', helper: 'Kleur gebruikt wanneer energie de batterij verlaat.' },
-          battery_fill_high_color: { label: 'Batterij vulling kleur (normaal)', helper: 'Kleur van vloeistof wanneer batterij SOC boven lage drempel is.' },
-          battery_fill_low_color: { label: 'Batterij vulling kleur (laag)', helper: 'Kleur van vloeistof wanneer SOC gelijk aan of lager dan lage drempel.' },
-          battery_fill_low_threshold: { label: 'Lage batterij vulling drempel (%)', helper: 'Gebruik lage kleur wanneer SOC gelijk aan of lager dan dit percentage.' },
-          battery_fill_opacity: { label: 'Batterij vulling dekking', helper: 'Dekking voor batterij vulling niveau (0-1).' },
-          grid_activity_threshold: { label: 'Grid animatie drempel (W)', helper: 'Negeer grid flows waarvan absolute waarde lager is dan deze kracht voordat animeren.' },
-          grid_power_only: { label: 'Alleen netstroom', helper: 'Verbergt omvormer/batterijflows en toont een directe net-naar-huis flow.' },
-          grid_threshold_warning: { label: 'Grid waarschuwingsdrempel', helper: 'Verander grid kleur wanneer magnitude deze waarde bereikt. Gebruikt geselecteerde weergave eenheid.' },
-          grid_warning_color: { label: 'Grid waarschuwingskleur', helper: 'Hex kleur toegepast op waarschuwingsdrempel.' },
-          grid_threshold_critical: { label: 'Grid kritieke drempel', helper: 'Verander grid kleur wanneer magnitude deze waarde bereikt. Gebruikt geselecteerde weergave eenheid.' },
-          grid_critical_color: { label: 'Grid kritieke kleur', helper: 'Kleur toegepast op kritieke drempel.' },
-          invert_grid: { label: 'Grid waarden omkeren', helper: 'Inschakelen als import/export polariteit omgekeerd is.' },
-          invert_battery: { label: 'Batterij waarden omkeren', helper: 'Inschakelen als laad/ontlaad polariteit omgekeerd is.' },
-          invert_bat1: { label: 'Batterij 1 omkeren', helper: 'Inschakelen als laad/ontlaad polariteit van Batterij 1 omgekeerd is.' },
-          invert_bat2: { label: 'Batterij 2 omkeren', helper: 'Inschakelen als laad/ontlaad polariteit van Batterij 2 omgekeerd is.' },
-          invert_bat3: { label: 'Batterij 3 omkeren', helper: 'Inschakelen als laad/ontlaad polariteit van Batterij 3 omgekeerd is.' },
-          sensor_car_power: { label: 'Voertuig 1 vermogen sensor' },
-          sensor_car_soc: { label: 'Voertuig 1 SOC sensor' },
-          car_soc: { label: 'Voertuig SOC', helper: 'Sensor voor EV batterij SOC.' },
-          car_range: { label: 'Voertuig bereik', helper: 'Sensor voor EV bereik.' },
-          car_efficiency: { label: 'Voertuig efficiÃ«ntie', helper: 'Sensor voor EV efficiÃ«ntie.' },
-          car_charger_power: { label: 'Voertuig lader vermogen', helper: 'Sensor voor EV lader vermogen.' },
-          car1_label: { label: 'Voertuig 1 label', helper: 'Tekst weergegeven naast de waarden van de eerste EV.' },
-          sensor_car2_power: { label: 'Voertuig 2 vermogen sensor' },
-          sensor_car2_soc: { label: 'Voertuig 2 SOC sensor' },
-          car2_soc: { label: 'Voertuig 2 SOC', helper: 'Sensor voor EV 2 batterij SOC.' },
-          car2_range: { label: 'Voertuig 2 bereik', helper: 'Sensor voor EV 2 bereik.' },
-          car2_efficiency: { label: 'Voertuig 2 efficiÃ«ntie', helper: 'Sensor voor EV 2 efficiÃ«ntie.' },
-          car2_charger_power: { label: 'Voertuig 2 lader vermogen', helper: 'Sensor voor EV 2 lader vermogen.' },
-          car2_power: { label: 'Voertuig 2 vermogen', helper: 'Sensor voor EV 2 laad/ontlaad vermogen.' },
-          car2_label: { label: 'Voertuig 2 label', helper: 'Tekst weergegeven naast de waarden van de tweede EV.' },
-          car_headlight_flash: { label: 'Koplampen laten knipperen tijdens laden', helper: 'Inschakelen om de voertuigkoplampen te laten knipperen tijdens het laden.' },
-          car1_glow_brightness: { label: 'Auto glow-effect', helper: 'Percentage van het auto-flow-effect dat zichtbaar is wanneer niet geladen.' },
-          car2_glow_brightness: { label: 'Auto glow-effect', helper: 'Percentage van het auto-flow-effect dat zichtbaar is wanneer niet geladen.' },
-          car_pct_color: { label: 'Voertuig SOC kleur', helper: 'Hex kleur voor EV SOC tekst (bijv. #00FFFF).' },
-          car2_pct_color: { label: 'Voertuig 2 SOC kleur', helper: 'Hex kleur voor tweede EV SOC (valt terug op Voertuig SOC indien leeg).' },
-          car1_name_color: { label: 'Voertuig 1 naam kleur', helper: 'Kleur toegepast op Voertuig 1 naam label.' },
-          car2_name_color: { label: 'Voertuig 2 naam kleur', helper: 'Kleur toegepast op Voertuig 2 naam label.' },
-          car1_color: { label: 'Voertuig 1 kleur', helper: 'Kleur toegepast op Voertuig 1 vermogen waarde.' },
-          car2_color: { label: 'Voertuig 2 kleur', helper: 'Kleur toegepast op Voertuig 2 vermogen waarde.' },
-          heat_pump_flow_color: { label: 'Warmtepomp stroom kleur', helper: 'Kleur toegepast op de warmtepomp stroom animatie.' },
-          heat_pump_text_color: { label: 'Warmtepomp tekst kleur', helper: 'Kleur toegepast op de warmtepomp vermogen tekst.' },
-          pool_flow_color: { label: 'Zwembad stroom kleur', helper: 'Kleur toegepast op de zwembad stroom animatie.' },
-          pool_text_color: { label: 'Zwembad tekst kleur', helper: 'Kleur toegepast op de zwembad vermogen tekst.' },
-          washing_machine_text_color: { label: 'Wasmachine tekst kleur', helper: 'Kleur toegepast op de wasmachine vermogen tekst.' },
-          dryer_text_color: { label: 'Droger tekst kleur', helper: 'Kleur toegepast op de droger vermogen tekst.' },
-          refrigerator_text_color: { label: 'Koelkast tekst kleur', helper: 'Kleur toegepast op de koelkast vermogen tekst.' },
-          windmill_flow_color: { label: 'Windmill Flow Color', helper: 'Kleur toegepast op de windmill flow (data-flow-key="windmill-inverter1" / "windmill-inverter2").' },
-          windmill_text_color: { label: 'Windmill Text Color', helper: 'Kleur toegepast op de windmill vermogen tekst (data-role="windmill-power").' },
-          header_font_size: { label: 'Header lettergrootte (px)', helper: 'Standaard 16' },
-          daily_label_font_size: { label: 'Dagelijks label lettergrootte (px)', helper: 'Standaard 12' },
-          daily_value_font_size: { label: 'Dagelijks waarde lettergrootte (px)', helper: 'Standaard 20' },
-          pv_font_size: { label: 'PV lettergrootte (px)', helper: 'Standaard 16' },
-          windmill_power_font_size: { label: 'Windmill Power Font Size (px)', helper: 'Standaard 16' },
-          battery_soc_font_size: { label: 'Batterij SOC lettergrootte (px)', helper: 'Standaard 20' },
-          battery_power_font_size: { label: 'Batterij vermogen lettergrootte (px)', helper: 'Standaard 16' },
-          load_font_size: { label: 'Belasting lettergrootte (px)', helper: 'Standaard 15' },
-          inv1_power_font_size: { label: 'INV 1 vermogen lettergrootte (px)', helper: 'Lettergrootte voor de INV 1 vermogensregel. Standaard gebruikt belasting lettergrootte.' },
-          inv2_power_font_size: { label: 'INV 2 vermogen lettergrootte (px)', helper: 'Lettergrootte voor de INV 2 vermogensregel. Standaard gebruikt belasting lettergrootte.' },
-          heat_pump_font_size: { label: 'Warmtepomp lettergrootte (px)', helper: 'Standaard 16' },
-          pool_font_size: { label: 'Zwembad lettergrootte (px)', helper: 'Standaard 16' },
-          washing_machine_font_size: { label: 'Wasmachine lettergrootte (px)', helper: 'Standaard 16' },
-          dryer_font_size: { label: 'Droger lettergrootte (px)', helper: 'Standaard 16' },
-          refrigerator_font_size: { label: 'Koelkast lettergrootte (px)', helper: 'Standaard 16' },
-          grid_font_size: { label: 'Grid lettergrootte (px)', helper: 'Standaard 15' },
-          car_power_font_size: { label: 'Voertuig vermogen lettergrootte (px)', helper: 'Standaard 15' },
-          car2_power_font_size: { label: 'Voertuig 2 vermogen lettergrootte (px)', helper: 'Standaard 15' },
-          car_name_font_size: { label: 'Voertuig naam lettergrootte (px)', helper: 'Standaard 15' },
-          car2_name_font_size: { label: 'Voertuig 2 naam lettergrootte (px)', helper: 'Standaard 15' },
-          car_soc_font_size: { label: 'Voertuig SOC lettergrootte (px)', helper: 'Standaard 12' },
-          car2_soc_font_size: { label: 'Voertuig 2 SOC lettergrootte (px)', helper: 'Standaard 12' },
-          sensor_popup_pv_1: { label: 'PV Popup 1', helper: 'Entiteit voor PV popup lijn 1.' },
-          sensor_popup_pv_2: { label: 'PV Popup 2', helper: 'Entiteit voor PV popup lijn 2.' },
-          sensor_popup_pv_3: { label: 'PV Popup 3', helper: 'Entiteit voor PV popup lijn 3.' },
-          sensor_popup_pv_4: { label: 'PV Popup 4', helper: 'Entiteit voor PV popup lijn 4.' },
-          sensor_popup_pv_5: { label: 'PV Popup 5', helper: 'Entiteit voor PV popup lijn 5.' },
-          sensor_popup_pv_6: { label: 'PV Popup 6', helper: 'Entiteit voor PV popup lijn 6.' },
-          sensor_popup_pv_1_name: { label: 'Naam PV Popup 1', helper: 'Optionele aangepaste naam voor PV popup lijn 1. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_pv_2_name: { label: 'Naam PV Popup 2', helper: 'Optionele aangepaste naam voor PV popup lijn 2. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_pv_3_name: { label: 'Naam PV Popup 3', helper: 'Optionele aangepaste naam voor PV popup lijn 3. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_pv_4_name: { label: 'Naam PV Popup 4', helper: 'Optionele aangepaste naam voor PV popup lijn 4. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_pv_5_name: { label: 'Naam PV Popup 5', helper: 'Optionele aangepaste naam voor PV popup lijn 5. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_pv_6_name: { label: 'Naam PV Popup 6', helper: 'Optionele aangepaste naam voor PV popup lijn 6. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_pv_1_color: { label: 'Kleur PV Popup 1', helper: 'Kleur voor PV popup lijn 1 tekst.' },
-          sensor_popup_pv_2_color: { label: 'Kleur PV Popup 2', helper: 'Kleur voor PV popup lijn 2 tekst.' },
-          sensor_popup_pv_3_color: { label: 'Kleur PV Popup 3', helper: 'Kleur voor PV popup lijn 3 tekst.' },
-          sensor_popup_pv_4_color: { label: 'Kleur PV Popup 4', helper: 'Kleur voor PV popup lijn 4 tekst.' },
-          sensor_popup_pv_5_color: { label: 'Kleur PV Popup 5', helper: 'Kleur voor PV popup lijn 5 tekst.' },
-          sensor_popup_pv_6_color: { label: 'Kleur PV Popup 6', helper: 'Kleur voor PV popup lijn 6 tekst.' },
-          sensor_popup_pv_1_font_size: { label: 'Lettergrootte PV Popup 1 (px)', helper: 'Lettergrootte voor PV popup lijn 1. Standaard 16' },
-          sensor_popup_pv_2_font_size: { label: 'Lettergrootte PV Popup 2 (px)', helper: 'Lettergrootte voor PV popup lijn 2. Standaard 16' },
-          sensor_popup_pv_3_font_size: { label: 'Lettergrootte PV Popup 3 (px)', helper: 'Lettergrootte voor PV popup lijn 3. Standaard 16' },
-          sensor_popup_pv_4_font_size: { label: 'Lettergrootte PV Popup 4 (px)', helper: 'Lettergrootte voor PV popup lijn 4. Standaard 16' },
-          sensor_popup_pv_5_font_size: { label: 'Lettergrootte PV Popup 5 (px)', helper: 'Lettergrootte voor PV popup lijn 5. Standaard 16' },
-          sensor_popup_pv_6_font_size: { label: 'Lettergrootte PV Popup 6 (px)', helper: 'Lettergrootte voor PV popup lijn 6. Standaard 16' },
-          sensor_popup_house_1: { label: 'House Popup 1', helper: 'Entiteit voor house popup lijn 1.' },
-          sensor_popup_house_1_name: { label: 'Naam House Popup 1', helper: 'Optionele aangepaste naam voor house popup lijn 1. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_house_1_color: { label: 'Kleur House Popup 1', helper: 'Kleur voor house popup lijn 1 tekst.' },
-          sensor_popup_house_1_font_size: { label: 'Lettergrootte House Popup 1 (px)', helper: 'Lettergrootte voor house popup lijn 1. Standaard 16' },
-          sensor_popup_house_2: { label: 'House Popup 2', helper: 'Entiteit voor house popup lijn 2.' },
-          sensor_popup_house_2_name: { label: 'Naam House Popup 2', helper: 'Optionele aangepaste naam voor house popup lijn 2. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_house_2_color: { label: 'Kleur House Popup 2', helper: 'Kleur voor house popup lijn 2 tekst.' },
-          sensor_popup_house_2_font_size: { label: 'Lettergrootte House Popup 2 (px)', helper: 'Lettergrootte voor house popup lijn 2. Standaard 16' },
-          sensor_popup_house_3: { label: 'House Popup 3', helper: 'Entiteit voor house popup lijn 3.' },
-          sensor_popup_house_3_name: { label: 'Naam House Popup 3', helper: 'Optionele aangepaste naam voor house popup lijn 3. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_house_3_color: { label: 'Kleur House Popup 3', helper: 'Kleur voor house popup lijn 3 tekst.' },
-          sensor_popup_house_3_font_size: { label: 'Lettergrootte House Popup 3 (px)', helper: 'Lettergrootte voor house popup lijn 3. Standaard 16' },
-          sensor_popup_house_4: { label: 'House Popup 4', helper: 'Entiteit voor house popup lijn 4.' },
-          sensor_popup_house_4_name: { label: 'Naam House Popup 4', helper: 'Optionele aangepaste naam voor house popup lijn 4. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_house_4_color: { label: 'Kleur House Popup 4', helper: 'Kleur voor house popup lijn 4 tekst.' },
-          sensor_popup_house_4_font_size: { label: 'Lettergrootte House Popup 4 (px)', helper: 'Lettergrootte voor house popup lijn 4. Standaard 16' },
-          sensor_popup_house_5: { label: 'House Popup 5', helper: 'Entiteit voor house popup lijn 5.' },
-          sensor_popup_house_5_name: { label: 'Naam House Popup 5', helper: 'Optionele aangepaste naam voor house popup lijn 5. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_house_5_color: { label: 'Kleur House Popup 5', helper: 'Kleur voor house popup lijn 5 tekst.' },
-          sensor_popup_house_5_font_size: { label: 'Lettergrootte House Popup 5 (px)', helper: 'Lettergrootte voor house popup lijn 5. Standaard 16' },
-          sensor_popup_house_6: { label: 'House Popup 6', helper: 'Entiteit voor house popup lijn 6.' },
-          sensor_popup_house_6_name: { label: 'Naam House Popup 6', helper: 'Optionele aangepaste naam voor house popup lijn 6. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_house_6_color: { label: 'Kleur House Popup 6', helper: 'Kleur voor house popup lijn 6 tekst.' },
-          sensor_popup_house_6_font_size: { label: 'Lettergrootte House Popup 6 (px)', helper: 'Lettergrootte voor house popup lijn 6. Standaard 16' },
-          sensor_popup_bat_1: { label: 'Battery Popup 1', helper: 'Entiteit voor battery popup lijn 1.' },
-          sensor_popup_bat_1_name: { label: 'Naam Battery Popup 1', helper: 'Optionele aangepaste naam voor battery popup lijn 1. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_bat_1_color: { label: 'Kleur Battery Popup 1', helper: 'Kleur voor battery popup lijn 1 tekst.' },
-          sensor_popup_bat_1_font_size: { label: 'Lettergrootte Battery Popup 1 (px)', helper: 'Lettergrootte voor battery popup lijn 1. Standaard 16' },
-          sensor_popup_bat_2: { label: 'Battery Popup 2', helper: 'Entiteit voor battery popup lijn 2.' },
-          sensor_popup_bat_2_name: { label: 'Naam Battery Popup 2', helper: 'Optionele aangepaste naam voor battery popup lijn 2. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_bat_2_color: { label: 'Kleur Battery Popup 2', helper: 'Kleur voor battery popup lijn 2 tekst.' },
-          sensor_popup_bat_2_font_size: { label: 'Lettergrootte Battery Popup 2 (px)', helper: 'Lettergrootte voor battery popup lijn 2. Standaard 16' },
-          sensor_popup_bat_3: { label: 'Battery Popup 3', helper: 'Entiteit voor battery popup lijn 3.' },
-          sensor_popup_bat_3_name: { label: 'Naam Battery Popup 3', helper: 'Optionele aangepaste naam voor battery popup lijn 3. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_bat_3_color: { label: 'Kleur Battery Popup 3', helper: 'Kleur voor battery popup lijn 3 tekst.' },
-          sensor_popup_bat_3_font_size: { label: 'Lettergrootte Battery Popup 3 (px)', helper: 'Lettergrootte voor battery popup lijn 3. Standaard 16' },
-          sensor_popup_bat_4: { label: 'Battery Popup 4', helper: 'Entiteit voor battery popup lijn 4.' },
-          sensor_popup_bat_4_name: { label: 'Naam Battery Popup 4', helper: 'Optionele aangepaste naam voor battery popup lijn 4. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_bat_4_color: { label: 'Kleur Battery Popup 4', helper: 'Kleur voor battery popup lijn 4 tekst.' },
-          sensor_popup_bat_4_font_size: { label: 'Lettergrootte Battery Popup 4 (px)', helper: 'Lettergrootte voor battery popup lijn 4. Standaard 16' },
-          sensor_popup_bat_5: { label: 'Battery Popup 5', helper: 'Entiteit voor battery popup lijn 5.' },
-          sensor_popup_bat_5_name: { label: 'Naam Battery Popup 5', helper: 'Optionele aangepaste naam voor battery popup lijn 5. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_bat_5_color: { label: 'Kleur Battery Popup 5', helper: 'Kleur voor battery popup lijn 5 tekst.' },
-          sensor_popup_bat_5_font_size: { label: 'Lettergrootte Battery Popup 5 (px)', helper: 'Lettergrootte voor battery popup lijn 5. Standaard 16' },
-          sensor_popup_bat_6: { label: 'Battery Popup 6', helper: 'Entiteit voor battery popup lijn 6.' },
-          sensor_popup_bat_6_name: { label: 'Naam Battery Popup 6', helper: 'Optionele aangepaste naam voor battery popup lijn 6. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_bat_6_color: { label: 'Kleur Battery Popup 6', helper: 'Kleur voor battery popup lijn 6 tekst.' },
-          sensor_popup_bat_6_font_size: { label: 'Lettergrootte Battery Popup 6 (px)', helper: 'Lettergrootte voor battery popup lijn 6. Standaard 16' },
-          sensor_popup_grid_1: { label: 'Grid Popup 1', helper: 'Entiteit voor grid popup lijn 1.' },
-          sensor_popup_grid_1_name: { label: 'Naam Grid Popup 1', helper: 'Optionele aangepaste naam voor grid popup lijn 1. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_grid_1_color: { label: 'Kleur Grid Popup 1', helper: 'Kleur voor grid popup lijn 1 tekst.' },
-          sensor_popup_grid_1_font_size: { label: 'Lettergrootte Grid Popup 1 (px)', helper: 'Lettergrootte voor grid popup lijn 1. Standaard 16' },
-          sensor_popup_grid_2: { label: 'Grid Popup 2', helper: 'Entiteit voor grid popup lijn 2.' },
-          sensor_popup_grid_2_name: { label: 'Naam Grid Popup 2', helper: 'Optionele aangepaste naam voor grid popup lijn 2. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_grid_2_color: { label: 'Kleur Grid Popup 2', helper: 'Kleur voor grid popup lijn 2 tekst.' },
-          sensor_popup_grid_2_font_size: { label: 'Lettergrootte Grid Popup 2 (px)', helper: 'Lettergrootte voor grid popup lijn 2. Standaard 16' },
-          sensor_popup_grid_3: { label: 'Grid Popup 3', helper: 'Entiteit voor grid popup lijn 3.' },
-          sensor_popup_grid_3_name: { label: 'Naam Grid Popup 3', helper: 'Optionele aangepaste naam voor grid popup lijn 3. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_grid_3_color: { label: 'Kleur Grid Popup 3', helper: 'Kleur voor grid popup lijn 3 tekst.' },
-          sensor_popup_grid_3_font_size: { label: 'Lettergrootte Grid Popup 3 (px)', helper: 'Lettergrootte voor grid popup lijn 3. Standaard 16' },
-          sensor_popup_grid_4: { label: 'Grid Popup 4', helper: 'Entiteit voor grid popup lijn 4.' },
-          sensor_popup_grid_4_name: { label: 'Naam Grid Popup 4', helper: 'Optionele aangepaste naam voor grid popup lijn 4. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_grid_4_color: { label: 'Kleur Grid Popup 4', helper: 'Kleur voor grid popup lijn 4 tekst.' },
-          sensor_popup_grid_4_font_size: { label: 'Lettergrootte Grid Popup 4 (px)', helper: 'Lettergrootte voor grid popup lijn 4. Standaard 16' },
-          sensor_popup_grid_5: { label: 'Grid Popup 5', helper: 'Entiteit voor grid popup lijn 5.' },
-          sensor_popup_grid_5_name: { label: 'Naam Grid Popup 5', helper: 'Optionele aangepaste naam voor grid popup lijn 5. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_grid_5_color: { label: 'Kleur Grid Popup 5', helper: 'Kleur voor grid popup lijn 5 tekst.' },
-          sensor_popup_grid_5_font_size: { label: 'Lettergrootte Grid Popup 5 (px)', helper: 'Lettergrootte voor grid popup lijn 5. Standaard 16' },
-          sensor_popup_grid_6: { label: 'Grid Popup 6', helper: 'Entiteit voor grid popup lijn 6.' },
-          sensor_popup_grid_6_name: { label: 'Naam Grid Popup 6', helper: 'Optionele aangepaste naam voor grid popup lijn 6. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_grid_6_color: { label: 'Kleur Grid Popup 6', helper: 'Kleur voor grid popup lijn 6 tekst.' },
-          sensor_popup_grid_6_font_size: { label: 'Lettergrootte Grid Popup 6 (px)', helper: 'Lettergrootte voor grid popup lijn 6. Standaard 16' },
-          sensor_popup_inverter_1: { label: 'Inverter Popup 1', helper: 'Entiteit voor inverter popup lijn 1.' },
-          sensor_popup_inverter_1_name: { label: 'Naam Inverter Popup 1', helper: 'Optionele aangepaste naam voor inverter popup lijn 1. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_inverter_1_color: { label: 'Kleur Inverter Popup 1', helper: 'Kleur voor inverter popup lijn 1 tekst.' },
-          sensor_popup_inverter_1_font_size: { label: 'Lettergrootte Inverter Popup 1 (px)', helper: 'Lettergrootte voor inverter popup lijn 1. Standaard 16' },
-          sensor_popup_inverter_2: { label: 'Inverter Popup 2', helper: 'Entiteit voor inverter popup lijn 2.' },
-          sensor_popup_inverter_2_name: { label: 'Naam Inverter Popup 2', helper: 'Optionele aangepaste naam voor inverter popup lijn 2. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_inverter_2_color: { label: 'Kleur Inverter Popup 2', helper: 'Kleur voor inverter popup lijn 2 tekst.' },
-          sensor_popup_inverter_2_font_size: { label: 'Lettergrootte Inverter Popup 2 (px)', helper: 'Lettergrootte voor inverter popup lijn 2. Standaard 16' },
-          sensor_popup_inverter_3: { label: 'Inverter Popup 3', helper: 'Entiteit voor inverter popup lijn 3.' },
-          sensor_popup_inverter_3_name: { label: 'Naam Inverter Popup 3', helper: 'Optionele aangepaste naam voor inverter popup lijn 3. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_inverter_3_color: { label: 'Kleur Inverter Popup 3', helper: 'Kleur voor inverter popup lijn 3 tekst.' },
-          sensor_popup_inverter_3_font_size: { label: 'Lettergrootte Inverter Popup 3 (px)', helper: 'Lettergrootte voor inverter popup lijn 3. Standaard 16' },
-          sensor_popup_inverter_4: { label: 'Inverter Popup 4', helper: 'Entiteit voor inverter popup lijn 4.' },
-          sensor_popup_inverter_4_name: { label: 'Naam Inverter Popup 4', helper: 'Optionele aangepaste naam voor inverter popup lijn 4. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_inverter_4_color: { label: 'Kleur Inverter Popup 4', helper: 'Kleur voor inverter popup lijn 4 tekst.' },
-          sensor_popup_inverter_4_font_size: { label: 'Lettergrootte Inverter Popup 4 (px)', helper: 'Lettergrootte voor inverter popup lijn 4. Standaard 16' },
-          sensor_popup_inverter_5: { label: 'Inverter Popup 5', helper: 'Entiteit voor inverter popup lijn 5.' },
-          sensor_popup_inverter_5_name: { label: 'Naam Inverter Popup 5', helper: 'Optionele aangepaste naam voor inverter popup lijn 5. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_inverter_5_color: { label: 'Kleur Inverter Popup 5', helper: 'Kleur voor inverter popup lijn 5 tekst.' },
-          sensor_popup_inverter_5_font_size: { label: 'Lettergrootte Inverter Popup 5 (px)', helper: 'Lettergrootte voor inverter popup lijn 5. Standaard 16' },
-          sensor_popup_inverter_6: { label: 'Inverter Popup 6', helper: 'Entiteit voor inverter popup lijn 6.' },
-          sensor_popup_inverter_6_name: { label: 'Naam Inverter Popup 6', helper: 'Optionele aangepaste naam voor inverter popup lijn 6. Laat leeg om entiteit naam te gebruiken.' },
-          sensor_popup_inverter_6_color: { label: 'Kleur Inverter Popup 6', helper: 'Kleur voor inverter popup lijn 6 tekst.' },
-          sensor_popup_inverter_6_font_size: { label: 'Lettergrootte Inverter Popup 6 (px)', helper: 'Lettergrootte voor inverter popup lijn 6. Standaard 16' }
+          card_title: { label: 'Kaarttitel', helper: 'Titel displayed at the top of the card. Leeg laten to disable.' },
+          title_text_color: { label: 'Titel Tekstkleur', helper: 'Overrides the fill color for [data-role="title-text"]. Leeg laten to keep the SVG styling.' },
+          title_bg_color: { label: 'Titel Achtergrondkleur', helper: 'Overrides the fill color for [data-role="title-bg"]. Leeg laten to keep the SVG styling.' },
+          font_family: { label: 'Lettertype', helper: 'CSS font-family used for all SVG text (e.g., sans-serif, Roboto, "Segoe UI").' },
+          odometer_font_family: { label: 'Odometer Lettertype (Monospace)', helper: 'Font family used only for odometer-animated values. Leeg laten to reuse Lettertype. Tip: pick a monospace variant (e.g., "Roboto Mono" or "Space Mono").' },
+          background_day: { label: 'Achtergrond (dag)', helper: 'Path to the day background SVG (e.g., /local/community/advanced-energy-card/advanced_background_day.svg).' },
+          background_night: { label: 'Achtergrond (nacht)', helper: 'Path to the night background SVG (e.g., /local/community/advanced-energy-card/advanced_background_night.svg).' },
+          night_mode: { label: 'Dag/nacht-modus', helper: 'Selecteer Day, Night, or Auto. Auto uses sun.sun: above_horizon = Day, below_horizon = Night.' },
+          language: { label: 'Taal', helper: 'Kies the editor language.' },
+          display_unit: { label: 'Weergave-eenheid', helper: 'Unit used when formatting power values.' },
+          update_interval: { label: 'Update-interval', helper: 'Refresh cadence for card updates (0 disables throttling).' },
+          initial_configuration: { label: 'Initiële configuratie', helper: 'Show the Initiële configuratie section in the editor.' },
+          initial_has_pv: { label: 'Do you have Solar/PV vermogen?', helper: 'Selecteer Yes if you have solar production to configure.' },
+          initial_inverters: { label: 'How many inverters do you have?', helper: 'Shown only when Solar/PV is enabled.' },
+          initial_has_battery: { label: 'Do you have Batterij storage?', helper: '' },
+          initial_battery_count: { label: 'How many Batteries do you have? Maximum 4', helper: '' },
+          initial_has_grid: { label: 'Do you have Net supplied electricity?', helper: '' },
+          initial_can_export: { label: 'Can you export excess electricity to the grid?', helper: '' },
+          initial_has_windmill: { label: 'Do you have a Windmolen?', helper: '' },
+          initial_has_ev: { label: 'Do you have Electric Vehicles/EV\'s?', helper: '' },
+          initial_ev_count: { label: 'How many do you have?', helper: '' },
+          initial_config_items_title: { label: 'Vereist configuration items', helper: '' },
+          initial_config_items_helper: { label: 'These items become relevant based on your answers above.', helper: '' },
+          initial_config_items_empty: { label: 'No items to show yet.', helper: '' },
+          initial_config_complete_helper: { label: 'This completes the last required minimum configuration. Once clicking on the Complete button, please review all menus to check for additional items and popup configurations. This initial configuration can be re-enabled in the General menu.', helper: '' },
+          initial_config_complete_button: { label: 'Complete', helper: '' },
+          array_helper_text: { label: 'Each Array must have at minimum a combined Solar/PV total sensor which is the total power output of that Array or individual string values which are added together to get the total power output of the array. Dagelijks production can be supplied and can be shown in a Dagelijks production card.', helper: '' },
+          animation_speed_factor: { label: 'Animatiesnelheidsfactor', helper: 'Adjust animation speed multiplier (-3x to 3x). Set 0 to pause; negatives reverse direction.' },
+          animation_style: { label: 'Animatiestijl (dag)', helper: 'Flow animation style used when the card is in Day mode.' },
+          night_animation_style: { label: 'Animatiestijl (nacht)', helper: 'Flow animation style used when the card is in Night mode. Leeg laten to use the Day style.' },
+          dashes_glow_intensity: { label: 'Gloei-intensiteit (streepjes)', helper: 'Controls glow strength for "Dashes + Glow" (0 disables glow).' },
+          fluid_flow_outer_glow: { label: 'Buitenste gloed (vloeiend)', helper: 'Inschakelen the extra outer haze/glow layer for animation_style: fluid_flow.' },
+          flow_stroke_width: { label: 'Flow Stroke Width (px)', helper: 'Optioneel override for the animated flow stroke width (no SVG edits). Leeg laten to keep SVG defaults.' },
+          fluid_flow_stroke_width: { label: 'Fluid Flow Stroke Width (px)', helper: 'Base stroke width for animation_style: fluid_flow. Overlay/mask widths are derived from this (default 5).' },
+          sensor_pv_total: { label: 'PV-totaalsensor', helper: 'Optioneel aggregate production sensor displayed as the combined line.' },
+          sensor_pv_total_secondary: { label: 'PV-totaalsensor (Omvormer 2)', helper: 'Optioneel second inverter total; added to the PV total when provided.' },
+          sensor_windmill_total: { label: 'Windmolen Total', helper: 'vermogen sensor for the windmill generator (W). When not configured the windmill SVG group is hidden.' },
+          sensor_windmill_daily: { label: 'Dagelijks Windmolen opbrengst', helper: 'Optioneel sensor reporting daily windmill production totals.' },
+          sensor_pv1: { label: 'PV String 1 (Array 1)', helper: 'Array 1 solar production sensor for string 1.' },
+          sensor_pv2: { label: 'PV String 2 (Array 1)', helper: 'Array 1 solar production sensor for string 2.' },
+          sensor_pv3: { label: 'PV String 3 (Array 1)', helper: 'Array 1 solar production sensor for string 3.' },
+          sensor_pv4: { label: 'PV String 4 (Array 1)', helper: 'Array 1 solar production sensor for string 4.' },
+          sensor_pv5: { label: 'PV String 5 (Array 1)', helper: 'Array 1 solar production sensor for string 5.' },
+          sensor_pv6: { label: 'PV String 6 (Array 1)', helper: 'Array 1 solar production sensor for string 6.' },
+          sensor_pv_array2_1: { label: 'PV String 1 (Array 2)', helper: 'Array 2 solar production sensor for string 1.' },
+          sensor_pv_array2_2: { label: 'PV String 2 (Array 2)', helper: 'Array 2 solar production sensor for string 2.' },
+          sensor_pv_array2_3: { label: 'PV String 3 (Array 2)', helper: 'Array 2 solar production sensor for string 3.' },
+          sensor_pv_array2_4: { label: 'PV String 4 (Array 2)', helper: 'Array 2 solar production sensor for string 4.' },
+          sensor_pv_array2_5: { label: 'PV String 5 (Array 2)', helper: 'Array 2 solar production sensor for string 5.' },
+          sensor_pv_array2_6: { label: 'PV String 6 (Array 2)', helper: 'Array 2 solar production sensor for string 6.' },
+          sensor_daily: { label: 'Dagelijks opbrengst sensor', helper: 'sensor reporting daily production totals. Either the PV total sensor or your PV string arrays need to be specified as a minimum.' },
+          sensor_daily_array2: { label: 'Dagelijks opbrengst sensor (Array 2)', helper: 'sensor reporting daily production totals for Array 2.' },
+          sensor_bat1_soc: { label: 'Batterij 1 SOC', helper: 'Laadstatus sensor for Batterij 1 (percentage).' },
+          sensor_bat1_power: { label: 'Batterij 1 vermogen', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batterij 1 becomes active.' },
+          sensor_bat1_charge_power: { label: 'Batterij 1 laden vermogen', helper: 'sensor for Batterij 1 charging power.' },
+          sensor_bat1_discharge_power: { label: 'Batterij 1 ontladen vermogen', helper: 'sensor for Batterij 1 discharging power.' },
+          sensor_bat2_soc: { label: 'Batterij 2 SOC', helper: 'Laadstatus sensor for Batterij 2 (percentage).' },
+          sensor_bat2_power: { label: 'Batterij 2 vermogen', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batterij 2 becomes active.' },
+          sensor_bat2_charge_power: { label: 'Batterij 2 laden vermogen', helper: 'sensor for Batterij 2 charging power.' },
+          sensor_bat2_discharge_power: { label: 'Batterij 2 ontladen vermogen', helper: 'sensor for Batterij 2 discharging power.' },
+          sensor_bat3_soc: { label: 'Batterij 3 SOC', helper: 'Laadstatus sensor for Batterij 3 (percentage).' },
+          sensor_bat3_power: { label: 'Batterij 3 vermogen', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batterij 3 becomes active.' },
+          sensor_bat3_charge_power: { label: 'Batterij 3 laden vermogen', helper: 'sensor for Batterij 3 charging power.' },
+          sensor_bat3_discharge_power: { label: 'Batterij 3 ontladen vermogen' },
+          sensor_bat4_soc: { label: 'Batterij 4 SOC', helper: 'Laadstatus sensor for Batterij 4 (percentage).' },
+          sensor_bat4_power: { label: 'Batterij 4 vermogen', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batterij 4 becomes active.' },
+          sensor_bat4_charge_power: { label: 'Batterij 4 laden vermogen', helper: 'sensor for Batterij 4 charging power.' },
+          sensor_bat4_discharge_power: { label: 'Batterij 4 ontladen vermogen', helper: 'sensor for Batterij 4 discharging power.' },
+          sensor_home_load: { label: 'Home Load/Consumption (Vereist)', helper: 'Total household consumption sensor.' },
+          sensor_home_load_secondary: { label: 'Home Load (Omvormer 2)', helper: 'Optioneel house load sensor for the second inverter.' },
+          sensor_heat_pump_consumption: { label: 'Heat Pump Consumption', helper: 'sensor for heat pump energy consumption.' },
+          sensor_hot_water_consumption: { label: 'Water Heating', helper: 'sensor for Hot Water Heating Load.' },
+          sensor_pool_consumption: { label: 'Pool', helper: 'sensor for pool power/consumption.' },
+          sensor_washing_machine_consumption: { label: 'Washing Machine', helper: 'sensor for washing machine power/consumption.' },
+          sensor_dishwasher_consumption: { label: 'Dish Washer', helper: 'sensor for Dish Washer Load.' },
+          sensor_dryer_consumption: { label: 'Dryer', helper: 'sensor for dryer power/consumption.' },
+          sensor_refrigerator_consumption: { label: 'Refrigerator', helper: 'sensor for refrigerator power/consumption.' },
+          hot_water_text_color: { label: 'Water Heating Tekstkleur', helper: 'Kleur applied to the hot water power text.' },
+          dishwasher_text_color: { label: 'Dish Washer Tekstkleur', helper: 'Kleur applied to the dish washer power text.' },
+          hot_water_font_size: { label: 'Water Heating Font Size (px)', helper: 'Standaard 8' },
+          dishwasher_font_size: { label: 'Dish Washer Font Size (px)', helper: 'Standaard 8' },
+          sensor_grid_power: { label: 'Net Omvormer 1 vermogen', helper: 'Positive/negative grid flow sensor for inverter 1. Specify either this sensor or both Net Omvormer 1 Import sensor and Net Omvormer 1 Export sensor.' },
+          sensor_grid_import: { label: 'Net Omvormer 1 Import sensor', helper: 'Optioneel entity reporting inverter 1 grid import (positive) power.' },
+          sensor_grid_export: { label: 'Net Omvormer 1 Export sensor', helper: 'Optioneel entity reporting inverter 1 grid export (positive) power.' },
+          sensor_grid_import_daily: { label: 'Dagelijks Net Omvormer 1 Import sensor', helper: 'Optioneel entity reporting cumulative inverter 1 grid import for the current day.' },
+          sensor_grid_export_daily: { label: 'Dagelijks Net Omvormer 1 Export sensor', helper: 'Optioneel entity reporting cumulative inverter 1 grid export for the current day.' },
+          sensor_grid2_power: { label: 'Net Omvormer 2 vermogen', helper: 'Positive/negative grid flow sensor for inverter 2. Specify either this sensor or both Net Omvormer 2 Import sensor and Net Omvormer 2 Export sensor.' },
+          sensor_grid2_import: { label: 'Net Omvormer 2 Import sensor', helper: 'Optioneel entity reporting inverter 2 grid import (positive) power.' },
+          sensor_grid2_export: { label: 'Net Omvormer 2 Export sensor', helper: 'Optioneel entity reporting inverter 2 grid export (positive) power.' },
+          sensor_grid2_import_daily: { label: 'Dagelijks Net Omvormer 2 Import sensor', helper: 'Optioneel entity reporting cumulative inverter 2 grid import for the current day.' },
+          sensor_grid2_export_daily: { label: 'Dagelijks Net Omvormer 2 Export sensor', helper: 'Optioneel entity reporting cumulative inverter 2 grid export for the current day.' },
+          show_daily_grid: { label: 'Show Dagelijks Net Values', helper: 'Show the daily import/export totals under the current grid flow when enabled.' },
+          grid_daily_font_size: { label: 'Dagelijks Net Font Size (px)', helper: 'Optioneel override for daily grid import/export text. Standaards to Net Font Size.' },
+          grid_current_odometer: { label: 'Odometer: Net Current', helper: 'Animate Net Current with a per-digit rolling effect.' },
+          grid_current_odometer_duration: { label: 'Odometer Duur (ms)', helper: 'Animation duration in milliseconds. Standaard 350.' },
+          show_grid_flow_label: { label: 'Show Net Import/Export Naam', helper: 'Prepend the importing/exporting label before the grid value when enabled.' },
+          enable_echo_alive: { label: 'Inschakelen Echo Alive', helper: 'Inschakelens an invisible iframe to keep the Silk browser open on Echo Show. The button will be positioned in a corner of the card.' },
+          pv_tot_color: { label: 'PV Total Kleur', helper: 'Colour applied to the PV TOTAL text line.' },
+          pv_primary_color: { label: 'PV 1 Flow Kleur', helper: 'Colour used for the primary PV animation line.' },
+          pv_secondary_color: { label: 'PV 2 Flow Kleur', helper: 'Colour used for the secondary PV animation line when available.' },
+          load_flow_color: { label: 'Load Flow Kleur', helper: 'Colour applied to the home load animation line.' },
+          load_text_color: { label: 'Load Tekstkleur', helper: 'Colour applied to the home load text when thresholds are inactive.' },
+          house_total_color: { label: 'Huis Total Kleur', helper: 'Colour applied to the HOUSE TOT text/flow.' },
+          inv1_color: { label: 'Omvormer 1 to Huis Kleur', helper: 'Kleur applied to the flow from Omvormer 1 to the house.' },
+          inv2_color: { label: 'Omvormer 2 to Huis Kleur', helper: 'Kleur applied to the flow from Omvormer 2 to the house.' },
+          load_threshold_warning: { label: 'Load Warning Drempel', helper: 'Change load color when magnitude equals or exceeds this value. Uses the selected display unit.' },
+          load_warning_color: { label: 'Load Warning Kleur', helper: 'Hex or CSS color applied at the load warning threshold.' },
+          load_threshold_critical: { label: 'Load Critical Drempel', helper: 'Change load color when magnitude equals or exceeds this value. Uses the selected display unit.' },
+          load_critical_color: { label: 'Load Critical Kleur', helper: 'Hex or CSS color applied at the load critical threshold.' },
+          battery_soc_color: { label: 'Batterij SOC Kleur', helper: 'Hex color applied to the battery SOC percentage text.' },
+          battery_charge_color: { label: 'Batterij laden Flow Kleur', helper: 'Colour used when energy is flowing into the battery.' },
+          battery_discharge_color: { label: 'Batterij ontladen Flow Kleur', helper: 'Colour used when energy is flowing from the battery.' },
+          grid_import_color: { label: 'Omvormer 1 Net Import Flow Kleur', helper: 'Base colour before thresholds when inverter 1 is importing from the grid.' },
+          grid_export_color: { label: 'Omvormer 1 Net Export Flow Kleur', helper: 'Base colour before thresholds when inverter 1 is exporting to the grid.' },
+          grid2_import_color: { label: 'Omvormer 2 Net Import Flow Kleur', helper: 'Base colour before thresholds when inverter 2 is importing from the grid.' },
+          grid2_export_color: { label: 'Omvormer 2 Net Export Flow Kleur', helper: 'Base colour before thresholds when inverter 2 is exporting to the grid.' },
+          car_flow_color: { label: 'EV Flow Kleur', helper: 'Colour applied to the electric vehicle animation line.' },
+          battery_fill_high_color: { label: 'Batterij Fill (Normal) Kleur', helper: 'Liquid fill colour when the battery SOC is above the low threshold.' },
+          battery_fill_low_color: { label: 'Batterij Fill (Low) Kleur', helper: 'Liquid fill colour when the battery SOC is at or below the low threshold.' },
+          battery_fill_low_threshold: { label: 'Batterij Low Fill Drempel (%)', helper: 'Use the low fill colour when SOC is at or below this percentage.' },
+          battery_fill_opacity: { label: 'Batterij Fill Opacity', helper: 'Opacity for the battery fill level (0-1).' },
+          grid_activity_threshold: { label: 'Net Animation Drempel (W)', helper: 'Ignore grid flows whose absolute value is below this wattage before animating.' },
+          grid_power_only: { label: 'Net vermogen Only', helper: 'Hide inverter/battery flows and show a direct grid-to-house flow.' },
+          grid_threshold_warning: { label: 'Omvormer 1 Net Warning Drempel', helper: 'Change inverter 1 grid color when magnitude equals or exceeds this value. Uses the selected display unit.' },
+          grid_warning_color: { label: 'Omvormer 1 Net Warning Kleur', helper: 'Hex or CSS color applied at the inverter 1 warning threshold.' },
+          grid_threshold_critical: { label: 'Omvormer 1 Net Critical Drempel', helper: 'Change inverter 1 grid color when magnitude equals or exceeds this value. Uses the selected display unit.' },
+          grid_critical_color: { label: 'Omvormer 1 Net Critical Kleur', helper: 'Hex or CSS color applied at the inverter 1 critical threshold.' },
+          grid2_threshold_warning: { label: 'Omvormer 2 Net Warning Drempel', helper: 'Change inverter 2 grid color when magnitude equals or exceeds this value. Uses the selected display unit.' },
+          grid2_warning_color: { label: 'Omvormer 2 Net Warning Kleur', helper: 'Hex or CSS color applied at the inverter 2 warning threshold.' },
+          grid2_threshold_critical: { label: 'Omvormer 2 Net Critical Drempel', helper: 'Change inverter 2 grid color when magnitude equals or exceeds this value. Uses the selected display unit.' },
+          grid2_critical_color: { label: 'Omvormer 2 Net Critical Kleur', helper: 'Hex or CSS color applied at the inverter 2 critical threshold.' },
+          invert_grid: { label: 'Invert Net Values', helper: 'Inschakelen if import/export polarity is reversed.' },
+          invert_battery: { label: 'Invert Batterij Values', helper: 'Inschakelen if charge/discharge polarity is reversed.' },
+          invert_bat1: { label: 'Invert Batterij 1 Values', helper: 'Inschakelen if Batterij 1 charge/discharge polarity is reversed.' },
+          invert_bat2: { label: 'Invert Batterij 2 Values', helper: 'Inschakelen if Batterij 2 charge/discharge polarity is reversed.' },
+          invert_bat3: { label: 'Invert Batterij 3 Values', helper: 'Inschakelen if Batterij 3 charge/discharge polarity is reversed.' },
+          sensor_car_power: { label: 'Auto 1 vermogen sensor', helper: 'sensor for EV charge/discharge power.' },
+          sensor_car_soc: { label: 'Auto 1 SOC sensor', helper: 'Laadstatus sensor for EV 1 (percentage).' },
+          car_soc: { label: 'Auto SOC', helper: 'sensor for EV battery SOC (percentage).' },
+          car_charger_power: { label: 'Auto Charger vermogen', helper: 'sensor for EV charger power.' },
+          car1_label: { label: 'Auto 1 Label', helper: 'Text displayed next to the first EV values.' },
+          sensor_car2_power: { label: 'Auto 2 vermogen sensor', helper: 'sensor for EV 2 charge/discharge power.' },
+          car2_power: { label: 'Auto 2 vermogen', helper: 'sensor for EV 2 charge/discharge power.' },
+          sensor_car2_soc: { label: 'Auto 2 SOC sensor', helper: 'Laadstatus sensor for EV 2 (percentage).' },
+          car2_soc: { label: 'Auto 2 SOC', helper: 'sensor for EV 2 battery SOC (percentage).' },
+          car2_charger_power: { label: 'Auto 2 Charger vermogen', helper: 'sensor for EV 2 charger power.' },
+          car2_label: { label: 'Auto 2 Label', helper: 'Text displayed next to the second EV values.' },
+          car_headlight_flash: { label: 'Headlight Flash While Charging', helper: 'Inschakelen to flash the EV headlights whenever charging is detected.' },
+          car1_glow_brightness: { label: 'Auto Glow Effect', helper: 'Percentage the car flow effects show while not charging.' },
+          car2_glow_brightness: { label: 'Auto Glow Effect', helper: 'Percentage the car flow effects show while not charging.' },
+          car_pct_color: { label: 'Auto SOC Kleur', helper: 'Hex color for EV SOC text (e.g., #00FFFF).' },
+          car2_pct_color: { label: 'Auto 2 SOC Kleur', helper: 'Hex color for second EV SOC text (falls back to Auto SOC Kleur).' },
+          car1_name_color: { label: 'Auto 1 Naam Kleur', helper: 'Kleur applied to the Auto 1 name label.' },
+          car2_name_color: { label: 'Auto 2 Naam Kleur', helper: 'Kleur applied to the Auto 2 name label.' },
+          car1_color: { label: 'Auto 1 Kleur', helper: 'Kleur applied to Auto 1 power value.' },
+          car2_color: { label: 'Auto 2 Kleur', helper: 'Kleur applied to Auto 2 power value.' },
+          heat_pump_label: { label: 'Heat Pump Label', helper: 'Custom label for the heat pump/AC line (defaults to "Heat Pump/AC").' },
+          heat_pump_flow_color: { label: 'Heat Pump Flow Kleur', helper: 'Kleur applied to the heat pump flow animation.' },
+          heat_pump_text_color: { label: 'Heat Pump Tekstkleur', helper: 'Kleur applied to the heat pump power text.' },
+          pool_flow_color: { label: 'Pool Flow Kleur', helper: 'Kleur applied to the pool flow animation.' },
+          pool_text_color: { label: 'Pool Tekstkleur', helper: 'Kleur applied to the pool power text.' },
+          washing_machine_text_color: { label: 'Washing Machine Tekstkleur', helper: 'Kleur applied to the washing machine power text.' },
+          dryer_text_color: { label: 'Dryer Tekstkleur', helper: 'Kleur applied to the dryer power text.' },
+          refrigerator_text_color: { label: 'Refrigerator Tekstkleur', helper: 'Kleur applied to the refrigerator power text.' },
+          windmill_flow_color: { label: 'Windmolen Flow Kleur', helper: 'Kleur applied to the windmill flow (data-flow-key="windmill-inverter1" / "windmill-inverter2").' },
+          windmill_text_color: { label: 'Windmolen Tekstkleur', helper: 'Kleur applied to the windmill power text (data-role="windmill-power").' },
+          header_font_size: { label: 'Header Font Size (px)', helper: 'Standaard 8' },
+          daily_label_font_size: { label: 'Dagelijks Label Font Size (px)', helper: 'Standaard 8' },
+          daily_value_font_size: { label: 'Dagelijks Value Font Size (px)', helper: 'Standaard 20' },
+          pv_font_size: { label: 'PV Text Font Size (px)', helper: 'Standaard 8' },
+          windmill_power_font_size: { label: 'Windmolen vermogen Font Size (px)', helper: 'Standaard 8' },
+          battery_soc_font_size: { label: 'Batterij SOC Font Size (px)', helper: 'Standaard 20' },
+          battery_power_font_size: { label: 'Batterij vermogen Font Size (px)', helper: 'Standaard 8' },
+          load_font_size: { label: 'Load Font Size (px)', helper: 'Standaard 8' },
+          inv1_power_font_size: { label: 'INV 1 vermogen Font Size (px)', helper: 'Font size for the INV 1 power line. Standaard uses Load Font Size.' },
+          inv2_power_font_size: { label: 'INV 2 vermogen Font Size (px)', helper: 'Font size for the INV 2 power line. Standaard uses Load Font Size.' },
+          heat_pump_font_size: { label: 'Heat Pump Font Size (px)', helper: 'Standaard 8' },
+          pool_font_size: { label: 'Pool Font Size (px)', helper: 'Standaard 8' },
+          washing_machine_font_size: { label: 'Washing Machine Font Size (px)', helper: 'Standaard 8' },
+          dryer_font_size: { label: 'Dryer Font Size (px)', helper: 'Standaard 8' },
+          refrigerator_font_size: { label: 'Refrigerator Font Size (px)', helper: 'Standaard 8' },
+          grid_font_size: { label: 'Net Font Size (px)', helper: 'Standaard 8' },
+          car_power_font_size: { label: 'Auto vermogen Font Size (px)', helper: 'Standaard 8' },
+          car2_power_font_size: { label: 'Auto 2 vermogen Font Size (px)', helper: 'Standaard 8' },
+          car_name_font_size: { label: 'Auto Naam Font Size (px)', helper: 'Standaard 8' },
+          car2_name_font_size: { label: 'Auto 2 Naam Font Size (px)', helper: 'Standaard 8' },
+          car_soc_font_size: { label: 'Auto SOC Font Size (px)', helper: 'Standaard 8' },
+          car2_soc_font_size: { label: 'Auto 2 SOC Font Size (px)', helper: 'Standaard 8' },
+          sensor_popup_pv_1: { label: 'PV Popup 1', helper: 'Entity for PV popup line 1.' },
+          sensor_popup_pv_2: { label: 'PV Popup 2', helper: 'Entity for PV popup line 2.' },
+          sensor_popup_pv_3: { label: 'PV Popup 3', helper: 'Entity for PV popup line 3.' },
+          sensor_popup_pv_4: { label: 'PV Popup 4', helper: 'Entity for PV popup line 4.' },
+          sensor_popup_pv_5: { label: 'PV Popup 5', helper: 'Entity for PV popup line 5.' },
+          sensor_popup_pv_6: { label: 'PV Popup 6', helper: 'Entity for PV popup line 6.' },
+          sensor_popup_pv_1_name: { label: 'PV Popup 1 Naam', helper: 'Optioneel custom name for PV popup line 1. Leeg laten to use entity name.' },
+          sensor_popup_pv_2_name: { label: 'PV Popup 2 Naam', helper: 'Optioneel custom name for PV popup line 2. Leeg laten to use entity name.' },
+          sensor_popup_pv_3_name: { label: 'PV Popup 3 Naam', helper: 'Optioneel custom name for PV popup line 3. Leeg laten to use entity name.' },
+          sensor_popup_pv_4_name: { label: 'PV Popup 4 Naam', helper: 'Optioneel custom name for PV popup line 4. Leeg laten to use entity name.' },
+          sensor_popup_pv_5_name: { label: 'PV Popup 5 Naam', helper: 'Optioneel custom name for PV popup line 5. Leeg laten to use entity name.' },
+          sensor_popup_pv_6_name: { label: 'PV Popup 6 Naam', helper: 'Optioneel custom name for PV popup line 6. Leeg laten to use entity name.' },
+          sensor_popup_pv_1_color: { label: 'PV Popup 1 Kleur', helper: 'Kleur for PV popup line 1 text.' },
+          sensor_popup_pv_2_color: { label: 'PV Popup 2 Kleur', helper: 'Kleur for PV popup line 2 text.' },
+          sensor_popup_pv_3_color: { label: 'PV Popup 3 Kleur', helper: 'Kleur for PV popup line 3 text.' },
+          sensor_popup_pv_4_color: { label: 'PV Popup 4 Kleur', helper: 'Kleur for PV popup line 4 text.' },
+          sensor_popup_pv_5_color: { label: 'PV Popup 5 Kleur', helper: 'Kleur for PV popup line 5 text.' },
+          sensor_popup_pv_6_color: { label: 'PV Popup 6 Kleur', helper: 'Kleur for PV popup line 6 text.' },
+          sensor_popup_pv_1_font_size: { label: 'PV Popup 1 Font Size (px)', helper: 'Font size for PV popup line 1. Standaard 8' },
+          sensor_popup_pv_2_font_size: { label: 'PV Popup 2 Font Size (px)', helper: 'Font size for PV popup line 2. Standaard 8' },
+          sensor_popup_pv_3_font_size: { label: 'PV Popup 3 Font Size (px)', helper: 'Font size for PV popup line 3. Standaard 8' },
+          sensor_popup_pv_4_font_size: { label: 'PV Popup 4 Font Size (px)', helper: 'Font size for PV popup line 4. Standaard 8' },
+          sensor_popup_pv_5_font_size: { label: 'PV Popup 5 Font Size (px)', helper: 'Font size for PV popup line 5. Standaard 8' },
+          sensor_popup_pv_6_font_size: { label: 'PV Popup 6 Font Size (px)', helper: 'Font size for PV popup line 6. Standaard 8' },
+          sensor_popup_house_1: { label: 'Huis Popup 1', helper: 'Entity for house popup line 1.' },
+          sensor_popup_house_1_name: { label: 'Huis Popup 1 Naam', helper: 'Optioneel custom name for house popup line 1. Leeg laten to use entity name.' },
+          sensor_popup_house_1_color: { label: 'Huis Popup 1 Kleur', helper: 'Kleur for house popup line 1 text.' },
+          sensor_popup_house_1_font_size: { label: 'Huis Popup 1 Font Size (px)', helper: 'Font size for house popup line 1. Standaard 8' },
+          sensor_popup_house_2: { label: 'Huis Popup 2', helper: 'Entity for house popup line 2.' },
+          sensor_popup_house_2_name: { label: 'Huis Popup 2 Naam', helper: 'Optioneel custom name for house popup line 2. Leeg laten to use entity name.' },
+          sensor_popup_house_2_color: { label: 'Huis Popup 2 Kleur', helper: 'Kleur for house popup line 2 text.' },
+          sensor_popup_house_2_font_size: { label: 'Huis Popup 2 Font Size (px)', helper: 'Font size for house popup line 2. Standaard 8' },
+          sensor_popup_house_3: { label: 'Huis Popup 3', helper: 'Entity for house popup line 3.' },
+          sensor_popup_house_3_name: { label: 'Huis Popup 3 Naam', helper: 'Optioneel custom name for house popup line 3. Leeg laten to use entity name.' },
+          sensor_popup_house_3_color: { label: 'Huis Popup 3 Kleur', helper: 'Kleur for house popup line 3 text.' },
+          sensor_popup_house_3_font_size: { label: 'Huis Popup 3 Font Size (px)', helper: 'Font size for house popup line 3. Standaard 8' },
+          sensor_popup_house_4: { label: 'Huis Popup 4', helper: 'Entity for house popup line 4.' },
+          sensor_popup_house_4_name: { label: 'Huis Popup 4 Naam', helper: 'Optioneel custom name for house popup line 4. Leeg laten to use entity name.' },
+          sensor_popup_house_4_color: { label: 'Huis Popup 4 Kleur', helper: 'Kleur for house popup line 4 text.' },
+          sensor_popup_house_4_font_size: { label: 'Huis Popup 4 Font Size (px)', helper: 'Font size for house popup line 4. Standaard 8' },
+          sensor_popup_house_5: { label: 'Huis Popup 5', helper: 'Entity for house popup line 5.' },
+          sensor_popup_house_5_name: { label: 'Huis Popup 5 Naam', helper: 'Optioneel custom name for house popup line 5. Leeg laten to use entity name.' },
+          sensor_popup_house_5_color: { label: 'Huis Popup 5 Kleur', helper: 'Kleur for house popup line 5 text.' },
+          sensor_popup_house_5_font_size: { label: 'Huis Popup 5 Font Size (px)', helper: 'Font size for house popup line 5. Standaard 8' },
+          sensor_popup_house_6: { label: 'Huis Popup 6', helper: 'Entity for house popup line 6.' },
+          sensor_popup_house_6_name: { label: 'Huis Popup 6 Naam', helper: 'Optioneel custom name for house popup line 6. Leeg laten to use entity name.' },
+          sensor_popup_house_6_color: { label: 'Huis Popup 6 Kleur', helper: 'Kleur for house popup line 6 text.' },
+          sensor_popup_house_6_font_size: { label: 'Huis Popup 6 Font Size (px)', helper: 'Font size for house popup line 6. Standaard 8' },
+          sensor_popup_bat_1: { label: 'Batterij Popup 1', helper: 'Entity for battery popup line 1.' },
+          sensor_popup_bat_1_name: { label: 'Batterij Popup 1 Naam', helper: 'Optioneel custom name for battery popup line 1. Leeg laten to use entity name.' },
+          sensor_popup_bat_1_color: { label: 'Batterij Popup 1 Kleur', helper: 'Kleur for battery popup line 1 text.' },
+          sensor_popup_bat_1_font_size: { label: 'Batterij Popup 1 Font Size (px)', helper: 'Font size for battery popup line 1. Standaard 8' },
+          sensor_popup_bat_2: { label: 'Batterij Popup 2', helper: 'Entity for battery popup line 2.' },
+          sensor_popup_bat_2_name: { label: 'Batterij Popup 2 Naam', helper: 'Optioneel custom name for battery popup line 2. Leeg laten to use entity name.' },
+          sensor_popup_bat_2_color: { label: 'Batterij Popup 2 Kleur', helper: 'Kleur for battery popup line 2 text.' },
+          sensor_popup_bat_2_font_size: { label: 'Batterij Popup 2 Font Size (px)', helper: 'Font size for battery popup line 2. Standaard 8' },
+          sensor_popup_bat_3: { label: 'Batterij Popup 3', helper: 'Entity for battery popup line 3.' },
+          sensor_popup_bat_3_name: { label: 'Batterij Popup 3 Naam', helper: 'Optioneel custom name for battery popup line 3. Leeg laten to use entity name.' },
+          sensor_popup_bat_3_color: { label: 'Batterij Popup 3 Kleur', helper: 'Kleur for battery popup line 3 text.' },
+          sensor_popup_bat_3_font_size: { label: 'Batterij Popup 3 Font Size (px)', helper: 'Font size for battery popup line 3. Standaard 8' },
+          sensor_popup_bat_4: { label: 'Batterij Popup 4', helper: 'Entity for battery popup line 4.' },
+          sensor_popup_bat_4_name: { label: 'Batterij Popup 4 Naam', helper: 'Optioneel custom name for battery popup line 4. Leeg laten to use entity name.' },
+          sensor_popup_bat_4_color: { label: 'Batterij Popup 4 Kleur', helper: 'Kleur for battery popup line 4 text.' },
+          sensor_popup_bat_4_font_size: { label: 'Batterij Popup 4 Font Size (px)', helper: 'Font size for battery popup line 4. Standaard 8' },
+          sensor_popup_bat_5: { label: 'Batterij Popup 5', helper: 'Entity for battery popup line 5.' },
+          sensor_popup_bat_5_name: { label: 'Batterij Popup 5 Naam', helper: 'Optioneel custom name for battery popup line 5. Leeg laten to use entity name.' },
+          sensor_popup_bat_5_color: { label: 'Batterij Popup 5 Kleur', helper: 'Kleur for battery popup line 5 text.' },
+          sensor_popup_bat_5_font_size: { label: 'Batterij Popup 5 Font Size (px)', helper: 'Font size for battery popup line 5. Standaard 8' },
+          sensor_popup_bat_6: { label: 'Batterij Popup 6', helper: 'Entity for battery popup line 6.' },
+          sensor_popup_bat_6_name: { label: 'Batterij Popup 6 Naam', helper: 'Optioneel custom name for battery popup line 6. Leeg laten to use entity name.' },
+          sensor_popup_bat_6_color: { label: 'Batterij Popup 6 Kleur', helper: 'Kleur for battery popup line 6 text.' },
+          sensor_popup_bat_6_font_size: { label: 'Batterij Popup 6 Font Size (px)', helper: 'Font size for battery popup line 6. Standaard 8' },
+          sensor_popup_grid_1: { label: 'Net Popup 1', helper: 'Entity for grid popup line 1.' },
+          sensor_popup_grid_1_name: { label: 'Net Popup 1 Naam', helper: 'Optioneel custom name for grid popup line 1. Leeg laten to use entity name.' },
+          sensor_popup_grid_1_color: { label: 'Net Popup 1 Kleur', helper: 'Kleur for grid popup line 1 text.' },
+          sensor_popup_grid_1_font_size: { label: 'Net Popup 1 Font Size (px)', helper: 'Font size for grid popup line 1. Standaard 8' },
+          sensor_popup_grid_2: { label: 'Net Popup 2', helper: 'Entity for grid popup line 2.' },
+          sensor_popup_grid_2_name: { label: 'Net Popup 2 Naam', helper: 'Optioneel custom name for grid popup line 2. Leeg laten to use entity name.' },
+          sensor_popup_grid_2_color: { label: 'Net Popup 2 Kleur', helper: 'Kleur for grid popup line 2 text.' },
+          sensor_popup_grid_2_font_size: { label: 'Net Popup 2 Font Size (px)', helper: 'Font size for grid popup line 2. Standaard 8' },
+          sensor_popup_grid_3: { label: 'Net Popup 3', helper: 'Entity for grid popup line 3.' },
+          sensor_popup_grid_3_name: { label: 'Net Popup 3 Naam', helper: 'Optioneel custom name for grid popup line 3. Leeg laten to use entity name.' },
+          sensor_popup_grid_3_color: { label: 'Net Popup 3 Kleur', helper: 'Kleur for grid popup line 3 text.' },
+          sensor_popup_grid_3_font_size: { label: 'Net Popup 3 Font Size (px)', helper: 'Font size for grid popup line 3. Standaard 8' },
+          sensor_popup_grid_4: { label: 'Net Popup 4', helper: 'Entity for grid popup line 4.' },
+          sensor_popup_grid_4_name: { label: 'Net Popup 4 Naam', helper: 'Optioneel custom name for grid popup line 4. Leeg laten to use entity name.' },
+          sensor_popup_grid_4_color: { label: 'Net Popup 4 Kleur', helper: 'Kleur for grid popup line 4 text.' },
+          sensor_popup_grid_4_font_size: { label: 'Net Popup 4 Font Size (px)', helper: 'Font size for grid popup line 4. Standaard 8' },
+          sensor_popup_grid_5: { label: 'Net Popup 5', helper: 'Entity for grid popup line 5.' },
+          sensor_popup_grid_5_name: { label: 'Net Popup 5 Naam', helper: 'Optioneel custom name for grid popup line 5. Leeg laten to use entity name.' },
+          sensor_popup_grid_5_color: { label: 'Net Popup 5 Kleur', helper: 'Kleur for grid popup line 5 text.' },
+          sensor_popup_grid_5_font_size: { label: 'Net Popup 5 Font Size (px)', helper: 'Font size for grid popup line 5. Standaard 8' },
+          sensor_popup_grid_6: { label: 'Net Popup 6', helper: 'Entity for grid popup line 6.' },
+          sensor_popup_grid_6_name: { label: 'Net Popup 6 Naam', helper: 'Optioneel custom name for grid popup line 6. Leeg laten to use entity name.' },
+          sensor_popup_grid_6_color: { label: 'Net Popup 6 Kleur', helper: 'Kleur for grid popup line 6 text.' },
+          sensor_popup_grid_6_font_size: { label: 'Net Popup 6 Font Size (px)', helper: 'Font size for grid popup line 6. Standaard 8' },
+          sensor_popup_inverter_1: { label: 'Omvormer Popup 1', helper: 'Entity for inverter popup line 1.' },
+          sensor_popup_inverter_1_name: { label: 'Omvormer Popup 1 Naam', helper: 'Optioneel custom name for inverter popup line 1. Leeg laten to use entity name.' },
+          sensor_popup_inverter_1_color: { label: 'Omvormer Popup 1 Kleur', helper: 'Kleur for inverter popup line 1 text.' },
+          sensor_popup_inverter_1_font_size: { label: 'Omvormer Popup 1 Font Size (px)', helper: 'Font size for inverter popup line 1. Standaard 8' },
+          sensor_popup_inverter_2: { label: 'Omvormer Popup 2', helper: 'Entity for inverter popup line 2.' },
+          sensor_popup_inverter_2_name: { label: 'Omvormer Popup 2 Naam', helper: 'Optioneel custom name for inverter popup line 2. Leeg laten to use entity name.' },
+          sensor_popup_inverter_2_color: { label: 'Omvormer Popup 2 Kleur', helper: 'Kleur for inverter popup line 2 text.' },
+          sensor_popup_inverter_2_font_size: { label: 'Omvormer Popup 2 Font Size (px)', helper: 'Font size for inverter popup line 2. Standaard 8' },
+          sensor_popup_inverter_3: { label: 'Omvormer Popup 3', helper: 'Entity for inverter popup line 3.' },
+          sensor_popup_inverter_3_name: { label: 'Omvormer Popup 3 Naam', helper: 'Optioneel custom name for inverter popup line 3. Leeg laten to use entity name.' },
+          sensor_popup_inverter_3_color: { label: 'Omvormer Popup 3 Kleur', helper: 'Kleur for inverter popup line 3 text.' },
+          sensor_popup_inverter_3_font_size: { label: 'Omvormer Popup 3 Font Size (px)', helper: 'Font size for inverter popup line 3. Standaard 8' },
+          sensor_popup_inverter_4: { label: 'Omvormer Popup 4', helper: 'Entity for inverter popup line 4.' },
+          sensor_popup_inverter_4_name: { label: 'Omvormer Popup 4 Naam', helper: 'Optioneel custom name for inverter popup line 4. Leeg laten to use entity name.' },
+          sensor_popup_inverter_4_color: { label: 'Omvormer Popup 4 Kleur', helper: 'Kleur for inverter popup line 4 text.' },
+          sensor_popup_inverter_4_font_size: { label: 'Omvormer Popup 4 Font Size (px)', helper: 'Font size for inverter popup line 4. Standaard 8' },
+          sensor_popup_inverter_5: { label: 'Omvormer Popup 5', helper: 'Entity for inverter popup line 5.' },
+          sensor_popup_inverter_5_name: { label: 'Omvormer Popup 5 Naam', helper: 'Optioneel custom name for inverter popup line 5. Leeg laten to use entity name.' },
+          sensor_popup_inverter_5_color: { label: 'Omvormer Popup 5 Kleur', helper: 'Kleur for inverter popup line 5 text.' },
+          sensor_popup_inverter_5_font_size: { label: 'Omvormer Popup 5 Font Size (px)', helper: 'Font size for inverter popup line 5. Standaard 8' },
+          sensor_popup_inverter_6: { label: 'Omvormer Popup 6', helper: 'Entity for inverter popup line 6.' },
+          sensor_popup_inverter_6_name: { label: 'Omvormer Popup 6 Naam', helper: 'Optioneel custom name for inverter popup line 6. Leeg laten to use entity name.' },
+          sensor_popup_inverter_6_color: { label: 'Omvormer Popup 6 Kleur', helper: 'Kleur for inverter popup line 6 text.' },
+          sensor_popup_inverter_6_font_size: { label: 'Omvormer Popup 6 Font Size (px)', helper: 'Font size for inverter popup line 6. Standaard 8' }
         },
         options: {
           languages: [
-            { value: 'en', label: 'English' },
-            { value: 'it', label: 'Italiano' },
-            { value: 'de', label: 'Deutsch' },
-            { value: 'fr', label: 'FranÃ§ais' },
-            { value: 'nl', label: 'Nederlands' }
+            { value: 'en', label: 'Engels' },
+            { value: 'it', label: 'Italiaans' },
+            { value: 'de', label: 'Duits' },
+            { value: 'fr', label: 'Frans' },
+            { value: 'nl', label: 'Nederlands' },
+            { value: 'es', label: 'Spaans' }
           ],
           display_units: [
             { value: 'W', label: 'Watt (W)' },
             { value: 'kW', label: 'Kilowatt (kW)' }
           ],
           animation_styles: [
-            { value: 'dashes', label: 'Strepen (standaard)' },
-            { value: 'dashes_glow', label: 'Strepen + Gloed' },
+            { value: 'dashes', label: 'Streepjes (standaard)' },
+            { value: 'dashes_glow', label: 'Streepjes + gloed' },
             { value: 'fluid_flow', label: 'Vloeiende stroom' },
-            { value: 'dots', label: 'Stippen' },
+            { value: 'dots', label: 'Punten' },
             { value: 'arrows', label: 'Pijlen' }
           ],
           initial_yes: 'Ja',
@@ -11816,14 +12782,375 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           initial_evs_2: '2'
         },
         view: {
-          daily: 'DAGOPBRENGST',
-          pv_tot: 'PV TOTAAL',
-          car1: 'AUTO 1',
-          car2: 'AUTO 2',
-          importing: 'IMPORTEREN',
-          exporting: 'EXPORTEREN'
+          daily: 'DAGOPBRENGST', pv_tot: 'PV TOTAAL', car1: 'AUTO 1', car2: 'AUTO 2', importing: 'IMPORT', exporting: 'EXPORT'
         }
       },
+      es: {
+        sections: {
+          general: { title: 'General Settings', helper: 'tarjeta metadata, background, language, and update cadence.' },
+          initialConfig: { title: 'Configuración inicial', helper: 'First-time setup checklist and starter options.' },
+          pvCommon: { title: 'Solar/PV Common', helper: 'Common Solar/PV settings shared across arrays.' },
+          array1: { title: 'Solar/PV Array 1', helper: 'Elige the PV, battery, grid, load, and VE entities used by the card. Either the PV total sensor or your PV string arrays need to be specified as a minimum.' },
+          array2: { title: 'Solar/PV Array 2', helper: 'If sensor PV total (Inversor 2) is set or the PV String values are provided, Array 2 will become active and enable the second inverter. You must also enable Diario producción sensor (Array 2) and Home Load (Inversor 2).' },
+          windmill: { title: 'Aerogenerador', helper: 'Configura windmill generator sensors and display styling.' },
+          battery: { title: 'Batería', helper: 'Configura battery entities.' },
+          grid: { title: 'Red', helper: 'Configura grid entities.' },
+          car: { title: 'Coche', helper: 'Configura VE entities.' },
+          other: { title: 'Casa', helper: 'Additional sensors and advanced toggles.' },
+          pvPopup: { title: 'PV Popup', helper: 'Configura entities for the PV popup display.' },
+          housePopup: { title: 'Casa Popup', helper: 'Configura entities for the house popup display.' },
+          batteryPopup: { title: 'Batería Popup', helper: 'Configura battery popup display.' },
+          gridPopup: { title: 'Red Popup', helper: 'Configura entities for the grid popup display.' },
+          inverterPopup: { title: 'Inversor Popup', helper: 'Configura entities for the inverter popup display.' },
+          colors: { title: 'Color & Thresholds', helper: 'Configura grid thresholds and accent colours for flows and VE display.' },
+          typography: { title: 'Typography', helper: 'Fine tune the font sizes used across the card.' },
+          about: { title: 'About', helper: 'Credits, version, and helpful links.' }
+        },
+        fields: {
+          card_title: { label: 'Título de la tarjeta', helper: 'Título displayed at the top of the card. Deja en blanco to disable.' },
+          title_text_color: { label: 'Título Color del texto', helper: 'Overrides the fill color for [data-role="title-text"]. Deja en blanco to keep the SVG styling.' },
+          title_bg_color: { label: 'Título Color de fondo', helper: 'Overrides the fill color for [data-role="title-bg"]. Deja en blanco to keep the SVG styling.' },
+          font_family: { label: 'Familia tipográfica', helper: 'CSS font-family used for all SVG text (e.g., sans-serif, Roboto, "Segoe UI").' },
+          odometer_font_family: { label: 'Odómetro Familia tipográfica (Monospace)', helper: 'Font family used only for odometer-animated values. Deja en blanco to reuse Familia tipográfica. Tip: pick a monospace variant (e.g., "Roboto Mono" or "Space Mono").' },
+          background_day: { label: 'Fondo (día)', helper: 'Path to the day background SVG (e.g., /local/community/advanced-energy-card/advanced_background_day.svg).' },
+          background_night: { label: 'Fondo (noche)', helper: 'Path to the night background SVG (e.g., /local/community/advanced-energy-card/advanced_background_night.svg).' },
+          night_mode: { label: 'Modo día/noche', helper: 'Selecciona Day, Night, or Auto. Auto uses sun.sun: above_horizon = Day, below_horizon = Night.' },
+          language: { label: 'Idioma', helper: 'Elige the editor language.' },
+          display_unit: { label: 'Unidad de visualización', helper: 'Unit used when formatting power values.' },
+          update_interval: { label: 'Intervalo de actualización', helper: 'Refresh cadence for card updates (0 disables throttling).' },
+          initial_configuration: { label: 'Configuración inicial', helper: 'Show the Configuración inicial section in the editor.' },
+          initial_has_pv: { label: 'Do you have Solar/PV potencia?', helper: 'Selecciona Yes if you have solar production to configure.' },
+          initial_inverters: { label: 'How many inverters do you have?', helper: 'Shown only when Solar/PV is enabled.' },
+          initial_has_battery: { label: 'Do you have Batería storage?', helper: '' },
+          initial_battery_count: { label: 'How many Batteries do you have? Maximum 4', helper: '' },
+          initial_has_grid: { label: 'Do you have Red supplied electricity?', helper: '' },
+          initial_can_export: { label: 'Can you export excess electricity to the grid?', helper: '' },
+          initial_has_windmill: { label: 'Do you have a Aerogenerador?', helper: '' },
+          initial_has_ev: { label: 'Do you have Electric Vehicles/VE\'s?', helper: '' },
+          initial_ev_count: { label: 'How many do you have?', helper: '' },
+          initial_config_items_title: { label: 'Requerido configuration items', helper: '' },
+          initial_config_items_helper: { label: 'These items become relevant based on your answers above.', helper: '' },
+          initial_config_items_empty: { label: 'No items to show yet.', helper: '' },
+          initial_config_complete_helper: { label: 'This completes the last required minimum configuration. Once clicking on the Complete button, please review all menus to check for additional items and popup configurations. This initial configuration can be re-enabled in the General menu.', helper: '' },
+          initial_config_complete_button: { label: 'Complete', helper: '' },
+          array_helper_text: { label: 'Each Array must have at minimum a combined Solar/PV total sensor which is the total power output of that Array or individual string values which are added together to get the total power output of the array. Diario production can be supplied and can be shown in a Diario production card.', helper: '' },
+          animation_speed_factor: { label: 'Factor de velocidad de animación', helper: 'Adjust animation speed multiplier (-3x to 3x). Set 0 to pause; negatives reverse direction.' },
+          animation_style: { label: 'Estilo de animación (día)', helper: 'Flow animation style used when the card is in Day mode.' },
+          night_animation_style: { label: 'Estilo de animación (noche)', helper: 'Flow animation style used when the card is in Night mode. Deja en blanco to use the Day style.' },
+          dashes_glow_intensity: { label: 'Intensidad del brillo (guiones)', helper: 'Controls glow strength for "Dashes + Glow" (0 disables glow).' },
+          fluid_flow_outer_glow: { label: 'Brillo exterior (flujo fluido)', helper: 'Habilitar the extra outer haze/glow layer for animation_style: fluid_flow.' },
+          flow_stroke_width: { label: 'Flow Stroke Width (px)', helper: 'Opcional override for the animated flow stroke width (no SVG edits). Deja en blanco to keep SVG defaults.' },
+          fluid_flow_stroke_width: { label: 'Fluid Flow Stroke Width (px)', helper: 'Base stroke width for animation_style: fluid_flow. Overlay/mask widths are derived from this (default 5).' },
+          sensor_pv_total: { label: 'sensor PV total', helper: 'Opcional aggregate production sensor displayed as the combined line.' },
+          sensor_pv_total_secondary: { label: 'sensor PV total (Inversor 2)', helper: 'Opcional second inverter total; added to the PV total when provided.' },
+          sensor_windmill_total: { label: 'Aerogenerador Total', helper: 'potencia sensor for the windmill generator (W). When not configured the windmill SVG group is hidden.' },
+          sensor_windmill_daily: { label: 'Diario Aerogenerador producción', helper: 'Opcional sensor reporting daily windmill production totals.' },
+          sensor_pv1: { label: 'PV String 1 (Array 1)', helper: 'Array 1 solar production sensor for string 1.' },
+          sensor_pv2: { label: 'PV String 2 (Array 1)', helper: 'Array 1 solar production sensor for string 2.' },
+          sensor_pv3: { label: 'PV String 3 (Array 1)', helper: 'Array 1 solar production sensor for string 3.' },
+          sensor_pv4: { label: 'PV String 4 (Array 1)', helper: 'Array 1 solar production sensor for string 4.' },
+          sensor_pv5: { label: 'PV String 5 (Array 1)', helper: 'Array 1 solar production sensor for string 5.' },
+          sensor_pv6: { label: 'PV String 6 (Array 1)', helper: 'Array 1 solar production sensor for string 6.' },
+          sensor_pv_array2_1: { label: 'PV String 1 (Array 2)', helper: 'Array 2 solar production sensor for string 1.' },
+          sensor_pv_array2_2: { label: 'PV String 2 (Array 2)', helper: 'Array 2 solar production sensor for string 2.' },
+          sensor_pv_array2_3: { label: 'PV String 3 (Array 2)', helper: 'Array 2 solar production sensor for string 3.' },
+          sensor_pv_array2_4: { label: 'PV String 4 (Array 2)', helper: 'Array 2 solar production sensor for string 4.' },
+          sensor_pv_array2_5: { label: 'PV String 5 (Array 2)', helper: 'Array 2 solar production sensor for string 5.' },
+          sensor_pv_array2_6: { label: 'PV String 6 (Array 2)', helper: 'Array 2 solar production sensor for string 6.' },
+          sensor_daily: { label: 'Diario producción sensor', helper: 'sensor reporting daily production totals. Either the PV total sensor or your PV string arrays need to be specified as a minimum.' },
+          sensor_daily_array2: { label: 'Diario producción sensor (Array 2)', helper: 'sensor reporting daily production totals for Array 2.' },
+          sensor_bat1_soc: { label: 'Batería 1 SOC', helper: 'Estado de carga sensor for Batería 1 (percentage).' },
+          sensor_bat1_power: { label: 'Batería 1 potencia', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batería 1 becomes active.' },
+          sensor_bat1_charge_power: { label: 'Batería 1 carga potencia', helper: 'sensor for Batería 1 charging power.' },
+          sensor_bat1_discharge_power: { label: 'Batería 1 descarga potencia', helper: 'sensor for Batería 1 discharging power.' },
+          sensor_bat2_soc: { label: 'Batería 2 SOC', helper: 'Estado de carga sensor for Batería 2 (percentage).' },
+          sensor_bat2_power: { label: 'Batería 2 potencia', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batería 2 becomes active.' },
+          sensor_bat2_charge_power: { label: 'Batería 2 carga potencia', helper: 'sensor for Batería 2 charging power.' },
+          sensor_bat2_discharge_power: { label: 'Batería 2 descarga potencia', helper: 'sensor for Batería 2 discharging power.' },
+          sensor_bat3_soc: { label: 'Batería 3 SOC', helper: 'Estado de carga sensor for Batería 3 (percentage).' },
+          sensor_bat3_power: { label: 'Batería 3 potencia', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batería 3 becomes active.' },
+          sensor_bat3_charge_power: { label: 'Batería 3 carga potencia', helper: 'sensor for Batería 3 charging power.' },
+          sensor_bat3_discharge_power: { label: 'Batería 3 descarga potencia' },
+          sensor_bat4_soc: { label: 'Batería 4 SOC', helper: 'Estado de carga sensor for Batería 4 (percentage).' },
+          sensor_bat4_power: { label: 'Batería 4 potencia', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batería 4 becomes active.' },
+          sensor_bat4_charge_power: { label: 'Batería 4 carga potencia', helper: 'sensor for Batería 4 charging power.' },
+          sensor_bat4_discharge_power: { label: 'Batería 4 descarga potencia', helper: 'sensor for Batería 4 discharging power.' },
+          sensor_home_load: { label: 'Home Load/Consumption (Requerido)', helper: 'Total household consumption sensor.' },
+          sensor_home_load_secondary: { label: 'Home Load (Inversor 2)', helper: 'Opcional house load sensor for the second inverter.' },
+          sensor_heat_pump_consumption: { label: 'Heat Pump Consumption', helper: 'sensor for heat pump energy consumption.' },
+          sensor_hot_water_consumption: { label: 'Water Heating', helper: 'sensor for Hot Water Heating Load.' },
+          sensor_pool_consumption: { label: 'Pool', helper: 'sensor for pool power/consumption.' },
+          sensor_washing_machine_consumption: { label: 'Washing Machine', helper: 'sensor for washing machine power/consumption.' },
+          sensor_dishwasher_consumption: { label: 'Dish Washer', helper: 'sensor for Dish Washer Load.' },
+          sensor_dryer_consumption: { label: 'Dryer', helper: 'sensor for dryer power/consumption.' },
+          sensor_refrigerator_consumption: { label: 'Refrigerator', helper: 'sensor for refrigerator power/consumption.' },
+          hot_water_text_color: { label: 'Water Heating Color del texto', helper: 'Color applied to the hot water power text.' },
+          dishwasher_text_color: { label: 'Dish Washer Color del texto', helper: 'Color applied to the dish washer power text.' },
+          hot_water_font_size: { label: 'Water Heating Font Size (px)', helper: 'Predeterminado 8' },
+          dishwasher_font_size: { label: 'Dish Washer Font Size (px)', helper: 'Predeterminado 8' },
+          sensor_grid_power: { label: 'Red Inversor 1 potencia', helper: 'Positive/negative grid flow sensor for inverter 1. Specify either this sensor or both Red Inversor 1 Import sensor and Red Inversor 1 Export sensor.' },
+          sensor_grid_import: { label: 'Red Inversor 1 Import sensor', helper: 'Opcional entity reporting inverter 1 grid import (positive) power.' },
+          sensor_grid_export: { label: 'Red Inversor 1 Export sensor', helper: 'Opcional entity reporting inverter 1 grid export (positive) power.' },
+          sensor_grid_import_daily: { label: 'Diario Red Inversor 1 Import sensor', helper: 'Opcional entity reporting cumulative inverter 1 grid import for the current day.' },
+          sensor_grid_export_daily: { label: 'Diario Red Inversor 1 Export sensor', helper: 'Opcional entity reporting cumulative inverter 1 grid export for the current day.' },
+          sensor_grid2_power: { label: 'Red Inversor 2 potencia', helper: 'Positive/negative grid flow sensor for inverter 2. Specify either this sensor or both Red Inversor 2 Import sensor and Red Inversor 2 Export sensor.' },
+          sensor_grid2_import: { label: 'Red Inversor 2 Import sensor', helper: 'Opcional entity reporting inverter 2 grid import (positive) power.' },
+          sensor_grid2_export: { label: 'Red Inversor 2 Export sensor', helper: 'Opcional entity reporting inverter 2 grid export (positive) power.' },
+          sensor_grid2_import_daily: { label: 'Diario Red Inversor 2 Import sensor', helper: 'Opcional entity reporting cumulative inverter 2 grid import for the current day.' },
+          sensor_grid2_export_daily: { label: 'Diario Red Inversor 2 Export sensor', helper: 'Opcional entity reporting cumulative inverter 2 grid export for the current day.' },
+          show_daily_grid: { label: 'Show Diario Red Values', helper: 'Show the daily import/export totals under the current grid flow when enabled.' },
+          grid_daily_font_size: { label: 'Diario Red Font Size (px)', helper: 'Opcional override for daily grid import/export text. Predeterminados to Red Font Size.' },
+          grid_current_odometer: { label: 'Odómetro: Red Current', helper: 'Animate Red Current with a per-digit rolling effect.' },
+          grid_current_odometer_duration: { label: 'Odómetro Duración (ms)', helper: 'Animation duration in milliseconds. Predeterminado 350.' },
+          show_grid_flow_label: { label: 'Show Red Import/Export Nombre', helper: 'Prepend the importing/exporting label before the grid value when enabled.' },
+          enable_echo_alive: { label: 'Habilitar Echo Alive', helper: 'Habilitars an invisible iframe to keep the Silk browser open on Echo Show. The button will be positioned in a corner of the card.' },
+          pv_tot_color: { label: 'PV Total Color', helper: 'Colour applied to the PV TOTAL text line.' },
+          pv_primary_color: { label: 'PV 1 Flow Color', helper: 'Colour used for the primary PV animation line.' },
+          pv_secondary_color: { label: 'PV 2 Flow Color', helper: 'Colour used for the secondary PV animation line when available.' },
+          load_flow_color: { label: 'Load Flow Color', helper: 'Colour applied to the home load animation line.' },
+          load_text_color: { label: 'Load Color del texto', helper: 'Colour applied to the home load text when thresholds are inactive.' },
+          house_total_color: { label: 'Casa Total Color', helper: 'Colour applied to the HOUSE TOT text/flow.' },
+          inv1_color: { label: 'Inversor 1 to Casa Color', helper: 'Color applied to the flow from Inversor 1 to the house.' },
+          inv2_color: { label: 'Inversor 2 to Casa Color', helper: 'Color applied to the flow from Inversor 2 to the house.' },
+          load_threshold_warning: { label: 'Load Warning Umbral', helper: 'Change load color when magnitude equals or exceeds this value. Uses the selected display unit.' },
+          load_warning_color: { label: 'Load Warning Color', helper: 'Hex or CSS color applied at the load warning threshold.' },
+          load_threshold_critical: { label: 'Load Critical Umbral', helper: 'Change load color when magnitude equals or exceeds this value. Uses the selected display unit.' },
+          load_critical_color: { label: 'Load Critical Color', helper: 'Hex or CSS color applied at the load critical threshold.' },
+          battery_soc_color: { label: 'Batería SOC Color', helper: 'Hex color applied to the battery SOC percentage text.' },
+          battery_charge_color: { label: 'Batería carga Flow Color', helper: 'Colour used when energy is flowing into the battery.' },
+          battery_discharge_color: { label: 'Batería descarga Flow Color', helper: 'Colour used when energy is flowing from the battery.' },
+          grid_import_color: { label: 'Inversor 1 Red Import Flow Color', helper: 'Base colour before thresholds when inverter 1 is importing from the grid.' },
+          grid_export_color: { label: 'Inversor 1 Red Export Flow Color', helper: 'Base colour before thresholds when inverter 1 is exporting to the grid.' },
+          grid2_import_color: { label: 'Inversor 2 Red Import Flow Color', helper: 'Base colour before thresholds when inverter 2 is importing from the grid.' },
+          grid2_export_color: { label: 'Inversor 2 Red Export Flow Color', helper: 'Base colour before thresholds when inverter 2 is exporting to the grid.' },
+          car_flow_color: { label: 'VE Flow Color', helper: 'Colour applied to the electric vehicle animation line.' },
+          battery_fill_high_color: { label: 'Batería Fill (Normal) Color', helper: 'Liquid fill colour when the battery SOC is above the low threshold.' },
+          battery_fill_low_color: { label: 'Batería Fill (Low) Color', helper: 'Liquid fill colour when the battery SOC is at or below the low threshold.' },
+          battery_fill_low_threshold: { label: 'Batería Low Fill Umbral (%)', helper: 'Use the low fill colour when SOC is at or below this percentage.' },
+          battery_fill_opacity: { label: 'Batería Fill Opacity', helper: 'Opacity for the battery fill level (0-1).' },
+          grid_activity_threshold: { label: 'Red Animation Umbral (W)', helper: 'Ignore grid flows whose absolute value is below this wattage before animating.' },
+          grid_power_only: { label: 'Red potencia Only', helper: 'Hide inverter/battery flows and show a direct grid-to-house flow.' },
+          grid_threshold_warning: { label: 'Inversor 1 Red Warning Umbral', helper: 'Change inverter 1 grid color when magnitude equals or exceeds this value. Uses the selected display unit.' },
+          grid_warning_color: { label: 'Inversor 1 Red Warning Color', helper: 'Hex or CSS color applied at the inverter 1 warning threshold.' },
+          grid_threshold_critical: { label: 'Inversor 1 Red Critical Umbral', helper: 'Change inverter 1 grid color when magnitude equals or exceeds this value. Uses the selected display unit.' },
+          grid_critical_color: { label: 'Inversor 1 Red Critical Color', helper: 'Hex or CSS color applied at the inverter 1 critical threshold.' },
+          grid2_threshold_warning: { label: 'Inversor 2 Red Warning Umbral', helper: 'Change inverter 2 grid color when magnitude equals or exceeds this value. Uses the selected display unit.' },
+          grid2_warning_color: { label: 'Inversor 2 Red Warning Color', helper: 'Hex or CSS color applied at the inverter 2 warning threshold.' },
+          grid2_threshold_critical: { label: 'Inversor 2 Red Critical Umbral', helper: 'Change inverter 2 grid color when magnitude equals or exceeds this value. Uses the selected display unit.' },
+          grid2_critical_color: { label: 'Inversor 2 Red Critical Color', helper: 'Hex or CSS color applied at the inverter 2 critical threshold.' },
+          invert_grid: { label: 'Invert Red Values', helper: 'Habilitar if import/export polarity is reversed.' },
+          invert_battery: { label: 'Invert Batería Values', helper: 'Habilitar if charge/discharge polarity is reversed.' },
+          invert_bat1: { label: 'Invert Batería 1 Values', helper: 'Habilitar if Batería 1 charge/discharge polarity is reversed.' },
+          invert_bat2: { label: 'Invert Batería 2 Values', helper: 'Habilitar if Batería 2 charge/discharge polarity is reversed.' },
+          invert_bat3: { label: 'Invert Batería 3 Values', helper: 'Habilitar if Batería 3 charge/discharge polarity is reversed.' },
+          sensor_car_power: { label: 'Coche 1 potencia sensor', helper: 'sensor for VE charge/discharge power.' },
+          sensor_car_soc: { label: 'Coche 1 SOC sensor', helper: 'Estado de carga sensor for VE 1 (percentage).' },
+          car_soc: { label: 'Coche SOC', helper: 'sensor for VE battery SOC (percentage).' },
+          car_charger_power: { label: 'Coche Charger potencia', helper: 'sensor for VE charger power.' },
+          car1_label: { label: 'Coche 1 Etiqueta', helper: 'Text displayed next to the first VE values.' },
+          sensor_car2_power: { label: 'Coche 2 potencia sensor', helper: 'sensor for VE 2 charge/discharge power.' },
+          car2_power: { label: 'Coche 2 potencia', helper: 'sensor for VE 2 charge/discharge power.' },
+          sensor_car2_soc: { label: 'Coche 2 SOC sensor', helper: 'Estado de carga sensor for VE 2 (percentage).' },
+          car2_soc: { label: 'Coche 2 SOC', helper: 'sensor for VE 2 battery SOC (percentage).' },
+          car2_charger_power: { label: 'Coche 2 Charger potencia', helper: 'sensor for VE 2 charger power.' },
+          car2_label: { label: 'Coche 2 Etiqueta', helper: 'Text displayed next to the second VE values.' },
+          car_headlight_flash: { label: 'Headlight Flash While Charging', helper: 'Habilitar to flash the VE headlights whenever charging is detected.' },
+          car1_glow_brightness: { label: 'Coche Glow Effect', helper: 'Percentage the car flow effects show while not charging.' },
+          car2_glow_brightness: { label: 'Coche Glow Effect', helper: 'Percentage the car flow effects show while not charging.' },
+          car_pct_color: { label: 'Coche SOC Color', helper: 'Hex color for VE SOC text (e.g., #00FFFF).' },
+          car2_pct_color: { label: 'Coche 2 SOC Color', helper: 'Hex color for second VE SOC text (falls back to Coche SOC Color).' },
+          car1_name_color: { label: 'Coche 1 Nombre Color', helper: 'Color applied to the Coche 1 name label.' },
+          car2_name_color: { label: 'Coche 2 Nombre Color', helper: 'Color applied to the Coche 2 name label.' },
+          car1_color: { label: 'Coche 1 Color', helper: 'Color applied to Coche 1 power value.' },
+          car2_color: { label: 'Coche 2 Color', helper: 'Color applied to Coche 2 power value.' },
+          heat_pump_label: { label: 'Heat Pump Etiqueta', helper: 'Custom label for the heat pump/AC line (defaults to "Heat Pump/AC").' },
+          heat_pump_flow_color: { label: 'Heat Pump Flow Color', helper: 'Color applied to the heat pump flow animation.' },
+          heat_pump_text_color: { label: 'Heat Pump Color del texto', helper: 'Color applied to the heat pump power text.' },
+          pool_flow_color: { label: 'Pool Flow Color', helper: 'Color applied to the pool flow animation.' },
+          pool_text_color: { label: 'Pool Color del texto', helper: 'Color applied to the pool power text.' },
+          washing_machine_text_color: { label: 'Washing Machine Color del texto', helper: 'Color applied to the washing machine power text.' },
+          dryer_text_color: { label: 'Dryer Color del texto', helper: 'Color applied to the dryer power text.' },
+          refrigerator_text_color: { label: 'Refrigerator Color del texto', helper: 'Color applied to the refrigerator power text.' },
+          windmill_flow_color: { label: 'Aerogenerador Flow Color', helper: 'Color applied to the windmill flow (data-flow-key="windmill-inverter1" / "windmill-inverter2").' },
+          windmill_text_color: { label: 'Aerogenerador Color del texto', helper: 'Color applied to the windmill power text (data-role="windmill-power").' },
+          header_font_size: { label: 'Header Font Size (px)', helper: 'Predeterminado 8' },
+          daily_label_font_size: { label: 'Diario Etiqueta Font Size (px)', helper: 'Predeterminado 8' },
+          daily_value_font_size: { label: 'Diario Value Font Size (px)', helper: 'Predeterminado 20' },
+          pv_font_size: { label: 'PV Text Font Size (px)', helper: 'Predeterminado 8' },
+          windmill_power_font_size: { label: 'Aerogenerador potencia Font Size (px)', helper: 'Predeterminado 8' },
+          battery_soc_font_size: { label: 'Batería SOC Font Size (px)', helper: 'Predeterminado 20' },
+          battery_power_font_size: { label: 'Batería potencia Font Size (px)', helper: 'Predeterminado 8' },
+          load_font_size: { label: 'Load Font Size (px)', helper: 'Predeterminado 8' },
+          inv1_power_font_size: { label: 'INV 1 potencia Font Size (px)', helper: 'Font size for the INV 1 power line. Predeterminado uses Load Font Size.' },
+          inv2_power_font_size: { label: 'INV 2 potencia Font Size (px)', helper: 'Font size for the INV 2 power line. Predeterminado uses Load Font Size.' },
+          heat_pump_font_size: { label: 'Heat Pump Font Size (px)', helper: 'Predeterminado 8' },
+          pool_font_size: { label: 'Pool Font Size (px)', helper: 'Predeterminado 8' },
+          washing_machine_font_size: { label: 'Washing Machine Font Size (px)', helper: 'Predeterminado 8' },
+          dryer_font_size: { label: 'Dryer Font Size (px)', helper: 'Predeterminado 8' },
+          refrigerator_font_size: { label: 'Refrigerator Font Size (px)', helper: 'Predeterminado 8' },
+          grid_font_size: { label: 'Red Font Size (px)', helper: 'Predeterminado 8' },
+          car_power_font_size: { label: 'Coche potencia Font Size (px)', helper: 'Predeterminado 8' },
+          car2_power_font_size: { label: 'Coche 2 potencia Font Size (px)', helper: 'Predeterminado 8' },
+          car_name_font_size: { label: 'Coche Nombre Font Size (px)', helper: 'Predeterminado 8' },
+          car2_name_font_size: { label: 'Coche 2 Nombre Font Size (px)', helper: 'Predeterminado 8' },
+          car_soc_font_size: { label: 'Coche SOC Font Size (px)', helper: 'Predeterminado 8' },
+          car2_soc_font_size: { label: 'Coche 2 SOC Font Size (px)', helper: 'Predeterminado 8' },
+          sensor_popup_pv_1: { label: 'PV Popup 1', helper: 'Entity for PV popup line 1.' },
+          sensor_popup_pv_2: { label: 'PV Popup 2', helper: 'Entity for PV popup line 2.' },
+          sensor_popup_pv_3: { label: 'PV Popup 3', helper: 'Entity for PV popup line 3.' },
+          sensor_popup_pv_4: { label: 'PV Popup 4', helper: 'Entity for PV popup line 4.' },
+          sensor_popup_pv_5: { label: 'PV Popup 5', helper: 'Entity for PV popup line 5.' },
+          sensor_popup_pv_6: { label: 'PV Popup 6', helper: 'Entity for PV popup line 6.' },
+          sensor_popup_pv_1_name: { label: 'PV Popup 1 Nombre', helper: 'Opcional custom name for PV popup line 1. Deja en blanco to use entity name.' },
+          sensor_popup_pv_2_name: { label: 'PV Popup 2 Nombre', helper: 'Opcional custom name for PV popup line 2. Deja en blanco to use entity name.' },
+          sensor_popup_pv_3_name: { label: 'PV Popup 3 Nombre', helper: 'Opcional custom name for PV popup line 3. Deja en blanco to use entity name.' },
+          sensor_popup_pv_4_name: { label: 'PV Popup 4 Nombre', helper: 'Opcional custom name for PV popup line 4. Deja en blanco to use entity name.' },
+          sensor_popup_pv_5_name: { label: 'PV Popup 5 Nombre', helper: 'Opcional custom name for PV popup line 5. Deja en blanco to use entity name.' },
+          sensor_popup_pv_6_name: { label: 'PV Popup 6 Nombre', helper: 'Opcional custom name for PV popup line 6. Deja en blanco to use entity name.' },
+          sensor_popup_pv_1_color: { label: 'PV Popup 1 Color', helper: 'Color for PV popup line 1 text.' },
+          sensor_popup_pv_2_color: { label: 'PV Popup 2 Color', helper: 'Color for PV popup line 2 text.' },
+          sensor_popup_pv_3_color: { label: 'PV Popup 3 Color', helper: 'Color for PV popup line 3 text.' },
+          sensor_popup_pv_4_color: { label: 'PV Popup 4 Color', helper: 'Color for PV popup line 4 text.' },
+          sensor_popup_pv_5_color: { label: 'PV Popup 5 Color', helper: 'Color for PV popup line 5 text.' },
+          sensor_popup_pv_6_color: { label: 'PV Popup 6 Color', helper: 'Color for PV popup line 6 text.' },
+          sensor_popup_pv_1_font_size: { label: 'PV Popup 1 Font Size (px)', helper: 'Font size for PV popup line 1. Predeterminado 8' },
+          sensor_popup_pv_2_font_size: { label: 'PV Popup 2 Font Size (px)', helper: 'Font size for PV popup line 2. Predeterminado 8' },
+          sensor_popup_pv_3_font_size: { label: 'PV Popup 3 Font Size (px)', helper: 'Font size for PV popup line 3. Predeterminado 8' },
+          sensor_popup_pv_4_font_size: { label: 'PV Popup 4 Font Size (px)', helper: 'Font size for PV popup line 4. Predeterminado 8' },
+          sensor_popup_pv_5_font_size: { label: 'PV Popup 5 Font Size (px)', helper: 'Font size for PV popup line 5. Predeterminado 8' },
+          sensor_popup_pv_6_font_size: { label: 'PV Popup 6 Font Size (px)', helper: 'Font size for PV popup line 6. Predeterminado 8' },
+          sensor_popup_house_1: { label: 'Casa Popup 1', helper: 'Entity for house popup line 1.' },
+          sensor_popup_house_1_name: { label: 'Casa Popup 1 Nombre', helper: 'Opcional custom name for house popup line 1. Deja en blanco to use entity name.' },
+          sensor_popup_house_1_color: { label: 'Casa Popup 1 Color', helper: 'Color for house popup line 1 text.' },
+          sensor_popup_house_1_font_size: { label: 'Casa Popup 1 Font Size (px)', helper: 'Font size for house popup line 1. Predeterminado 8' },
+          sensor_popup_house_2: { label: 'Casa Popup 2', helper: 'Entity for house popup line 2.' },
+          sensor_popup_house_2_name: { label: 'Casa Popup 2 Nombre', helper: 'Opcional custom name for house popup line 2. Deja en blanco to use entity name.' },
+          sensor_popup_house_2_color: { label: 'Casa Popup 2 Color', helper: 'Color for house popup line 2 text.' },
+          sensor_popup_house_2_font_size: { label: 'Casa Popup 2 Font Size (px)', helper: 'Font size for house popup line 2. Predeterminado 8' },
+          sensor_popup_house_3: { label: 'Casa Popup 3', helper: 'Entity for house popup line 3.' },
+          sensor_popup_house_3_name: { label: 'Casa Popup 3 Nombre', helper: 'Opcional custom name for house popup line 3. Deja en blanco to use entity name.' },
+          sensor_popup_house_3_color: { label: 'Casa Popup 3 Color', helper: 'Color for house popup line 3 text.' },
+          sensor_popup_house_3_font_size: { label: 'Casa Popup 3 Font Size (px)', helper: 'Font size for house popup line 3. Predeterminado 8' },
+          sensor_popup_house_4: { label: 'Casa Popup 4', helper: 'Entity for house popup line 4.' },
+          sensor_popup_house_4_name: { label: 'Casa Popup 4 Nombre', helper: 'Opcional custom name for house popup line 4. Deja en blanco to use entity name.' },
+          sensor_popup_house_4_color: { label: 'Casa Popup 4 Color', helper: 'Color for house popup line 4 text.' },
+          sensor_popup_house_4_font_size: { label: 'Casa Popup 4 Font Size (px)', helper: 'Font size for house popup line 4. Predeterminado 8' },
+          sensor_popup_house_5: { label: 'Casa Popup 5', helper: 'Entity for house popup line 5.' },
+          sensor_popup_house_5_name: { label: 'Casa Popup 5 Nombre', helper: 'Opcional custom name for house popup line 5. Deja en blanco to use entity name.' },
+          sensor_popup_house_5_color: { label: 'Casa Popup 5 Color', helper: 'Color for house popup line 5 text.' },
+          sensor_popup_house_5_font_size: { label: 'Casa Popup 5 Font Size (px)', helper: 'Font size for house popup line 5. Predeterminado 8' },
+          sensor_popup_house_6: { label: 'Casa Popup 6', helper: 'Entity for house popup line 6.' },
+          sensor_popup_house_6_name: { label: 'Casa Popup 6 Nombre', helper: 'Opcional custom name for house popup line 6. Deja en blanco to use entity name.' },
+          sensor_popup_house_6_color: { label: 'Casa Popup 6 Color', helper: 'Color for house popup line 6 text.' },
+          sensor_popup_house_6_font_size: { label: 'Casa Popup 6 Font Size (px)', helper: 'Font size for house popup line 6. Predeterminado 8' },
+          sensor_popup_bat_1: { label: 'Batería Popup 1', helper: 'Entity for battery popup line 1.' },
+          sensor_popup_bat_1_name: { label: 'Batería Popup 1 Nombre', helper: 'Opcional custom name for battery popup line 1. Deja en blanco to use entity name.' },
+          sensor_popup_bat_1_color: { label: 'Batería Popup 1 Color', helper: 'Color for battery popup line 1 text.' },
+          sensor_popup_bat_1_font_size: { label: 'Batería Popup 1 Font Size (px)', helper: 'Font size for battery popup line 1. Predeterminado 8' },
+          sensor_popup_bat_2: { label: 'Batería Popup 2', helper: 'Entity for battery popup line 2.' },
+          sensor_popup_bat_2_name: { label: 'Batería Popup 2 Nombre', helper: 'Opcional custom name for battery popup line 2. Deja en blanco to use entity name.' },
+          sensor_popup_bat_2_color: { label: 'Batería Popup 2 Color', helper: 'Color for battery popup line 2 text.' },
+          sensor_popup_bat_2_font_size: { label: 'Batería Popup 2 Font Size (px)', helper: 'Font size for battery popup line 2. Predeterminado 8' },
+          sensor_popup_bat_3: { label: 'Batería Popup 3', helper: 'Entity for battery popup line 3.' },
+          sensor_popup_bat_3_name: { label: 'Batería Popup 3 Nombre', helper: 'Opcional custom name for battery popup line 3. Deja en blanco to use entity name.' },
+          sensor_popup_bat_3_color: { label: 'Batería Popup 3 Color', helper: 'Color for battery popup line 3 text.' },
+          sensor_popup_bat_3_font_size: { label: 'Batería Popup 3 Font Size (px)', helper: 'Font size for battery popup line 3. Predeterminado 8' },
+          sensor_popup_bat_4: { label: 'Batería Popup 4', helper: 'Entity for battery popup line 4.' },
+          sensor_popup_bat_4_name: { label: 'Batería Popup 4 Nombre', helper: 'Opcional custom name for battery popup line 4. Deja en blanco to use entity name.' },
+          sensor_popup_bat_4_color: { label: 'Batería Popup 4 Color', helper: 'Color for battery popup line 4 text.' },
+          sensor_popup_bat_4_font_size: { label: 'Batería Popup 4 Font Size (px)', helper: 'Font size for battery popup line 4. Predeterminado 8' },
+          sensor_popup_bat_5: { label: 'Batería Popup 5', helper: 'Entity for battery popup line 5.' },
+          sensor_popup_bat_5_name: { label: 'Batería Popup 5 Nombre', helper: 'Opcional custom name for battery popup line 5. Deja en blanco to use entity name.' },
+          sensor_popup_bat_5_color: { label: 'Batería Popup 5 Color', helper: 'Color for battery popup line 5 text.' },
+          sensor_popup_bat_5_font_size: { label: 'Batería Popup 5 Font Size (px)', helper: 'Font size for battery popup line 5. Predeterminado 8' },
+          sensor_popup_bat_6: { label: 'Batería Popup 6', helper: 'Entity for battery popup line 6.' },
+          sensor_popup_bat_6_name: { label: 'Batería Popup 6 Nombre', helper: 'Opcional custom name for battery popup line 6. Deja en blanco to use entity name.' },
+          sensor_popup_bat_6_color: { label: 'Batería Popup 6 Color', helper: 'Color for battery popup line 6 text.' },
+          sensor_popup_bat_6_font_size: { label: 'Batería Popup 6 Font Size (px)', helper: 'Font size for battery popup line 6. Predeterminado 8' },
+          sensor_popup_grid_1: { label: 'Red Popup 1', helper: 'Entity for grid popup line 1.' },
+          sensor_popup_grid_1_name: { label: 'Red Popup 1 Nombre', helper: 'Opcional custom name for grid popup line 1. Deja en blanco to use entity name.' },
+          sensor_popup_grid_1_color: { label: 'Red Popup 1 Color', helper: 'Color for grid popup line 1 text.' },
+          sensor_popup_grid_1_font_size: { label: 'Red Popup 1 Font Size (px)', helper: 'Font size for grid popup line 1. Predeterminado 8' },
+          sensor_popup_grid_2: { label: 'Red Popup 2', helper: 'Entity for grid popup line 2.' },
+          sensor_popup_grid_2_name: { label: 'Red Popup 2 Nombre', helper: 'Opcional custom name for grid popup line 2. Deja en blanco to use entity name.' },
+          sensor_popup_grid_2_color: { label: 'Red Popup 2 Color', helper: 'Color for grid popup line 2 text.' },
+          sensor_popup_grid_2_font_size: { label: 'Red Popup 2 Font Size (px)', helper: 'Font size for grid popup line 2. Predeterminado 8' },
+          sensor_popup_grid_3: { label: 'Red Popup 3', helper: 'Entity for grid popup line 3.' },
+          sensor_popup_grid_3_name: { label: 'Red Popup 3 Nombre', helper: 'Opcional custom name for grid popup line 3. Deja en blanco to use entity name.' },
+          sensor_popup_grid_3_color: { label: 'Red Popup 3 Color', helper: 'Color for grid popup line 3 text.' },
+          sensor_popup_grid_3_font_size: { label: 'Red Popup 3 Font Size (px)', helper: 'Font size for grid popup line 3. Predeterminado 8' },
+          sensor_popup_grid_4: { label: 'Red Popup 4', helper: 'Entity for grid popup line 4.' },
+          sensor_popup_grid_4_name: { label: 'Red Popup 4 Nombre', helper: 'Opcional custom name for grid popup line 4. Deja en blanco to use entity name.' },
+          sensor_popup_grid_4_color: { label: 'Red Popup 4 Color', helper: 'Color for grid popup line 4 text.' },
+          sensor_popup_grid_4_font_size: { label: 'Red Popup 4 Font Size (px)', helper: 'Font size for grid popup line 4. Predeterminado 8' },
+          sensor_popup_grid_5: { label: 'Red Popup 5', helper: 'Entity for grid popup line 5.' },
+          sensor_popup_grid_5_name: { label: 'Red Popup 5 Nombre', helper: 'Opcional custom name for grid popup line 5. Deja en blanco to use entity name.' },
+          sensor_popup_grid_5_color: { label: 'Red Popup 5 Color', helper: 'Color for grid popup line 5 text.' },
+          sensor_popup_grid_5_font_size: { label: 'Red Popup 5 Font Size (px)', helper: 'Font size for grid popup line 5. Predeterminado 8' },
+          sensor_popup_grid_6: { label: 'Red Popup 6', helper: 'Entity for grid popup line 6.' },
+          sensor_popup_grid_6_name: { label: 'Red Popup 6 Nombre', helper: 'Opcional custom name for grid popup line 6. Deja en blanco to use entity name.' },
+          sensor_popup_grid_6_color: { label: 'Red Popup 6 Color', helper: 'Color for grid popup line 6 text.' },
+          sensor_popup_grid_6_font_size: { label: 'Red Popup 6 Font Size (px)', helper: 'Font size for grid popup line 6. Predeterminado 8' },
+          sensor_popup_inverter_1: { label: 'Inversor Popup 1', helper: 'Entity for inverter popup line 1.' },
+          sensor_popup_inverter_1_name: { label: 'Inversor Popup 1 Nombre', helper: 'Opcional custom name for inverter popup line 1. Deja en blanco to use entity name.' },
+          sensor_popup_inverter_1_color: { label: 'Inversor Popup 1 Color', helper: 'Color for inverter popup line 1 text.' },
+          sensor_popup_inverter_1_font_size: { label: 'Inversor Popup 1 Font Size (px)', helper: 'Font size for inverter popup line 1. Predeterminado 8' },
+          sensor_popup_inverter_2: { label: 'Inversor Popup 2', helper: 'Entity for inverter popup line 2.' },
+          sensor_popup_inverter_2_name: { label: 'Inversor Popup 2 Nombre', helper: 'Opcional custom name for inverter popup line 2. Deja en blanco to use entity name.' },
+          sensor_popup_inverter_2_color: { label: 'Inversor Popup 2 Color', helper: 'Color for inverter popup line 2 text.' },
+          sensor_popup_inverter_2_font_size: { label: 'Inversor Popup 2 Font Size (px)', helper: 'Font size for inverter popup line 2. Predeterminado 8' },
+          sensor_popup_inverter_3: { label: 'Inversor Popup 3', helper: 'Entity for inverter popup line 3.' },
+          sensor_popup_inverter_3_name: { label: 'Inversor Popup 3 Nombre', helper: 'Opcional custom name for inverter popup line 3. Deja en blanco to use entity name.' },
+          sensor_popup_inverter_3_color: { label: 'Inversor Popup 3 Color', helper: 'Color for inverter popup line 3 text.' },
+          sensor_popup_inverter_3_font_size: { label: 'Inversor Popup 3 Font Size (px)', helper: 'Font size for inverter popup line 3. Predeterminado 8' },
+          sensor_popup_inverter_4: { label: 'Inversor Popup 4', helper: 'Entity for inverter popup line 4.' },
+          sensor_popup_inverter_4_name: { label: 'Inversor Popup 4 Nombre', helper: 'Opcional custom name for inverter popup line 4. Deja en blanco to use entity name.' },
+          sensor_popup_inverter_4_color: { label: 'Inversor Popup 4 Color', helper: 'Color for inverter popup line 4 text.' },
+          sensor_popup_inverter_4_font_size: { label: 'Inversor Popup 4 Font Size (px)', helper: 'Font size for inverter popup line 4. Predeterminado 8' },
+          sensor_popup_inverter_5: { label: 'Inversor Popup 5', helper: 'Entity for inverter popup line 5.' },
+          sensor_popup_inverter_5_name: { label: 'Inversor Popup 5 Nombre', helper: 'Opcional custom name for inverter popup line 5. Deja en blanco to use entity name.' },
+          sensor_popup_inverter_5_color: { label: 'Inversor Popup 5 Color', helper: 'Color for inverter popup line 5 text.' },
+          sensor_popup_inverter_5_font_size: { label: 'Inversor Popup 5 Font Size (px)', helper: 'Font size for inverter popup line 5. Predeterminado 8' },
+          sensor_popup_inverter_6: { label: 'Inversor Popup 6', helper: 'Entity for inverter popup line 6.' },
+          sensor_popup_inverter_6_name: { label: 'Inversor Popup 6 Nombre', helper: 'Opcional custom name for inverter popup line 6. Deja en blanco to use entity name.' },
+          sensor_popup_inverter_6_color: { label: 'Inversor Popup 6 Color', helper: 'Color for inverter popup line 6 text.' },
+          sensor_popup_inverter_6_font_size: { label: 'Inversor Popup 6 Font Size (px)', helper: 'Font size for inverter popup line 6. Predeterminado 8' }
+        },
+        options: {
+          languages: [
+            { value: 'en', label: 'Inglés' },
+            { value: 'it', label: 'Italiano' },
+            { value: 'de', label: 'Alemán' },
+            { value: 'fr', label: 'Francés' },
+            { value: 'nl', label: 'Neerlandés' },
+            { value: 'es', label: 'Español' }
+          ],
+          display_units: [
+            { value: 'W', label: 'Vatios (W)' },
+            { value: 'kW', label: 'Kilovatios (kW)' }
+          ],
+          animation_styles: [
+            { value: 'dashes', label: 'Guiones (predeterminado)' },
+            { value: 'dashes_glow', label: 'Guiones + brillo' },
+            { value: 'fluid_flow', label: 'Flujo fluido' },
+            { value: 'dots', label: 'Puntos' },
+            { value: 'arrows', label: 'Flechas' }
+          ],
+          initial_yes: 'Sí',
+          initial_no: 'No',
+          initial_inverters_1: '1',
+          initial_inverters_2: '2',
+          initial_batteries_1: '1',
+          initial_batteries_2: '2',
+          initial_batteries_3: '3',
+          initial_batteries_4: '4',
+          initial_evs_1: '1',
+          initial_evs_2: '2'
+        },
+        view: {
+          daily: 'PRODUCCIÓN DIARIA', pv_tot: 'PV TOTAL', car1: 'COCHE 1', car2: 'COCHE 2', importing: 'IMPORTANDO', exporting: 'EXPORTANDO'
+        }
+      }
     };
   }
 
