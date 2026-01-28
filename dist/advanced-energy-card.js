@@ -1,7 +1,7 @@
 ﻿/**
  * Advanced Energy Card
  * Custom Home Assistant card for energy flow visualization
- * Version: 1.0.21
+ * Version: 1.0.22
  * Tested with Home Assistant 2025.12+
  */
 const BATTERY_GEOMETRY = { X: 260, Y_BASE: 350, WIDTH: 55, MAX_HEIGHT: 84 };
@@ -2103,7 +2103,8 @@ class AdvancedEnergyCard extends HTMLElement {
         return false;
       }
     })();
-    if (isForceHidden) {
+    const isForceHiddenByState = Boolean(flowState && flowState.forceHidden);
+    if (isForceHidden || isForceHiddenByState) {
       try {
         if (typeof element.removeAttribute === 'function') {
           element.removeAttribute('data-style');
@@ -4321,9 +4322,11 @@ class AdvancedEnergyCard extends HTMLElement {
       pv2: { stroke: pvSecondaryColor, glowColor: pvSecondaryColor, active: inverter2ConfiguredForPv && pv_secondary_w > 0 },
       'array-inverter1': { stroke: pvPrimaryColor, glowColor: pvPrimaryColor, active: inverter1Configured && !inverter2Active },
       'array-inverter2': { stroke: pvSecondaryColor, glowColor: pvSecondaryColor, active: inverter2Configured },
-      windmill: { stroke: windmillFlowColor, glowColor: windmillFlowColor, active: windmillFlowActive, direction: 1 },
+      'windmill-inverter1': { stroke: windmillFlowColor, glowColor: windmillFlowColor, active: windmillFlowActive, direction: 1 },
+      'windmill-inverter2': { stroke: windmillFlowColor, glowColor: windmillFlowColor, active: inverter2Active && windmillFlowActive, direction: 1, forceHidden: !inverter2Active },
       load: { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: loadMagnitude > 10, direction: 1 },
-      'house-load': { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: !gridPowerOnly && loadMagnitude > 10, direction: 1 },
+      'house-load-inverter1': { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: !gridPowerOnly && loadMagnitude > 10, direction: 1 },
+      'house-load-inverter2': { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: !gridPowerOnly && inverter2Active && loadMagnitude > 10, direction: 1 },
       grid: { stroke: effectiveGridColor, glowColor: effectiveGridColor, active: gridActiveForGrid, direction: gridAnimationDirection },
       // House-only grid flow when no PV entities exist. Uses load thresholds/colors.
       grid_house: { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: gridActiveForHouse && (gridPowerOnly ? true : loadMagnitude > 10), direction: gridHouseDirection },
@@ -4363,7 +4366,8 @@ class AdvancedEnergyCard extends HTMLElement {
 
     flows.pv1.direction = 1;
     flows.pv2.direction = 1;
-    flows.windmill.direction = 1;
+    flows['windmill-inverter1'].direction = 1;
+    flows['windmill-inverter2'].direction = 1;
     flows.heatPump.direction = 1;
     flows.pool.direction = 1;
 
@@ -4964,9 +4968,11 @@ class AdvancedEnergyCard extends HTMLElement {
         pv2: root.querySelector('[data-flow-key="pv2"]'),
         'array-inverter1': root.querySelector('[data-flow-key="array-inverter1"]'),
         'array-inverter2': root.querySelector('[data-flow-key="array-inverter2"]'),
-        windmill: root.querySelector('[data-flow-key="windmill"]'),
+        'windmill-inverter1': root.querySelector('[data-flow-key="windmill-inverter1"]'),
+        'windmill-inverter2': root.querySelector('[data-flow-key="windmill-inverter2"]'),
         load: root.querySelector('[data-flow-key="load"]'),
-        'house-load': root.querySelector('[data-flow-key="house-load"]'),
+        'house-load-inverter1': root.querySelector('[data-flow-key="house-load-inverter1"]'),
+        'house-load-inverter2': root.querySelector('[data-flow-key="house-load-inverter2"]'),
         grid: root.querySelector('[data-flow-key="grid"]'),
         grid_house: root.querySelector('[data-flow-key="grid_house"]'),
         'grid-house': root.querySelector('[data-flow-key="grid-house"]'),
@@ -5012,7 +5018,10 @@ class AdvancedEnergyCard extends HTMLElement {
       'array-inverter1': root.querySelector('[data-arrow-key="array-inverter1"]'),
       'array-inverter2': root.querySelector('[data-arrow-key="array-inverter2"]'),
       load: root.querySelector('[data-arrow-key="load"]'),
-      'house-load': root.querySelector('[data-arrow-key="house-load"]'),
+      'windmill-inverter1': root.querySelector('[data-arrow-key="windmill-inverter1"]'),
+      'windmill-inverter2': root.querySelector('[data-arrow-key="windmill-inverter2"]'),
+      'house-load-inverter1': root.querySelector('[data-arrow-key="house-load-inverter1"]'),
+      'house-load-inverter2': root.querySelector('[data-arrow-key="house-load-inverter2"]'),
       grid: root.querySelector('[data-arrow-key="grid"]'),
       grid_house: root.querySelector('[data-arrow-key="grid_house"]'),
       'grid-house': root.querySelector('[data-arrow-key="grid-house"]'),
@@ -5038,7 +5047,10 @@ class AdvancedEnergyCard extends HTMLElement {
       'array-inverter1': Array.from(root.querySelectorAll('[data-arrow-shape="array-inverter1"]')),
       'array-inverter2': Array.from(root.querySelectorAll('[data-arrow-shape="array-inverter2"]')),
       load: Array.from(root.querySelectorAll('[data-arrow-shape="load"]')),
-      'house-load': Array.from(root.querySelectorAll('[data-arrow-shape="house-load"]')),
+      'windmill-inverter1': Array.from(root.querySelectorAll('[data-arrow-shape="windmill-inverter1"]')),
+      'windmill-inverter2': Array.from(root.querySelectorAll('[data-arrow-shape="windmill-inverter2"]')),
+      'house-load-inverter1': Array.from(root.querySelectorAll('[data-arrow-shape="house-load-inverter1"]')),
+      'house-load-inverter2': Array.from(root.querySelectorAll('[data-arrow-shape="house-load-inverter2"]')),
       grid: Array.from(root.querySelectorAll('[data-arrow-shape="grid"]')),
       grid_house: Array.from(root.querySelectorAll('[data-arrow-shape="grid_house"]')),
       'grid-house': Array.from(root.querySelectorAll('[data-arrow-shape="grid-house"]')),
@@ -9902,7 +9914,7 @@ class AdvancedEnergyCard extends HTMLElement {
   }
 
   static get version() {
-    return '1.0.21';
+    return '1.0.22';
   }
 }
 
@@ -10196,7 +10208,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           washing_machine_text_color: { label: 'Washing Machine Text Color', helper: 'Color applied to the washing machine power text.' },
           dryer_text_color: { label: 'Dryer Text Color', helper: 'Color applied to the dryer power text.' },
           refrigerator_text_color: { label: 'Refrigerator Text Color', helper: 'Color applied to the refrigerator power text.' },
-          windmill_flow_color: { label: 'Windmill Flow Color', helper: 'Color applied to the windmill flow (data-flow-key="windmill").' },
+          windmill_flow_color: { label: 'Windmill Flow Color', helper: 'Color applied to the windmill flow (data-flow-key="windmill-inverter1" / "windmill-inverter2").' },
           windmill_text_color: { label: 'Windmill Text Color', helper: 'Color applied to the windmill power text (data-role="windmill-power").' },
           header_font_size: { label: 'Header Font Size (px)', helper: 'Default 16' },
           daily_label_font_size: { label: 'Daily Label Font Size (px)', helper: 'Default 12' },
@@ -10554,7 +10566,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           washing_machine_text_color: { label: 'Colore testo lavatrice', helper: 'Colore applicato al testo potenza della lavatrice.' },
           dryer_text_color: { label: 'Colore testo asciugatrice', helper: 'Colore applicato al testo potenza dell asciugatrice.' },
           refrigerator_text_color: { label: 'Colore testo frigorifero', helper: 'Colore applicato al testo potenza del frigorifero.' },
-          windmill_flow_color: { label: 'Windmill Flow Color', helper: 'Colore applicato al flusso del windmill (data-flow-key="windmill").' },
+          windmill_flow_color: { label: 'Windmill Flow Color', helper: 'Colore applicato al flusso del windmill (data-flow-key="windmill-inverter1" / "windmill-inverter2").' },
           windmill_text_color: { label: 'Windmill Text Color', helper: 'Colore applicato al testo potenza del windmill (data-role="windmill-power").' },
           header_font_size: { label: 'Dimensione titolo (px)', helper: 'Predefinita 16' },
           daily_label_font_size: { label: 'Dimensione etichetta giornaliera (px)', helper: 'Predefinita 12' },
@@ -10912,7 +10924,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           washing_machine_text_color: { label: 'Waschmaschine Textfarbe', helper: 'Farbe fuer den Waschmaschinen-Leistungstext.' },
           dryer_text_color: { label: 'Trockner Textfarbe', helper: 'Farbe fuer den Trockner-Leistungstext.' },
           refrigerator_text_color: { label: 'Kuehlschrank Textfarbe', helper: 'Farbe fuer den Kuehlschrank-Leistungstext.' },
-          windmill_flow_color: { label: 'Windmill Flow Color', helper: 'Farbe fuer den Windmill-Flow (data-flow-key="windmill").' },
+          windmill_flow_color: { label: 'Windmill Flow Color', helper: 'Farbe fuer den Windmill-Flow (data-flow-key="windmill-inverter1" / "windmill-inverter2").' },
           windmill_text_color: { label: 'Windmill Text Color', helper: 'Farbe fuer den Windmill-Leistungstext (data-role="windmill-power").' },
           header_font_size: { label: 'Schriftgroesse Titel (px)', helper: 'Standard 16' },
           daily_label_font_size: { label: 'Schriftgroesse Tageslabel (px)', helper: 'Standard 12' },
@@ -11268,7 +11280,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           washing_machine_text_color: { label: 'Couleur texte lave-linge', helper: 'Couleur appliquÃ©e au texte de puissance du lave-linge.' },
           dryer_text_color: { label: 'Couleur texte sÃ¨che-linge', helper: 'Couleur appliquÃ©e au texte de puissance du sÃ¨che-linge.' },
           refrigerator_text_color: { label: 'Couleur texte rÃ©frigÃ©rateur', helper: 'Couleur appliquÃ©e au texte de puissance du rÃ©frigÃ©rateur.' },
-          windmill_flow_color: { label: 'Windmill Flow Color', helper: 'Couleur appliquÃ©e au flux windmill (data-flow-key="windmill").' },
+          windmill_flow_color: { label: 'Windmill Flow Color', helper: 'Couleur appliquÃ©e au flux windmill (data-flow-key="windmill-inverter1" / "windmill-inverter2").' },
           windmill_text_color: { label: 'Windmill Text Color', helper: 'Couleur appliquÃ©e au texte puissance windmill (data-role="windmill-power").' },
           header_font_size: { label: 'Taille police en-tÃªte (px)', helper: 'Par dÃ©faut 16' },
           daily_label_font_size: { label: 'Taille Ã©tiquette quotidienne (px)', helper: 'Par dÃ©faut 12' },
@@ -11628,7 +11640,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           washing_machine_text_color: { label: 'Wasmachine tekst kleur', helper: 'Kleur toegepast op de wasmachine vermogen tekst.' },
           dryer_text_color: { label: 'Droger tekst kleur', helper: 'Kleur toegepast op de droger vermogen tekst.' },
           refrigerator_text_color: { label: 'Koelkast tekst kleur', helper: 'Kleur toegepast op de koelkast vermogen tekst.' },
-          windmill_flow_color: { label: 'Windmill Flow Color', helper: 'Kleur toegepast op de windmill flow (data-flow-key="windmill").' },
+          windmill_flow_color: { label: 'Windmill Flow Color', helper: 'Kleur toegepast op de windmill flow (data-flow-key="windmill-inverter1" / "windmill-inverter2").' },
           windmill_text_color: { label: 'Windmill Text Color', helper: 'Kleur toegepast op de windmill vermogen tekst (data-role="windmill-power").' },
           header_font_size: { label: 'Header lettergrootte (px)', helper: 'Standaard 16' },
           daily_label_font_size: { label: 'Dagelijks label lettergrootte (px)', helper: 'Standaard 12' },

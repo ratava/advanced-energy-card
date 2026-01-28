@@ -1,7 +1,7 @@
 # Advanced Energy Card
 
 ![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)  
-![Version](https://img.shields.io/badge/version-1.0.21-blue.svg)
+![Version](https://img.shields.io/badge/version-1.0.22-blue.svg)
 
 Advanced Energy Card repository is [https://github.com/ratava/advanced-energy-card](https://github.com/ratava/advanced-energy-card).
 
@@ -330,7 +330,6 @@ lovelace:
 - Volg de vragen in het menu Initial Configuration; dit dekt de meeste basis‑sensoren.
 - Veel andere opties zijn toegevoegd, inclusief een volledig herbouwd menu.
 
-
 | Option                               | Type    | Default                                                           | Notes                                                                                                                                             |
 | ------------------------------------ | ------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `card_title`                         | string  | —                                                                 | Optional header text; blank keeps the title hidden.                                                                                               |
@@ -483,7 +482,6 @@ lovelace:
 | `invert_bat2`                        | boolean | `false`                                                           | Override only Battery 2 polarity when its sensors are reversed.                                                                                   |
 | `invert_bat3`                        | boolean | `false`                                                           | Override only Battery 3 polarity when its sensors are reversed.                                                                                   |
 
-
 > **Battery sensor requirement (EN):** For each battery (`bat1`..`bat4`) supply either the combined `sensor_batX_power` **or** both `sensor_batX_charge_power` and `sensor_batX_discharge_power`. Readings may be in W or kW; the card handles conversions automatically.
 
 ### Grid Flow Routing (EN)
@@ -537,7 +535,6 @@ a helper to display it.
 
 ### Additional Array 2 & Options (EN)
 
-
 | Option                                            | Type     | Default   | Notes                                                                                                                                      |
 | ------------------------------------------------- | -------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `sensor_pv_total_secondary`                       | entity   | —         | Optional second inverter total (PV2). When provided it is added to PV TOT and drives the secondary PV flow.                                |
@@ -547,7 +544,6 @@ a helper to display it.
 | `pv_tot_color`                                    | string   | `#00FFFF` | Overrides the PV TOT line/text colour (also affects string inheritance when set).                                                          |
 | `house_total_color` / `inv1_color` / `inv2_color` | string   | —         | Per-line colour overrides for HOUSE TOT, INV 1 and INV 2 flows.                                                                            |
 | `invert_battery`                                  | boolean  | `false`   | Swaps charge/discharge polarity, colours, and animation direction.                                                                         |
-
 
 Car colours & fonts: `car1_name_color`, `car2_name_color`, `car1_color`, `car2_color`, `car2_pct_color`, `car_name_font_size`, `car2_name_font_size` — new colour and name-font-size controls for Car 1 and Car 2 (power and SOC font sizes remain available as `car_power_font_size`, `car2_power_font_size`, `car_soc_font_size`, `car2_soc_font_size`).
 
