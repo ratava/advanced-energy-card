@@ -1,3 +1,8 @@
 .vscode/
 locales
-
+node_modules/
+CHANGELOG_v1.0.24.md
+package-lock.json
+package.json
+.markdownlint-cli2.mjs
+.markdownlint.json
