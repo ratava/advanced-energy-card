@@ -2029,6 +2029,7 @@ class LocalizationManager {
       'dishwasher-power-text': { ...this.translations.dishwasher, linkTo: 'dishwasher-power' },
       'dryer-power-text': { ...this.translations.dryer, linkTo: 'dryer-power' },
       'refrigerator-power-text': { ...this.translations.refrigerator, linkTo: 'refrigerator-power' },
+      'freezer-power-text': { ...this.translations.freezer, linkTo: 'freezer-power' },
       'heat-pump-power-text': { ...this.translations.heat_pump, linkTo: 'heat-pump-power' },
       'hot-water-power-text': { ...this.translations.hot_water, linkTo: 'hot-water-power' },
       'pool-power-text': { ...this.translations.pool, linkTo: 'pool-power' }
@@ -2438,7 +2439,6 @@ class AdvancedEnergyCard extends HTMLElement {
       dryer_text_color: '#00FFFF',
       refrigerator_text_color: '#00FFFF',
       freezer_text_color: '#00FFFF',
-      freezer_color: '#00FFFF',
       hot_water_text_color: '#00FFFF',
       windmill_flow_color: '#00FFFF',
       windmill_text_color: '#00FFFF',
@@ -4972,6 +4972,12 @@ class AdvancedEnergyCard extends HTMLElement {
     const hasRefrigeratorSensor = Boolean(refrigeratorSensorId);
     const refrigerator_w = hasRefrigeratorSensor ? this.getStateSafe(refrigeratorSensorId) : 0;
 
+    const freezerSensorId = typeof config.sensor_freezer_consumption === 'string'
+      ? config.sensor_freezer_consumption.trim()
+      : (config.sensor_freezer_consumption || null);
+    const hasFreezerSensor = Boolean(freezerSensorId);
+    const freezer_w = hasFreezerSensor ? this.getStateSafe(freezerSensorId) : 0;
+
     // Utility functions for sensor reading
     const resolveEntityId = (value) => (typeof value === 'string' ? value.trim() : '');
     const isEntityAvailable = (entityId) => {
@@ -5376,6 +5382,12 @@ class AdvancedEnergyCard extends HTMLElement {
       28,
       heat_pump_font_size
     );
+    const freezer_font_size = clampValue(
+      config.freezer_font_size !== undefined ? config.freezer_font_size : config.heat_pump_font_size,
+      4,
+      28,
+      heat_pump_font_size
+    );
     const grid_font_size = clampValue(config.grid_font_size, 4, 28, 15);
     const grid_daily_font_size = clampValue(config.grid_daily_font_size, 4, 28, grid_font_size);
     const grid_current_odometer = config.grid_current_odometer === true;
@@ -5510,6 +5522,7 @@ class AdvancedEnergyCard extends HTMLElement {
     const dishwasherTextColor = resolveColor(config.dishwasher_text_color, effectiveLoadTextColor);
     const dryerTextColor = resolveColor(config.dryer_text_color, effectiveLoadTextColor);
     const refrigeratorTextColor = resolveColor(config.refrigerator_text_color, effectiveLoadTextColor);
+    const freezerTextColor = resolveColor(config.freezer_text_color, effectiveLoadTextColor);
     const batteryChargeColor = resolveColor(config.battery_charge_color, C_CYAN);
     const batteryDischargeColor = resolveColor(config.battery_discharge_color, C_WHITE);
     const batterySocColor = resolveColor(config.battery_soc_color, C_WHITE);
@@ -5918,6 +5931,12 @@ class AdvancedEnergyCard extends HTMLElement {
         fontSize: refrigerator_font_size,
         fill: refrigeratorTextColor,
         visible: hasRefrigeratorSensor
+      },
+      freezer: {
+        text: hasFreezerSensor ? this.formatPower(freezer_w, use_kw) : '',
+        fontSize: freezer_font_size,
+        fill: freezerTextColor,
+        visible: hasFreezerSensor
       },
       car1: car1View,
       car2: car2View,
@@ -7151,7 +7170,8 @@ class AdvancedEnergyCard extends HTMLElement {
       { key: 'sensor_washing_machine_consumption', label: 'Washing Machine', fontKey: 'washing_machine_font_size', colorKey: 'washing_machine_text_color' },
       { key: 'sensor_dryer_consumption', label: 'Dryer', fontKey: 'dryer_font_size', colorKey: 'dryer_text_color' },
       { key: 'sensor_dishwasher_consumption', label: 'Dish Washer', fontKey: 'dishwasher_font_size', colorKey: 'dishwasher_text_color' },
-      { key: 'sensor_refrigerator_consumption', label: 'Refrigerator', fontKey: 'refrigerator_font_size', colorKey: 'refrigerator_text_color' }
+      { key: 'sensor_refrigerator_consumption', label: 'Refrigerator', fontKey: 'refrigerator_font_size', colorKey: 'refrigerator_text_color' },
+      { key: 'sensor_freezer_consumption', label: 'Freezer', fontKey: 'freezer_font_size', colorKey: 'freezer_text_color' }
     ];
     autoEntries.forEach((entry) => {
       const entityIdRaw = config[entry.key];
@@ -9325,7 +9345,9 @@ class AdvancedEnergyCard extends HTMLElement {
                 return '';
               }
             })();
-            if (fill) {
+            // Don't copy fill color to icon elements (paths) - only to text elements
+            const isIconElement = labelTarget.tagName && labelTarget.tagName.toLowerCase() === 'path';
+            if (fill && !isIconElement) {
               labelTarget.setAttribute('fill', fill);
               if (labelTarget.style) labelTarget.style.fill = fill;
             }
@@ -9492,6 +9514,12 @@ class AdvancedEnergyCard extends HTMLElement {
             }
             if (target.getAttribute('visibility') === 'hidden') {
               target.removeAttribute('visibility');
+            }
+            if (target.getAttribute('opacity') === '0') {
+              target.removeAttribute('opacity');
+            }
+            if (target.style.opacity === '0') {
+              target.style.opacity = '';
             }
           } else {
             target.setAttribute('display', 'none');
@@ -10518,6 +10546,13 @@ class AdvancedEnergyCard extends HTMLElement {
       fontSize: viewState.refrigerator ? viewState.refrigerator.fontSize : undefined
     });
     setRoleVisibilityOnly('refrigerator-power-text', refrigeratorVisible);
+    const freezerVisible = Boolean(viewState.freezer && viewState.freezer.visible);
+    updateRole('freezer-power', viewState.freezer ? viewState.freezer.text : '', {
+      visible: freezerVisible,
+      fill: viewState.freezer ? viewState.freezer.fill : undefined,
+      fontSize: viewState.freezer ? viewState.freezer.fontSize : undefined
+    });
+    setRoleVisibilityOnly('freezer-power-text', freezerVisible);
 
     // Cars
     const car1Visible = Boolean(viewState.car1 && viewState.car1.visible);
@@ -11165,6 +11200,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           sensor_dishwasher_consumption: { label: 'Dish Washer', helper: 'Sensor for Dish Washer Load.' },
           sensor_dryer_consumption: { label: 'Dryer', helper: 'Sensor for dryer power/consumption.' },
           sensor_refrigerator_consumption: { label: 'Refrigerator', helper: 'Sensor for refrigerator power/consumption.' },
+          sensor_freezer_consumption: { label: 'Freezer', helper: 'Sensor for freezer power/consumption.' },
           hot_water_text_color: { label: 'Water Heating Text Color', helper: 'Color applied to the hot water power text.' },
           dishwasher_text_color: { label: 'Dish Washer Text Color', helper: 'Color applied to the dish washer power text.' },
           hot_water_font_size: { label: 'Water Heating Font Size (px)', helper: 'Default 8' },
@@ -11251,7 +11287,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           washing_machine_text_color: { label: 'Washing Machine Text Color', helper: 'Color applied to the washing machine power text.' },
           dryer_text_color: { label: 'Dryer Text Color', helper: 'Color applied to the dryer power text.' },
           refrigerator_text_color: { label: 'Refrigerator Text Color', helper: 'Color applied to the refrigerator power text.' },
-          freezer_color: { label: 'Freezer Text Color', helper: 'Color applied to the freezer power text.' },
+          freezer_text_color: { label: 'Freezer Text Color', helper: 'Color applied to the freezer power text.' },
           windmill_flow_color: { label: 'Windmill Flow Color', helper: 'Color applied to the windmill flow (data-flow-key="windmill-inverter1" / "windmill-inverter2").' },
           windmill_text_color: { label: 'Windmill Text Color', helper: 'Color applied to the windmill power text (data-role="windmill-power").' },
           header_font_size: { label: 'Header Font Size (px)', helper: 'Default 8' },
@@ -11269,6 +11305,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           washing_machine_font_size: { label: 'Washing Machine Font Size (px)', helper: 'Default 8' },
           dryer_font_size: { label: 'Dryer Font Size (px)', helper: 'Default 8' },
           refrigerator_font_size: { label: 'Refrigerator Font Size (px)', helper: 'Default 8' },
+          freezer_font_size: { label: 'Freezer Font Size (px)', helper: 'Default 8' },
           grid_font_size: { label: 'Grid Font Size (px)', helper: 'Default 8' },
           car_power_font_size: { label: 'Car Power Font Size (px)', helper: 'Default 8' },
           car2_power_font_size: { label: 'Car 2 Power Font Size (px)', helper: 'Default 8' },
@@ -11531,6 +11568,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           sensor_dishwasher_consumption: { label: 'Lavastoviglie', helper: 'Sensore per il consumo della lavastoviglie.' },
           sensor_dryer_consumption: { label: 'Asciugatrice', helper: 'Sensore per il consumo dell\'asciugatrice.' },
           sensor_refrigerator_consumption: { label: 'Frigorifero', helper: 'Sensore per il consumo del frigorifero.' },
+          sensor_freezer_consumption: { label: 'Congelatore', helper: 'Sensore per il consumo del congelatore.' },
           hot_water_text_color: { label: 'Colore testo riscaldamento acqua', helper: 'Colore applicato al testo della potenza dell\'acqua calda.' },
           dishwasher_text_color: { label: 'Colore testo lavastoviglie', helper: 'Colore applicato al testo della potenza della lavastoviglie.' },
           hot_water_font_size: { label: 'Dimensione font riscaldamento acqua (px)', helper: 'Default 8' },
@@ -11617,7 +11655,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           washing_machine_text_color: { label: 'Colore testo lavatrice', helper: 'Colore applicato al testo della potenza della lavatrice.' },
           dryer_text_color: { label: 'Colore testo asciugatrice', helper: 'Colore applicato al testo della potenza dell\'asciugatrice.' },
           refrigerator_text_color: { label: 'Colore testo frigorifero', helper: 'Colore applicato al testo della potenza del frigorifero.' },
-          freezer_color: { label: 'Colore testo congelatore', helper: 'Colore applicato al testo della potenza del congelatore.' },
+          freezer_text_color: { label: 'Colore testo congelatore', helper: 'Colore applicato al testo della potenza del congelatore.' },
           windmill_flow_color: { label: 'Colore flusso mulino', helper: 'Colore applicato al flusso del mulino a vento (data-flow-key="windmill-inverter1" / "windmill-inverter2").' },
           windmill_text_color: { label: 'Colore testo mulino', helper: 'Colore applicato al testo della potenza del mulino (data-role="windmill-power").' },
           header_font_size: { label: 'Dimensione font header (px)', helper: 'Default 8' },
@@ -11635,6 +11673,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           washing_machine_font_size: { label: 'Dimensione font lavatrice (px)', helper: 'Default 8' },
           dryer_font_size: { label: 'Dimensione font asciugatrice (px)', helper: 'Default 8' },
           refrigerator_font_size: { label: 'Dimensione font frigorifero (px)', helper: 'Default 8' },
+          freezer_font_size: { label: 'Dimensione font congelatore (px)', helper: 'Default 8' },
           grid_font_size: { label: 'Dimensione font rete (px)', helper: 'Default 8' },
           car_power_font_size: { label: 'Dimensione font potenza auto (px)', helper: 'Default 8' },
           car2_power_font_size: { label: 'Dimensione font potenza auto 2 (px)', helper: 'Default 8' },
@@ -11803,6 +11842,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           sensor_dishwasher_consumption: { label: 'Dish Washer', helper: 'Sensor for Dish Washer Load.' },
           sensor_dryer_consumption: { label: 'Dryer', helper: 'Sensor for dryer power/consumption.' },
           sensor_refrigerator_consumption: { label: 'Refrigerator', helper: 'Sensor for refrigerator power/consumption.' },
+          sensor_freezer_consumption: { label: 'Freezer', helper: 'Sensor for freezer power/consumption.' },
           hot_water_text_color: { label: 'Water Heating Textfarbe', helper: 'Farbe applied to the hot water power text.' },
           dishwasher_text_color: { label: 'Dish Washer Textfarbe', helper: 'Farbe applied to the dish washer power text.' },
           hot_water_font_size: { label: 'Water Heating Font Size ((px))', helper: 'Standard 8' },
@@ -11907,6 +11947,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           washing_machine_font_size: { label: 'Washing Machine Font Size ((px))', helper: 'Standard 8' },
           dryer_font_size: { label: 'Dryer Font Size ((px))', helper: 'Standard 8' },
           refrigerator_font_size: { label: 'Refrigerator Font Size ((px))', helper: 'Standard 8' },
+          freezer_font_size: { label: 'Freezer Font Size ((px))', helper: 'Standard 8' },
           grid_font_size: { label: 'Netz Font Size ((px))', helper: 'Standard 8' },
           car_power_font_size: { label: 'Auto Leistung Font Size ((px))', helper: 'Standard 8' },
           car2_power_font_size: { label: 'Auto 2 Leistung Font Size ((px))', helper: 'Standard 8' },
@@ -12169,6 +12210,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           sensor_dishwasher_consumption: { label: 'Dish Washer', helper: 'capteur for Dish Washer Load.' },
           sensor_dryer_consumption: { label: 'Dryer', helper: 'capteur for dryer power/consumption.' },
           sensor_refrigerator_consumption: { label: 'Refrigerator', helper: 'capteur for refrigerator power/consumption.' },
+          sensor_freezer_consumption: { label: 'Congélateur', helper: 'capteur for freezer power/consumption.' },
           hot_water_text_color: { label: 'Water Heating Couleur du texte', helper: 'Couleur applied to the hot water power text.' },
           dishwasher_text_color: { label: 'Dish Washer Couleur du texte', helper: 'Couleur applied to the dish washer power text.' },
           hot_water_font_size: { label: 'Water Heating Font Size (px)', helper: 'Par défaut 8' },
@@ -12255,7 +12297,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           washing_machine_text_color: { label: 'Washing Machine Couleur du texte', helper: 'Couleur applied to the washing machine power text.' },
           dryer_text_color: { label: 'Dryer Couleur du texte', helper: 'Couleur applied to the dryer power text.' },
           refrigerator_text_color: { label: 'Refrigerator Couleur du texte', helper: 'Couleur applied to the refrigerator power text.' },
-          freezer_color: { label: 'Congélateur Couleur du texte', helper: 'Couleur applied to the freezer power text.' },
+          freezer_text_color: { label: 'Congélateur Couleur du texte', helper: 'Couleur applied to the freezer power text.' },
           windmill_flow_color: { label: 'Éolienne Flow Couleur', helper: 'Couleur applied to the windmill flow (data-flow-key="windmill-inverter1" / "windmill-inverter2").' },
           windmill_text_color: { label: 'Éolienne Couleur du texte', helper: 'Couleur applied to the windmill power text (data-role="windmill-power").' },
           header_font_size: { label: 'Header Font Size (px)', helper: 'Par défaut 8' },
@@ -12273,6 +12315,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           washing_machine_font_size: { label: 'Washing Machine Font Size (px)', helper: 'Par défaut 8' },
           dryer_font_size: { label: 'Dryer Font Size (px)', helper: 'Par défaut 8' },
           refrigerator_font_size: { label: 'Refrigerator Font Size (px)', helper: 'Par défaut 8' },
+          freezer_font_size: { label: 'Freezer Font Size (px)', helper: 'Par défaut 8' },
           grid_font_size: { label: 'Réseau Font Size (px)', helper: 'Par défaut 8' },
           car_power_font_size: { label: 'Voiture puissance Font Size (px)', helper: 'Par défaut 8' },
           car2_power_font_size: { label: 'Voiture 2 puissance Font Size (px)', helper: 'Par défaut 8' },
@@ -12535,6 +12578,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           sensor_dishwasher_consumption: { label: 'Dish Washer', helper: 'sensor for Dish Washer Load.' },
           sensor_dryer_consumption: { label: 'Dryer', helper: 'sensor for dryer power/consumption.' },
           sensor_refrigerator_consumption: { label: 'Refrigerator', helper: 'sensor for refrigerator power/consumption.' },
+          sensor_freezer_consumption: { label: 'Vriezer', helper: 'sensor for freezer power/consumption.' },
           hot_water_text_color: { label: 'Water Heating Tekstkleur', helper: 'Kleur applied to the hot water power text.' },
           dishwasher_text_color: { label: 'Dish Washer Tekstkleur', helper: 'Kleur applied to the dish washer power text.' },
           hot_water_font_size: { label: 'Water Heating Font Size (px)', helper: 'Standaard 8' },
@@ -12621,7 +12665,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           washing_machine_text_color: { label: 'Washing Machine Tekstkleur', helper: 'Kleur applied to the washing machine power text.' },
           dryer_text_color: { label: 'Dryer Tekstkleur', helper: 'Kleur applied to the dryer power text.' },
           refrigerator_text_color: { label: 'Refrigerator Tekstkleur', helper: 'Kleur applied to the refrigerator power text.' },
-          freezer_color: { label: 'Vriezer Tekstkleur', helper: 'Kleur applied to the freezer power text.' },
+          freezer_text_color: { label: 'Vriezer Tekstkleur', helper: 'Kleur applied to the freezer power text.' },
           windmill_flow_color: { label: 'Windmolen Flow Kleur', helper: 'Kleur applied to the windmill flow (data-flow-key="windmill-inverter1" / "windmill-inverter2").' },
           windmill_text_color: { label: 'Windmolen Tekstkleur', helper: 'Kleur applied to the windmill power text (data-role="windmill-power").' },
           header_font_size: { label: 'Header Font Size (px)', helper: 'Standaard 8' },
@@ -12639,6 +12683,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           washing_machine_font_size: { label: 'Washing Machine Font Size (px)', helper: 'Standaard 8' },
           dryer_font_size: { label: 'Dryer Font Size (px)', helper: 'Standaard 8' },
           refrigerator_font_size: { label: 'Refrigerator Font Size (px)', helper: 'Standaard 8' },
+          freezer_font_size: { label: 'Freezer Font Size (px)', helper: 'Standaard 8' },
           grid_font_size: { label: 'Net Font Size (px)', helper: 'Standaard 8' },
           car_power_font_size: { label: 'Auto vermogen Font Size (px)', helper: 'Standaard 8' },
           car2_power_font_size: { label: 'Auto 2 vermogen Font Size (px)', helper: 'Standaard 8' },
@@ -12901,6 +12946,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           sensor_dishwasher_consumption: { label: 'Dish Washer', helper: 'sensor for Dish Washer Load.' },
           sensor_dryer_consumption: { label: 'Dryer', helper: 'sensor for dryer power/consumption.' },
           sensor_refrigerator_consumption: { label: 'Refrigerator', helper: 'sensor for refrigerator power/consumption.' },
+          sensor_freezer_consumption: { label: 'Congelador', helper: 'sensor for freezer power/consumption.' },
           hot_water_text_color: { label: 'Water Heating Color del texto', helper: 'Color applied to the hot water power text.' },
           dishwasher_text_color: { label: 'Dish Washer Color del texto', helper: 'Color applied to the dish washer power text.' },
           hot_water_font_size: { label: 'Water Heating Font Size (px)', helper: 'Predeterminado 8' },
@@ -12987,7 +13033,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           washing_machine_text_color: { label: 'Washing Machine Color del texto', helper: 'Color applied to the washing machine power text.' },
           dryer_text_color: { label: 'Dryer Color del texto', helper: 'Color applied to the dryer power text.' },
           refrigerator_text_color: { label: 'Refrigerator Color del texto', helper: 'Color applied to the refrigerator power text.' },
-          freezer_color: { label: 'Congelador Color del texto', helper: 'Color applied to the freezer power text.' },
+          freezer_text_color: { label: 'Congelador Color del texto', helper: 'Color applied to the freezer power text.' },
           windmill_flow_color: { label: 'Aerogenerador Flow Color', helper: 'Color applied to the windmill flow (data-flow-key="windmill-inverter1" / "windmill-inverter2").' },
           windmill_text_color: { label: 'Aerogenerador Color del texto', helper: 'Color applied to the windmill power text (data-role="windmill-power").' },
           header_font_size: { label: 'Header Font Size (px)', helper: 'Predeterminado 8' },
@@ -13005,6 +13051,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           washing_machine_font_size: { label: 'Washing Machine Font Size (px)', helper: 'Predeterminado 8' },
           dryer_font_size: { label: 'Dryer Font Size (px)', helper: 'Predeterminado 8' },
           refrigerator_font_size: { label: 'Refrigerator Font Size (px)', helper: 'Predeterminado 8' },
+          freezer_font_size: { label: 'Freezer Font Size (px)', helper: 'Predeterminado 8' },
           grid_font_size: { label: 'Red Font Size (px)', helper: 'Predeterminado 8' },
           car_power_font_size: { label: 'Coche potencia Font Size (px)', helper: 'Predeterminado 8' },
           car2_power_font_size: { label: 'Coche 2 potencia Font Size (px)', helper: 'Predeterminado 8' },
@@ -13413,6 +13460,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
         { name: 'sensor_dishwasher_consumption', label: fields.sensor_dishwasher_consumption.label, helper: fields.sensor_dishwasher_consumption.helper, selector: entitySelector },
         { name: 'sensor_dryer_consumption', label: fields.sensor_dryer_consumption.label, helper: fields.sensor_dryer_consumption.helper, selector: entitySelector },
         { name: 'sensor_refrigerator_consumption', label: fields.sensor_refrigerator_consumption.label, helper: fields.sensor_refrigerator_consumption.helper, selector: entitySelector },
+        { name: 'sensor_freezer_consumption', label: fields.sensor_freezer_consumption.label, helper: fields.sensor_freezer_consumption.helper, selector: entitySelector },
         { name: 'heat_pump_text_color', label: fields.heat_pump_text_color.label, helper: fields.heat_pump_text_color.helper, selector: { color_picker: {} }, default: '#FFA500' },
         { name: 'pool_flow_color', label: fields.pool_flow_color.label, helper: fields.pool_flow_color.helper, selector: { color_picker: {} }, default: '#0080ff' },
         { name: 'pool_text_color', label: fields.pool_text_color.label, helper: fields.pool_text_color.helper, selector: { color_picker: {} }, default: '#FFFFFF' },
@@ -13421,6 +13469,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
         { name: 'dishwasher_text_color', label: fields.dishwasher_text_color.label, helper: fields.dishwasher_text_color.helper, selector: { color_picker: {} }, default: '#FFFFFF' },
         { name: 'dryer_text_color', label: fields.dryer_text_color.label, helper: fields.dryer_text_color.helper, selector: { color_picker: {} }, default: '#FFFFFF' },
         { name: 'refrigerator_text_color', label: fields.refrigerator_text_color.label, helper: fields.refrigerator_text_color.helper, selector: { color_picker: {} }, default: '#FFFFFF' },
+        { name: 'freezer_text_color', label: fields.freezer_text_color.label, helper: fields.freezer_text_color.helper, selector: { color_picker: {} }, default: '#FFFFFF' },
         { name: 'load_flow_color', label: fields.load_flow_color.label, helper: fields.load_flow_color.helper, selector: { color_picker: {} } },
         { name: 'load_text_color', label: fields.load_text_color.label, helper: fields.load_text_color.helper, selector: { color_picker: {} }, default: '#FFFFFF' },
         { name: 'house_total_color', label: fields.house_total_color.label, helper: fields.house_total_color.helper, selector: { color_picker: {} }, default: '#00FFFF' },
@@ -13435,6 +13484,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
         { name: 'dishwasher_font_size', label: fields.dishwasher_font_size.label, helper: fields.dishwasher_font_size.helper, selector: { text: { mode: 'blur' } } },
         { name: 'dryer_font_size', label: fields.dryer_font_size.label, helper: fields.dryer_font_size.helper, selector: { text: { mode: 'blur' } } },
         { name: 'refrigerator_font_size', label: fields.refrigerator_font_size.label, helper: fields.refrigerator_font_size.helper, selector: { text: { mode: 'blur' } } },
+        { name: 'freezer_font_size', label: fields.freezer_font_size.label, helper: fields.freezer_font_size.helper, selector: { text: { mode: 'blur' } } },
         { name: 'load_font_size', label: fields.load_font_size.label, helper: fields.load_font_size.helper, selector: { text: { mode: 'blur' } } },
 
       ]),
