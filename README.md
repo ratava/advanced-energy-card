@@ -12,12 +12,12 @@ Support Brent - ratava ![Donate Brent Wesley @ratava](https://github.com/user-at
 
 ## Language Selection
 
-* [English](#english)
-* [Italiano](#italiano)
-* [Deutsch](#deutsch)
-* [Français](#français)
-* [Nederlands](#nederlands)
-* [Español](#español)
+- [English](#english)
+- [Italiano](#italiano)
+- [Deutsch](#deutsch)
+- [Français](#français)
+- [Nederlands](#nederlands)
+- [Español](#español)
 
 ---
 
@@ -29,27 +29,27 @@ Advanced Energy Card is a Home Assistant custom Lovelace card that renders anima
 
 ### Key Features
 
-* New futuristic house with a completely redesigned graphics system, allowing for more functionality  
-* New guided Initial Configuration
-* Up to six PV sensors with two arrays supported per string or totalized inputs
-* Up to four battery systems with SOC, power, and battery‑level visualization for four batteries. (2 per inverter if using 2 inverters)
-* Additional battery information displayed in the battery popup
-* Dynamic display of windmill power and up to two EVs with state of charge and power consumption or return
-* Animated grid, load, PV, battery, and EV flows with dynamic color based on thresholds and selectable animation styles
-* Configurable grid animation threshold (default 100 W) to suppress low‑level import/export chatter
-* Adjustable animation speed multiplier (-3× to 3×, default 1×, pause/reverse supported) and per‑flow visibility thresholds
-* Daily energy production badge
-* Daily import and export totals
-* Swimming pool power consumption now shown on the main graphic and can now be hidden if not in use
-* Heat pump/AC power and Hot Water System consumption now shown
-* Washing Machine, Dryer, Refrigerator, Dishwasher now included in popup
-* Load warning/critical color overrides and a configurable low‑SOC threshold for the battery liquid fill
-* Font selection, font size, and text color available for all displayed entities
-* Update interval slider (0–60 s, default 5 s) with optional real‑time refresh when set to 0
-* Popup information displays for House, Solar, Battery, Grid, and Inverter  
-* Each has six slots for entities with name overrides and font‑color overrides.
-* Popup entries can be clicked to show the HA Entity.
-* Many new features coming, with support for more items
+- New futuristic house with a completely redesigned graphics system, allowing for more functionality  
+- New guided Initial Configuration
+- Up to six PV sensors with two arrays supported per string or totalized inputs
+- Up to four battery systems with SOC, power, and battery‑level visualization for four batteries. (2 per inverter if using 2 inverters)
+- Additional battery information displayed in the battery popup
+- Dynamic display of windmill power and up to two EVs with state of charge and power consumption or return
+- Animated grid, load, PV, battery, and EV flows with dynamic color based on thresholds and selectable animation styles
+- Configurable grid animation threshold (default 100 W) to suppress low‑level import/export chatter
+- Adjustable animation speed multiplier (-3× to 3×, default 1×, pause/reverse supported) and per‑flow visibility thresholds
+- Daily energy production badge
+- Daily import and export totals
+- Swimming pool power consumption now shown on the main graphic and can now be hidden if not in use
+- Heat pump/AC power and Hot Water System consumption now shown
+- Washing Machine, Dryer, Refrigerator, Dishwasher now included in popup
+- Load warning/critical color overrides and a configurable low‑SOC threshold for the battery liquid fill
+- Font selection, font size, and text color available for all displayed entities
+- Update interval slider (0–60 s, default 5 s) with optional real‑time refresh when set to 0
+- Popup information displays for House, Solar, Battery, Grid, and Inverter  
+- Each has six slots for entities with name overrides and font‑color overrides.
+- Popup entries can be clicked to show the HA Entity.
+- Many new features coming, with support for more items
 
 ### Installation
 
@@ -246,9 +246,9 @@ lovelace:
 
 The card now selects the grid animation path automatically:
 
-* When a PV total (`sensor_pv_total`) or at least one Array 1 string sensor exists, imports and exports animate along the inverter conduit just like before.
-* If `sensor_pv_total` and all Array 1 string slots are left blank, the card assumes you're running directly from the grid: the animation shifts to the house branch, the grid arrow points at the home, and PV-only UI (Daily Yield badge + PV popup) stays hidden.
-* When `grid_power_only` is enabled, the card always uses the direct grid→house path and hides inverter/battery flows, even if PV sensors are configured.
+- When a PV total (`sensor_pv_total`) or at least one Array 1 string sensor exists, imports and exports animate along the inverter conduit just like before.
+- If `sensor_pv_total` and all Array 1 string slots are left blank, the card assumes you're running directly from the grid: the animation shifts to the house branch, the grid arrow points at the home, and PV-only UI (Daily Yield badge + PV popup) stays hidden.
+- When `grid_power_only` is enabled, the card always uses the direct grid→house path and hides inverter/battery flows, even if PV sensors are configured.
 
 The legacy grid→house toggle has been removed, so delete any `grid_flow_mode` entries from your YAML. Detection now happens every render and `grid_activity_threshold` still governs when the animation starts.
 
@@ -259,37 +259,37 @@ The entities specfied in here will not have any conversions done to them other t
 It is not only sensors that can be specifed in the popups. Text based entities can be displayed (e.g. alerts). If you have a sensor that needs its units converted. Please use  
 a helper to display it.
 
-* PV Popup
-  * `sensor_popup_pv_1` .. `sensor_popup_pv_6`: entity selectors for PV popup lines.
-  * `sensor_popup_pv_1_name` .. `sensor_popup_pv_6_name`: optional custom names (falls back to entity name).
-  * `sensor_popup_pv_1_color` .. `sensor_popup_pv_6_color`: per-line colour pickers (default `#00FFFF`).
-  * `sensor_popup_pv_1_font_size` .. `sensor_popup_pv_6_font_size`: per-line font-size (px) (default `12`).
-  * Clickable areas are the Daily PV Yield box and the Solar Panels. Click to toggle the PV popup; clicking the popup closes it.
-* House Popup
-  * `sensor_popup_house_1` .. `sensor_popup_house_6`: entity selectors for House popup lines.
-  * `sensor_popup_house_1_name` .. `sensor_popup_house_6_name`: optional custom names.
-  * `sensor_popup_house_1_color` .. `sensor_popup_house_6_color`: per-line colour pickers (default `#00FFFF`).
-  * `sensor_popup_house_1_font_size` .. `sensor_popup_house_6_font_size`: per-line font-size (px) (default `12`).
-  * When configured, the House popup also auto-includes: Heat Pump/AC, Pool, Washing Machine, Dryer, Dish Washer, and Refrigerator (using the popup slot styling).
-  * House clickable area is the House; click to toggle the House popup and click the popup to close.
-* Battery Popup
-  * `sensor_popup_bat_1` .. `sensor_popup_bat_6`: entity selectors for Battery popup lines.
-  * `sensor_popup_bat_1_name` .. `sensor_popup_bat_6_name`: optional custom names.
-  * `sensor_popup_bat_1_color` .. `sensor_popup_bat_6_color`: per-line colour pickers (default `#00FFFF`).
-  * `sensor_popup_bat_1_font_size` .. `sensor_popup_bat_6_font_size`: per-line font-size (px) (default `12`).
-  * Battery clickable areads is the battery image. Click to toggle the Battery popup; clicking the popup closes it.
-* Grid Popup
-  * `sensor_popup_grid_1` .. `sensor_popup_grid_6`: entity selectors for Grid popup lines.
-  * `sensor_popup_grid_1_name` .. `sensor_popup_grid_6_name`: optional custom names.
-  * `sensor_popup_grid_1_color` .. `sensor_popup_grid_6_color`: per-line colour pickers (default `#00FFFF`).
-  * `sensor_popup_grid_1_font_size` .. `sensor_popup_grid_6_font_size`: per-line font-size (px) (default `12`).
-  * Grid clickable area is the Grid section; click to toggle the Grid popup and click the popup to close.
-* Inverter Popup
-  * `sensor_popup_inverter_1` .. `sensor_popup_inverter_6`: entity selectors for Inverter popup lines.
-  * `sensor_popup_inverter_1_name` .. `sensor_popup_inverter_6_name`: optional custom names.
-  * `sensor_popup_inverter_1_color` .. `sensor_popup_inverter_6_color`: per-line colour pickers (default `#00FFFF`).
-  * `sensor_popup_inverter_1_font_size` .. `sensor_popup_inverter_6_font_size`: per-line font-size (px) (default `12`).
-  * Inverter clickable area is the Inverter section; click to toggle the Inverter popup and click the popup to close.
+- PV Popup
+  - `sensor_popup_pv_1` .. `sensor_popup_pv_6`: entity selectors for PV popup lines.
+  - `sensor_popup_pv_1_name` .. `sensor_popup_pv_6_name`: optional custom names (falls back to entity name).
+  - `sensor_popup_pv_1_color` .. `sensor_popup_pv_6_color`: per-line colour pickers (default `#00FFFF`).
+  - `sensor_popup_pv_1_font_size` .. `sensor_popup_pv_6_font_size`: per-line font-size (px) (default `12`).
+  - Clickable areas are the Daily PV Yield box and the Solar Panels. Click to toggle the PV popup; clicking the popup closes it.
+- House Popup
+  - `sensor_popup_house_1` .. `sensor_popup_house_6`: entity selectors for House popup lines.
+  - `sensor_popup_house_1_name` .. `sensor_popup_house_6_name`: optional custom names.
+  - `sensor_popup_house_1_color` .. `sensor_popup_house_6_color`: per-line colour pickers (default `#00FFFF`).
+  - `sensor_popup_house_1_font_size` .. `sensor_popup_house_6_font_size`: per-line font-size (px) (default `12`).
+  - When configured, the House popup also auto-includes: Heat Pump/AC, Pool, Washing Machine, Dryer, Dish Washer, and Refrigerator (using the popup slot styling).
+  - House clickable area is the House; click to toggle the House popup and click the popup to close.
+- Battery Popup
+  - `sensor_popup_bat_1` .. `sensor_popup_bat_6`: entity selectors for Battery popup lines.
+  - `sensor_popup_bat_1_name` .. `sensor_popup_bat_6_name`: optional custom names.
+  - `sensor_popup_bat_1_color` .. `sensor_popup_bat_6_color`: per-line colour pickers (default `#00FFFF`).
+  - `sensor_popup_bat_1_font_size` .. `sensor_popup_bat_6_font_size`: per-line font-size (px) (default `12`).
+  - Battery clickable areads is the battery image. Click to toggle the Battery popup; clicking the popup closes it.
+- Grid Popup
+  - `sensor_popup_grid_1` .. `sensor_popup_grid_6`: entity selectors for Grid popup lines.
+  - `sensor_popup_grid_1_name` .. `sensor_popup_grid_6_name`: optional custom names.
+  - `sensor_popup_grid_1_color` .. `sensor_popup_grid_6_color`: per-line colour pickers (default `#00FFFF`).
+  - `sensor_popup_grid_1_font_size` .. `sensor_popup_grid_6_font_size`: per-line font-size (px) (default `12`).
+  - Grid clickable area is the Grid section; click to toggle the Grid popup and click the popup to close.
+- Inverter Popup
+  - `sensor_popup_inverter_1` .. `sensor_popup_inverter_6`: entity selectors for Inverter popup lines.
+  - `sensor_popup_inverter_1_name` .. `sensor_popup_inverter_6_name`: optional custom names.
+  - `sensor_popup_inverter_1_color` .. `sensor_popup_inverter_6_color`: per-line colour pickers (default `#00FFFF`).
+  - `sensor_popup_inverter_1_font_size` .. `sensor_popup_inverter_6_font_size`: per-line font-size (px) (default `12`).
+  - Inverter clickable area is the Inverter section; click to toggle the Inverter popup and click the popup to close.
 
 ### Additional Array 2 & Options (EN)
 
@@ -307,8 +307,21 @@ Car colours & fonts: `car1_name_color`, `car2_name_color`, `car1_color`, `car2_c
 
 Notes:
 
-* When Array 2 is active the PV flow mapping is: `pv1` → Array 1 (primary), `pv2` → Array 2 (secondary). The PV TOT line shows the combined production where applicable.
-* Individual PV strings are no longer rendered on the main card; use the PV popup (`sensor_popup_pv_1` .. `sensor_popup_pv_6`) to show per-string sensors if desired.
+- When Array 2 is active the PV flow mapping is: `pv1` → Array 1 (primary), `pv2` → Array 2 (secondary). The PV TOT line shows the combined production where applicable.
+- Individual PV strings are no longer rendered on the main card; use the PV popup (`sensor_popup_pv_1` .. `sensor_popup_pv_6`) to show per-string sensors if desired.
+
+### Kiosk Mode
+
+- Full Screen Kiosk Mode for this card can be achieved by using the Kiosk Mode HACS Plugin [Kiosk Mode by NemesisRE](https://github.com/NemesisRE/kiosk-mode) or for Android Tablets
+- Android Tablet users can follow this Guide [How to Set Up Home Assistant Kiosk Mode on Android](https://www.airdroid.com/mdm/home-assistant-kiosk-mode/)
+- For Amazon Echo display users a special option has been added in the General Setting called Echo Alive. It is designed to keep the screen from blanking while in full screen.
+
+### Bug Reporting
+
+- If you have any genuine problems or feature requests please log an Issue on the github repository
+- If you are reporting a bug please be as descriptive as possible. Include screenshots. If it relates to specific sensors not working please supply a screenshot of the sensor configuration.
+- Feature requests will need to have genuine merit and not be one off requests for personal change for your own configuration. It must have merit for other users. (for instance additional Languages)
+- Not all feature requests will be actioned. That said this card is being actively developed. New layout with different themes will be added in future versions.
 
 ---
 
@@ -320,27 +333,27 @@ Advanced Energy Card è una card personalizzata Lovelace per Home Assistant che 
 
 ### Caratteristiche Principali
 
-* Nuova casa futuristica con un sistema grafico completamente ridisegnato, che consente maggiore funzionalità
-* Nuova configurazione iniziale guidata
-* Fino a sei sensori fotovoltaici con due array supportati per stringa o ingressi totalizzati
-* Fino a quattro sistemi di batterie con visualizzazione SOC, potenza e livello della batteria per quattro batterie (2 per inverter se si utilizzano 2 inverter)
-* Informazioni aggiuntive sulla batteria visualizzate nel popup della batteria
-* Visualizzazione dinamica della potenza della turbina eolica e fino a due veicoli elettrici con stato di carica e consumo o ritorno di potenza
-* Flussi animati di rete, carico, fotovoltaico, batteria e veicoli elettrici con colore dinamico basato su soglie e stili di animazione selezionabili
-* Soglia di animazione della rete configurabile (predefinita 100 W) per sopprimere le fluttuazioni di importazione/esportazione a basso livello
-* Moltiplicatore di velocità di animazione regolabile (da -3× a 3×, predefinito 1×, pausa/inversione supportata) e soglie di visibilità per flusso
-* Badge di produzione energetica giornaliera
-* Totali di importazione ed esportazione giornalieri
-* Il consumo energetico della piscina ora mostrato sul grafico principale e può essere nascosto se non in uso
-* Consumo di pompa di calore/climatizzatore e sistema acqua calda ora mostrati
-* Lavatrice, asciugatrice, frigorifero, lavastoviglie ora inclusi nel popup
-* Override dei colori di avviso/critico del carico e soglia SOC bassa configurabile per il riempimento liquido della batteria
-* Selezione del carattere, dimensione del carattere e colore del testo disponibili per tutte le entità visualizzate
-* Cursore dell'intervallo di aggiornamento (0-60 s, predefinito 5 s) con aggiornamento in tempo reale opzionale quando impostato su 0
-* Popup informativi per Casa, Solare, Batteria, Rete e Inverter
-* Ognuno ha sei slot per le entità con override dei nomi e override dei colori dei caratteri
-* Le voci dei popup possono essere cliccate per mostrare l'entità HA
-* Molte nuove funzionalità in arrivo, con supporto per più elementi
+- Nuova casa futuristica con un sistema grafico completamente ridisegnato, che consente maggiore funzionalità
+- Nuova configurazione iniziale guidata
+- Fino a sei sensori fotovoltaici con due array supportati per stringa o ingressi totalizzati
+- Fino a quattro sistemi di batterie con visualizzazione SOC, potenza e livello della batteria per quattro batterie (2 per inverter se si utilizzano 2 inverter)
+- Informazioni aggiuntive sulla batteria visualizzate nel popup della batteria
+- Visualizzazione dinamica della potenza della turbina eolica e fino a due veicoli elettrici con stato di carica e consumo o ritorno di potenza
+- Flussi animati di rete, carico, fotovoltaico, batteria e veicoli elettrici con colore dinamico basato su soglie e stili di animazione selezionabili
+- Soglia di animazione della rete configurabile (predefinita 100 W) per sopprimere le fluttuazioni di importazione/esportazione a basso livello
+- Moltiplicatore di velocità di animazione regolabile (da -3× a 3×, predefinito 1×, pausa/inversione supportata) e soglie di visibilità per flusso
+- Badge di produzione energetica giornaliera
+- Totali di importazione ed esportazione giornalieri
+- Il consumo energetico della piscina ora mostrato sul grafico principale e può essere nascosto se non in uso
+- Consumo di pompa di calore/climatizzatore e sistema acqua calda ora mostrati
+- Lavatrice, asciugatrice, frigorifero, lavastoviglie ora inclusi nel popup
+- Override dei colori di avviso/critico del carico e soglia SOC bassa configurabile per il riempimento liquido della batteria
+- Selezione del carattere, dimensione del carattere e colore del testo disponibili per tutte le entità visualizzate
+- Cursore dell'intervallo di aggiornamento (0-60 s, predefinito 5 s) con aggiornamento in tempo reale opzionale quando impostato su 0
+- Popup informativi per Casa, Solare, Batteria, Rete e Inverter
+- Ognuno ha sei slot per le entità con override dei nomi e override dei colori dei caratteri
+- Le voci dei popup possono essere cliccate per mostrare l'entità HA
+- Molte nuove funzionalità in arrivo, con supporto per più elementi
 
 ### Installazione
 
@@ -435,6 +448,19 @@ lovelace:
 
 > **Requisito sensore batteria:** Per ogni batteria (`bat1`..`bat4`) fornire `sensor_batX_power` combinato **o** entrambi `sensor_batX_charge_power` e `sensor_batX_discharge_power`. Le letture possono essere in W o kW; la card gestisce automaticamente le conversioni.
 
+### Modalità Kiosk
+
+- La modalità Kiosk a schermo intero per questa card può essere ottenuta utilizzando il plugin HACS Kiosk Mode [Kiosk Mode by NemesisRE](https://github.com/NemesisRE/kiosk-mode) o per tablet Android
+- Gli utenti di tablet Android possono seguire questa guida [How to Set Up Home Assistant Kiosk Mode on Android](https://www.airdroid.com/mdm/home-assistant-kiosk-mode/)
+- Per gli utenti di display Amazon Echo è stata aggiunta un'opzione speciale nelle impostazioni generali chiamata Echo Alive. È progettata per evitare che lo schermo si spenga mentre è a schermo intero.
+
+### Segnalazione Bug
+
+- Se hai problemi reali o richieste di funzionalità, segnala un Issue sul repository github
+- Se stai segnalando un bug, sii il più descrittivo possibile. Includi screenshot. Se riguarda sensori specifici che non funzionano, fornisci uno screenshot della configurazione del sensore.
+- Le richieste di funzionalità devono avere un valore genuino e non essere richieste uniche per modifiche personali della tua configurazione. Devono avere valore per altri utenti (ad esempio lingue aggiuntive)
+- Non tutte le richieste di funzionalità verranno implementate. Detto questo, questa card è in sviluppo attivo. Nuovi layout con temi diversi saranno aggiunti nelle versioni future.
+
 ---
 
 ## Deutsch
@@ -445,27 +471,27 @@ Advanced Energy Card ist eine benutzerdefinierte Lovelace-Karte für Home Assist
 
 ### Hauptmerkmale
 
-* Neues futuristisches Haus mit einem völlig neu gestalteten Grafiksystem, das mehr Funktionalität ermöglicht
-* Neue geführte Erstkonfiguration
-* Bis zu sechs PV-Sensoren mit zwei Arrays, die pro String oder totalisierten Eingängen unterstützt werden
-* Bis zu vier Batteriesysteme mit SOC-, Leistungs- und Batteriestandvisualisierung für vier Batterien (2 pro Wechselrichter bei Verwendung von 2 Wechselrichtern)
-* Zusätzliche Batterieinformationen werden im Batterie-Popup angezeigt
-* Dynamische Anzeige der Windmühlenleistung und bis zu zwei Elektrofahrzeuge mit Ladezustand und Stromverbrauch oder -rückgabe
-* Animierte Netz-, Last-, PV-, Batterie- und EV-Flüsse mit dynamischer Farbe basierend auf Schwellenwerten und auswählbaren Animationsstilen
-* Konfigurierbare Netzanimationsschwelle (Standard 100 W) zur Unterdrückung von Import-/Export-Schwankungen auf niedrigem Niveau
-* Einstellbarer Animationsgeschwindigkeitsmultiplikator (-3× bis 3×, Standard 1×, Pause/Rückwärts unterstützt) und Sichtbarkeitsschwellen pro Fluss
-* Tägliches Energieproduktions-Badge
-* Tägliche Import- und Exportgesamtwerte
-* Poolstromverbrauch wird jetzt auf der Hauptgrafik angezeigt und kann ausgeblendet werden, wenn er nicht verwendet wird
-* Wärmepumpen-/Klimaanlagenleistung und Warmwassersystemverbrauch werden jetzt angezeigt
-* Waschmaschine, Trockner, Kühlschrank, Geschirrspüler jetzt im Popup enthalten
-* Überschreibungen der Warnung/kritischen Farbe der Last und eine konfigurierbare niedrige SOC-Schwelle für die Batterieflüssigkeitsfüllung
-* Schriftauswahl, Schriftgröße und Textfarbe verfügbar für alle angezeigten Entitäten
-* Aktualisierungsintervall-Schieberegler (0-60 s, Standard 5 s) mit optionaler Echtzeit-Aktualisierung, wenn auf 0 gesetzt
-* Popup-Informationsanzeigen für Haus, Solar, Batterie, Netz und Wechselrichter
-* Jedes hat sechs Slots für Entitäten mit Namensüberschreibungen und Schriftfarbenüberschreibungen
-* Popup-Einträge können angeklickt werden, um die HA-Entität anzuzeigen
-* Viele neue Funktionen kommen, mit Unterstützung für weitere Elemente
+- Neues futuristisches Haus mit einem völlig neu gestalteten Grafiksystem, das mehr Funktionalität ermöglicht
+- Neue geführte Erstkonfiguration
+- Bis zu sechs PV-Sensoren mit zwei Arrays, die pro String oder totalisierten Eingängen unterstützt werden
+- Bis zu vier Batteriesysteme mit SOC-, Leistungs- und Batteriestandvisualisierung für vier Batterien (2 pro Wechselrichter bei Verwendung von 2 Wechselrichtern)
+- Zusätzliche Batterieinformationen werden im Batterie-Popup angezeigt
+- Dynamische Anzeige der Windmühlenleistung und bis zu zwei Elektrofahrzeuge mit Ladezustand und Stromverbrauch oder -rückgabe
+- Animierte Netz-, Last-, PV-, Batterie- und EV-Flüsse mit dynamischer Farbe basierend auf Schwellenwerten und auswählbaren Animationsstilen
+- Konfigurierbare Netzanimationsschwelle (Standard 100 W) zur Unterdrückung von Import-/Export-Schwankungen auf niedrigem Niveau
+- Einstellbarer Animationsgeschwindigkeitsmultiplikator (-3× bis 3×, Standard 1×, Pause/Rückwärts unterstützt) und Sichtbarkeitsschwellen pro Fluss
+- Tägliches Energieproduktions-Badge
+- Tägliche Import- und Exportgesamtwerte
+- Poolstromverbrauch wird jetzt auf der Hauptgrafik angezeigt und kann ausgeblendet werden, wenn er nicht verwendet wird
+- Wärmepumpen-/Klimaanlagenleistung und Warmwassersystemverbrauch werden jetzt angezeigt
+- Waschmaschine, Trockner, Kühlschrank, Geschirrspüler jetzt im Popup enthalten
+- Überschreibungen der Warnung/kritischen Farbe der Last und eine konfigurierbare niedrige SOC-Schwelle für die Batterieflüssigkeitsfüllung
+- Schriftauswahl, Schriftgröße und Textfarbe verfügbar für alle angezeigten Entitäten
+- Aktualisierungsintervall-Schieberegler (0-60 s, Standard 5 s) mit optionaler Echtzeit-Aktualisierung, wenn auf 0 gesetzt
+- Popup-Informationsanzeigen für Haus, Solar, Batterie, Netz und Wechselrichter
+- Jedes hat sechs Slots für Entitäten mit Namensüberschreibungen und Schriftfarbenüberschreibungen
+- Popup-Einträge können angeklickt werden, um die HA-Entität anzuzeigen
+- Viele neue Funktionen kommen, mit Unterstützung für weitere Elemente
 
 ### Installation
 
@@ -560,6 +586,19 @@ lovelace:
 
 > **Batteriesensor-Anforderung:** Für jede Batterie (`bat1`..`bat4`) entweder den kombinierten `sensor_batX_power` **oder** beide `sensor_batX_charge_power` und `sensor_batX_discharge_power` bereitstellen. Messwerte können in W oder kW vorliegen; die Karte führt automatisch Konvertierungen durch.
 
+### Kiosk-Modus
+
+- Der Vollbild-Kiosk-Modus für diese Karte kann durch Verwendung des Kiosk Mode HACS Plugins [Kiosk Mode by NemesisRE](https://github.com/NemesisRE/kiosk-mode) oder für Android-Tablets erreicht werden
+- Android-Tablet-Benutzer können dieser Anleitung folgen [How to Set Up Home Assistant Kiosk Mode on Android](https://www.airdroid.com/mdm/home-assistant-kiosk-mode/)
+- Für Amazon Echo Display-Benutzer wurde eine spezielle Option in den allgemeinen Einstellungen namens Echo Alive hinzugefügt. Sie ist darauf ausgelegt, zu verhindern, dass der Bildschirm im Vollbildmodus leer wird.
+
+### Fehlermeldung
+
+- Wenn Sie echte Probleme oder Feature-Anfragen haben, melden Sie bitte ein Issue im Github-Repository
+- Wenn Sie einen Fehler melden, seien Sie bitte so beschreibend wie möglich. Fügen Sie Screenshots bei. Wenn es sich auf bestimmte Sensoren bezieht, die nicht funktionieren, stellen Sie bitte einen Screenshot der Sensorkonfiguration zur Verfügung.
+- Feature-Anfragen müssen echten Wert haben und dürfen keine einmaligen Anfragen für persönliche Änderungen Ihrer eigenen Konfiguration sein. Sie müssen Wert für andere Benutzer haben (z. B. zusätzliche Sprachen)
+- Nicht alle Feature-Anfragen werden umgesetzt. Allerdings wird diese Karte aktiv entwickelt. Neue Layouts mit verschiedenen Themes werden in zukünftigen Versionen hinzugefügt.
+
 ---
 
 ## Français
@@ -570,27 +609,27 @@ Advanced Energy Card est une carte Lovelace personnalisée pour Home Assistant q
 
 ### Caractéristiques Principales
 
-* Nouvelle maison futuriste avec un système graphique entièrement repensé, permettant plus de fonctionnalités
-* Nouvelle configuration initiale guidée
-* Jusqu'à six capteurs PV avec deux panneaux supportés par chaîne ou entrées totalisées
-* Jusqu'à quatre systèmes de batteries avec visualisation SOC, puissance et niveau de batterie pour quatre batteries (2 par onduleur si vous utilisez 2 onduleurs)
-* Informations supplémentaires sur la batterie affichées dans le popup de la batterie
-* Affichage dynamique de la puissance de l'éolienne et jusqu'à deux véhicules électriques avec état de charge et consommation ou retour de puissance
-* Flux animés de réseau, charge, PV, batterie et VE avec couleur dynamique basée sur des seuils et styles d'animation sélectionnables
-* Seuil d'animation du réseau configurable (par défaut 100 W) pour supprimer les fluctuations d'import/export de bas niveau
-* Multiplicateur de vitesse d'animation réglable (-3× à 3×, par défaut 1×, pause/inversion supportée) et seuils de visibilité par flux
-* Badge de production d'énergie quotidienne
-* Totaux d'importation et d'exportation quotidiens
-* Consommation électrique de la piscine maintenant affichée sur le graphique principal et peut être masquée si non utilisée
-* Consommation de la pompe à chaleur/climatisation et du système d'eau chaude maintenant affichées
-* Lave-linge, sèche-linge, réfrigérateur, lave-vaisselle maintenant inclus dans le popup
-* Remplacements de couleur d'avertissement/critique de charge et seuil SOC bas configurable pour le remplissage liquide de la batterie
-* Sélection de police, taille de police et couleur de texte disponibles pour toutes les entités affichées
-* Curseur d'intervalle de mise à jour (0-60 s, par défaut 5 s) avec actualisation en temps réel optionnelle lorsqu'il est réglé sur 0
-* Affichages d'informations popup pour Maison, Solaire, Batterie, Réseau et Onduleur
-* Chacun dispose de six emplacements pour les entités avec remplacements de noms et remplacements de couleurs de police
-* Les entrées des popups peuvent être cliquées pour afficher l'entité HA
-* De nombreuses nouvelles fonctionnalités à venir, avec prise en charge de plus d'éléments
+- Nouvelle maison futuriste avec un système graphique entièrement repensé, permettant plus de fonctionnalités
+- Nouvelle configuration initiale guidée
+- Jusqu'à six capteurs PV avec deux panneaux supportés par chaîne ou entrées totalisées
+- Jusqu'à quatre systèmes de batteries avec visualisation SOC, puissance et niveau de batterie pour quatre batteries (2 par onduleur si vous utilisez 2 onduleurs)
+- Informations supplémentaires sur la batterie affichées dans le popup de la batterie
+- Affichage dynamique de la puissance de l'éolienne et jusqu'à deux véhicules électriques avec état de charge et consommation ou retour de puissance
+- Flux animés de réseau, charge, PV, batterie et VE avec couleur dynamique basée sur des seuils et styles d'animation sélectionnables
+- Seuil d'animation du réseau configurable (par défaut 100 W) pour supprimer les fluctuations d'import/export de bas niveau
+- Multiplicateur de vitesse d'animation réglable (-3× à 3×, par défaut 1×, pause/inversion supportée) et seuils de visibilité par flux
+- Badge de production d'énergie quotidienne
+- Totaux d'importation et d'exportation quotidiens
+- Consommation électrique de la piscine maintenant affichée sur le graphique principal et peut être masquée si non utilisée
+- Consommation de la pompe à chaleur/climatisation et du système d'eau chaude maintenant affichées
+- Lave-linge, sèche-linge, réfrigérateur, lave-vaisselle maintenant inclus dans le popup
+- Remplacements de couleur d'avertissement/critique de charge et seuil SOC bas configurable pour le remplissage liquide de la batterie
+- Sélection de police, taille de police et couleur de texte disponibles pour toutes les entités affichées
+- Curseur d'intervalle de mise à jour (0-60 s, par défaut 5 s) avec actualisation en temps réel optionnelle lorsqu'il est réglé sur 0
+- Affichages d'informations popup pour Maison, Solaire, Batterie, Réseau et Onduleur
+- Chacun dispose de six emplacements pour les entités avec remplacements de noms et remplacements de couleurs de police
+- Les entrées des popups peuvent être cliquées pour afficher l'entité HA
+- De nombreuses nouvelles fonctionnalités à venir, avec prise en charge de plus d'éléments
 
 ### Installation
 
@@ -685,6 +724,19 @@ lovelace:
 
 > **Exigence de capteur de batterie :** Pour chaque batterie (`bat1`..`bat4`) fournir soit le `sensor_batX_power` combiné **ou** à la fois `sensor_batX_charge_power` et `sensor_batX_discharge_power`. Les lectures peuvent être en W ou kW ; la carte gère automatiquement les conversions.
 
+### Mode Kiosque
+
+- Le mode Kiosque plein écran pour cette carte peut être réalisé en utilisant le plugin HACS Kiosk Mode [Kiosk Mode by NemesisRE](https://github.com/NemesisRE/kiosk-mode) ou pour les tablettes Android
+- Les utilisateurs de tablettes Android peuvent suivre ce guide [How to Set Up Home Assistant Kiosk Mode on Android](https://www.airdroid.com/mdm/home-assistant-kiosk-mode/)
+- Pour les utilisateurs d'écran Amazon Echo, une option spéciale a été ajoutée dans les paramètres généraux appelée Echo Alive. Elle est conçue pour empêcher l'écran de s'éteindre en mode plein écran.
+
+### Signalement de Bugs
+
+- Si vous avez des problèmes réels ou des demandes de fonctionnalités, veuillez enregistrer un Issue sur le dépôt github
+- Si vous signalez un bug, veuillez être aussi descriptif que possible. Incluez des captures d'écran. Si cela concerne des capteurs spécifiques qui ne fonctionnent pas, veuillez fournir une capture d'écran de la configuration du capteur.
+- Les demandes de fonctionnalités doivent avoir un mérite réel et ne pas être des demandes uniques pour des modifications personnelles de votre propre configuration. Elles doivent avoir un mérite pour d'autres utilisateurs (par exemple, des langues supplémentaires)
+- Toutes les demandes de fonctionnalités ne seront pas mises en œuvre. Cela dit, cette carte est activement développée. De nouvelles mises en page avec différents thèmes seront ajoutées dans les versions futures.
+
 ---
 
 ## Nederlands
@@ -695,27 +747,27 @@ Advanced Energy Card is een aangepaste Lovelace-kaart voor Home Assistant die ge
 
 ### Belangrijkste Kenmerken
 
-* Nieuw futuristisch huis met een volledig opnieuw ontworpen grafisch systeem, wat meer functionaliteit mogelijk maakt
-* Nieuwe begeleide initiële configuratie
-* Tot zes PV-sensoren met twee arrays ondersteund per string of getotaliseerde ingangen
-* Tot vier batterijsystemen met SOC-, vermogen- en batterijniveauweergave voor vier batterijen (2 per omvormer bij gebruik van 2 omvormers)
-* Aanvullende batterij-informatie weergegeven in de batterij-popup
-* Dynamische weergave van windmolenvermogen en tot twee elektrische voertuigen met laadstatus en stroomverbruik of -teruglevering
-* Geanimeerde net-, belasting-, PV-, batterij- en EV-stromen met dynamische kleur op basis van drempelwaarden en selecteerbare animatiestijlen
-* Configureerbare netanimatiedrempel (standaard 100 W) om laagniveau import-/exportschommelingen te onderdrukken
-* Aanpasbare animatiesnelheidsvermenigvuldiger (-3× tot 3×, standaard 1×, pauze/achteruit ondersteund) en zichtbaarheidsdrempels per stroom
-* Dagelijkse energieproductiebadge
-* Dagelijkse import- en exporttotalen
-* Zwembadstroomverbruik nu weergegeven op de hoofdgrafiek en kan worden verborgen indien niet in gebruik
-* Warmtepomp/AC-vermogen en warmwatersysteemverbruik nu weergegeven
-* Wasmachine, droger, koelkast, vaatwasser nu opgenomen in popup
-* Overschrijvingen voor waarschuwing/kritieke kleur van belasting en een configureerbare lage SOC-drempel voor de batterijvloeistofvulling
-* Lettertypeselectie, lettergrootte en tekstkleur beschikbaar voor alle weergegeven entiteiten
-* Update-intervalschuif (0-60 s, standaard 5 s) met optionele realtime vernieuwing wanneer ingesteld op 0
-* Popup-informatiedisplays voor Huis, Zonne-energie, Batterij, Net en Omvormer
-* Elk heeft zes slots voor entiteiten met naamsoverschrijvingen en letterkleuroverschrijvingen
-* Popup-items kunnen worden aangeklikt om de HA-entiteit te tonen
-* Veel nieuwe functies in aantocht, met ondersteuning voor meer items
+- Nieuw futuristisch huis met een volledig opnieuw ontworpen grafisch systeem, wat meer functionaliteit mogelijk maakt
+- Nieuwe begeleide initiële configuratie
+- Tot zes PV-sensoren met twee arrays ondersteund per string of getotaliseerde ingangen
+- Tot vier batterijsystemen met SOC-, vermogen- en batterijniveauweergave voor vier batterijen (2 per omvormer bij gebruik van 2 omvormers)
+- Aanvullende batterij-informatie weergegeven in de batterij-popup
+- Dynamische weergave van windmolenvermogen en tot twee elektrische voertuigen met laadstatus en stroomverbruik of -teruglevering
+- Geanimeerde net-, belasting-, PV-, batterij- en EV-stromen met dynamische kleur op basis van drempelwaarden en selecteerbare animatiestijlen
+- Configureerbare netanimatiedrempel (standaard 100 W) om laagniveau import-/exportschommelingen te onderdrukken
+- Aanpasbare animatiesnelheidsvermenigvuldiger (-3× tot 3×, standaard 1×, pauze/achteruit ondersteund) en zichtbaarheidsdrempels per stroom
+- Dagelijkse energieproductiebadge
+- Dagelijkse import- en exporttotalen
+- Zwembadstroomverbruik nu weergegeven op de hoofdgrafiek en kan worden verborgen indien niet in gebruik
+- Warmtepomp/AC-vermogen en warmwatersysteemverbruik nu weergegeven
+- Wasmachine, droger, koelkast, vaatwasser nu opgenomen in popup
+- Overschrijvingen voor waarschuwing/kritieke kleur van belasting en een configureerbare lage SOC-drempel voor de batterijvloeistofvulling
+- Lettertypeselectie, lettergrootte en tekstkleur beschikbaar voor alle weergegeven entiteiten
+- Update-intervalschuif (0-60 s, standaard 5 s) met optionele realtime vernieuwing wanneer ingesteld op 0
+- Popup-informatiedisplays voor Huis, Zonne-energie, Batterij, Net en Omvormer
+- Elk heeft zes slots voor entiteiten met naamsoverschrijvingen en letterkleuroverschrijvingen
+- Popup-items kunnen worden aangeklikt om de HA-entiteit te tonen
+- Veel nieuwe functies in aantocht, met ondersteuning voor meer items
 
 ### Installatie
 
@@ -810,6 +862,19 @@ lovelace:
 
 > **Batterijsensorvereiste:** Voor elke batterij (`bat1`..`bat4`) geef de gecombineerde `sensor_batX_power` **of** beide `sensor_batX_charge_power` en `sensor_batX_discharge_power` op. Metingen kunnen in W of kW zijn; de kaart verwerkt automatisch conversies.
 
+### Kiosk Modus
+
+- Volledig scherm Kiosk Modus voor deze kaart kan worden bereikt door gebruik te maken van de Kiosk Mode HACS Plugin [Kiosk Mode by NemesisRE](https://github.com/NemesisRE/kiosk-mode) of voor Android Tablets
+- Android Tablet gebruikers kunnen deze gids volgen [How to Set Up Home Assistant Kiosk Mode on Android](https://www.airdroid.com/mdm/home-assistant-kiosk-mode/)
+- Voor Amazon Echo display gebruikers is een speciale optie toegevoegd in de Algemene Instellingen genaamd Echo Alive. Het is ontworpen om te voorkomen dat het scherm leeg wordt tijdens volledig scherm.
+
+### Bug Rapportage
+
+- Als u echte problemen of functieverzoeken heeft, log dan een Issue op de github repository
+- Als u een bug meldt, wees dan zo beschrijvend mogelijk. Voeg screenshots toe. Als het betrekking heeft op specifieke sensoren die niet werken, lever dan een screenshot van de sensorconfiguratie.
+- Functieverzoeken moeten echte waarde hebben en geen eenmalige verzoeken zijn voor persoonlijke wijzigingen voor uw eigen configuratie. Het moet waarde hebben voor andere gebruikers (bijvoorbeeld aanvullende talen)
+- Niet alle functieverzoeken zullen worden uitgevoerd. Dat gezegd hebbende, deze kaart wordt actief ontwikkeld. Nieuwe layouts met verschillende thema's zullen worden toegevoegd in toekomstige versies.
+
 ---
 
 ## Español
@@ -820,27 +885,27 @@ Advanced Energy Card es una tarjeta Lovelace personalizada para Home Assistant q
 
 ### Características Principales
 
-* Nueva casa futurista con un sistema gráfico completamente rediseñado, que permite más funcionalidad
-* Nueva configuración inicial guiada
-* Hasta seis sensores fotovoltaicos con dos arrays soportados por string o entradas totalizadas
-* Hasta cuatro sistemas de batería con visualización de SOC, potencia y nivel de batería para cuatro baterías (2 por inversor si se usan 2 inversores)
-* Información adicional de la batería mostrada en la ventana emergente de la batería
-* Visualización dinámica de la potencia del molino de viento y hasta dos vehículos eléctricos con estado de carga y consumo o devolución de energía
-* Flujos animados de red, carga, fotovoltaica, batería y VE con color dinámico basado en umbrales y estilos de animación seleccionables
-* Umbral de animación de red configurable (predeterminado 100 W) para suprimir fluctuaciones de importación/exportación de bajo nivel
-* Multiplicador de velocidad de animación ajustable (-3× a 3×, predeterminado 1×, pausa/inversión soportada) y umbrales de visibilidad por flujo
-* Distintivo de producción de energía diaria
-* Totales de importación y exportación diarios
-* Consumo de energía de la piscina ahora mostrado en el gráfico principal y puede ocultarse si no está en uso
-* Consumo de bomba de calor/AC y sistema de agua caliente ahora mostrados
-* Lavadora, secadora, refrigerador, lavavajillas ahora incluidos en la ventana emergente
-* Anulaciones de color de advertencia/crítico de carga y umbral de SOC bajo configurable para el llenado líquido de la batería
-* Selección de fuente, tamaño de fuente y color de texto disponibles para todas las entidades mostradas
-* Control deslizante de intervalo de actualización (0-60 s, predeterminado 5 s) con actualización en tiempo real opcional cuando se establece en 0
-* Pantallas de información emergente para Casa, Solar, Batería, Red e Inversor
-* Cada uno tiene seis ranuras para entidades con anulaciones de nombres y anulaciones de colores de fuente
-* Las entradas emergentes se pueden hacer clic para mostrar la entidad HA
-* Muchas nuevas características próximamente, con soporte para más elementos
+- Nueva casa futurista con un sistema gráfico completamente rediseñado, que permite más funcionalidad
+- Nueva configuración inicial guiada
+- Hasta seis sensores fotovoltaicos con dos arrays soportados por string o entradas totalizadas
+- Hasta cuatro sistemas de batería con visualización de SOC, potencia y nivel de batería para cuatro baterías (2 por inversor si se usan 2 inversores)
+- Información adicional de la batería mostrada en la ventana emergente de la batería
+- Visualización dinámica de la potencia del molino de viento y hasta dos vehículos eléctricos con estado de carga y consumo o devolución de energía
+- Flujos animados de red, carga, fotovoltaica, batería y VE con color dinámico basado en umbrales y estilos de animación seleccionables
+- Umbral de animación de red configurable (predeterminado 100 W) para suprimir fluctuaciones de importación/exportación de bajo nivel
+- Multiplicador de velocidad de animación ajustable (-3× a 3×, predeterminado 1×, pausa/inversión soportada) y umbrales de visibilidad por flujo
+- Distintivo de producción de energía diaria
+- Totales de importación y exportación diarios
+- Consumo de energía de la piscina ahora mostrado en el gráfico principal y puede ocultarse si no está en uso
+- Consumo de bomba de calor/AC y sistema de agua caliente ahora mostrados
+- Lavadora, secadora, refrigerador, lavavajillas ahora incluidos en la ventana emergente
+- Anulaciones de color de advertencia/crítico de carga y umbral de SOC bajo configurable para el llenado líquido de la batería
+- Selección de fuente, tamaño de fuente y color de texto disponibles para todas las entidades mostradas
+- Control deslizante de intervalo de actualización (0-60 s, predeterminado 5 s) con actualización en tiempo real opcional cuando se establece en 0
+- Pantallas de información emergente para Casa, Solar, Batería, Red e Inversor
+- Cada uno tiene seis ranuras para entidades con anulaciones de nombres y anulaciones de colores de fuente
+- Las entradas emergentes se pueden hacer clic para mostrar la entidad HA
+- Muchas nuevas características próximamente, con soporte para más elementos
 
 ### Instalación
 
@@ -934,3 +999,16 @@ lovelace:
 | `invert_battery`                     | boolean | `false`                                                           | Invertir polaridad de batería e intercambiar tonos de carga/descarga                                                                                                             |
 
 > **Requisito de sensor de batería:** Para cada batería (`bat1`..`bat4`) proporcione el `sensor_batX_power` combinado **o** ambos `sensor_batX_charge_power` y `sensor_batX_discharge_power`. Las lecturas pueden estar en W o kW; la tarjeta maneja las conversiones automáticamente.
+
+### Modo Kiosco
+
+- El modo Kiosco de pantalla completa para esta tarjeta se puede lograr utilizando el plugin HACS Kiosk Mode [Kiosk Mode by NemesisRE](https://github.com/NemesisRE/kiosk-mode) o para tabletas Android
+- Los usuarios de tabletas Android pueden seguir esta guía [How to Set Up Home Assistant Kiosk Mode on Android](https://www.airdroid.com/mdm/home-assistant-kiosk-mode/)
+- Para los usuarios de pantalla Amazon Echo se ha agregado una opción especial en la Configuración General llamada Echo Alive. Está diseñada para evitar que la pantalla se apague mientras está en pantalla completa.
+
+### Informe de Errores
+
+- Si tiene problemas genuinos o solicitudes de funciones, registre un Issue en el repositorio de github
+- Si está reportando un error, sea lo más descriptivo posible. Incluya capturas de pantalla. Si se relaciona con sensores específicos que no funcionan, proporcione una captura de pantalla de la configuración del sensor.
+- Las solicitudes de funciones deben tener mérito genuino y no ser solicitudes únicas para cambios personales de su propia configuración. Debe tener mérito para otros usuarios (por ejemplo, idiomas adicionales)
+- No todas las solicitudes de funciones serán ejecutadas. Dicho esto, esta tarjeta está siendo desarrollada activamente. Nuevos diseños con diferentes temas se agregarán en versiones futuras.

@@ -232,6 +232,7 @@ const FLOW_ARROW_COUNT = ANIMATION.FLOW_ARROW_COUNT;
 
 // Legacy Configuration Migration
 const LEGACY_CAR_VISIBILITY_KEYS = ['show_car', 'show_car2', 'show_car_2', 'show_car_soc', 'show_car_soc2'];
+const LEGACY_DEPRECATED_KEYS = ['heat_pump_flow_color'];
 const stripLegacyCarVisibility = (config) => {
   if (!config || typeof config !== 'object') {
     return config;
@@ -1028,7 +1029,8 @@ class PopupManager {
       { keys: ['sensor_washing_machine_consumption', 'sensor_washer_consumption', 'sensor_washing_machine_power', 'sensor_washer_power'], label: i18n.t('washing_machine_full') },
       { keys: ['sensor_dryer_consumption', 'sensor_dryer_power'], label: i18n.t('dryer_full') },
       { keys: ['sensor_dishwasher_consumption', 'sensor_dishwasher_power', 'sensor_dish_washer_consumption', 'sensor_dishwasher_load'], label: i18n.t('dishwasher_full') },
-      { keys: ['sensor_refrigerator_consumption', 'sensor_refrigerator_power', 'sensor_fridge_consumption', 'sensor_fridge_power'], label: i18n.t('refrigerator_full') }
+      { keys: ['sensor_refrigerator_consumption', 'sensor_refrigerator_power', 'sensor_fridge_consumption', 'sensor_fridge_power'], label: i18n.t('refrigerator_full') },
+      { keys: ['sensor_freezer_consumption', 'sensor_freezer_power'], label: i18n.t('freezer_full'), dataRole: 'freezer-power' }
     ];
 
     autoEntries.forEach((entry) => {
@@ -1417,6 +1419,16 @@ class ConfigValidator {
     
     // Remove legacy car visibility keys
     LEGACY_CAR_VISIBILITY_KEYS.forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(config, key)) {
+        if (!sanitized) {
+          sanitized = { ...config };
+        }
+        delete sanitized[key];
+      }
+    });
+    
+    // Remove deprecated config keys
+    LEGACY_DEPRECATED_KEYS.forEach((key) => {
       if (Object.prototype.hasOwnProperty.call(config, key)) {
         if (!sanitized) {
           sanitized = { ...config };
@@ -5467,8 +5479,8 @@ class AdvancedEnergyCard extends HTMLElement {
     const grid2ImportColor = resolveColor(config.grid2_import_color, gridImportColor);
     const grid2ExportColor = resolveColor(config.grid2_export_color, gridExportColor);
     const carFlowColor = resolveColor(config.car_flow_color, C_CYAN);
-    const heatPumpFlowColor = resolveColor(config.heat_pump_flow_color, '#FFA500');
     const heatPumpTextColor = resolveColor(config.heat_pump_text_color, '#FFA500');
+    const heatPumpFlowColor = heatPumpTextColor;
     const windmillFlowColor = resolveColor(config.windmill_flow_color, C_CYAN);
     const windmillTextColor = resolveColor(config.windmill_text_color, C_WHITE);
     const loadMagnitude = Math.abs(loadValue);
@@ -13401,7 +13413,6 @@ class AdvancedEnergyCardEditor extends HTMLElement {
         { name: 'sensor_dishwasher_consumption', label: fields.sensor_dishwasher_consumption.label, helper: fields.sensor_dishwasher_consumption.helper, selector: entitySelector },
         { name: 'sensor_dryer_consumption', label: fields.sensor_dryer_consumption.label, helper: fields.sensor_dryer_consumption.helper, selector: entitySelector },
         { name: 'sensor_refrigerator_consumption', label: fields.sensor_refrigerator_consumption.label, helper: fields.sensor_refrigerator_consumption.helper, selector: entitySelector },
-        { name: 'heat_pump_flow_color', label: fields.heat_pump_flow_color.label, helper: fields.heat_pump_flow_color.helper, selector: { color_picker: {} }, default: '#FFA500' },
         { name: 'heat_pump_text_color', label: fields.heat_pump_text_color.label, helper: fields.heat_pump_text_color.helper, selector: { color_picker: {} }, default: '#FFA500' },
         { name: 'pool_flow_color', label: fields.pool_flow_color.label, helper: fields.pool_flow_color.helper, selector: { color_picker: {} }, default: '#0080ff' },
         { name: 'pool_text_color', label: fields.pool_text_color.label, helper: fields.pool_text_color.helper, selector: { color_picker: {} }, default: '#FFFFFF' },
