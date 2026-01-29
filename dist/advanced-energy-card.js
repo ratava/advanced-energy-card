@@ -10998,7 +10998,7 @@ class AdvancedEnergyCard extends HTMLElement {
   }
 
   static get version() {
-    return '1.0.23';
+    return '1.0.24';
   }
 }
 
