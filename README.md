@@ -4,7 +4,7 @@
 
 Advanced Energy Card repository is [https://github.com/ratava/advanced-energy-card](https://github.com/ratava/advanced-energy-card).
 
-[Advanced Energy Card Background](images/advanced-day.png)
+![Advanced Energy Card Background](Images/AEC%20Example.png)
 
 Support Brent - ratava ![Donate Brent Wesley @ratava](https://github.com/user-attachments/assets/b603f494-a142-4bb0-893f-aaafd5d19dfd)
 
