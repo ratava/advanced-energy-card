@@ -1,6 +1,6 @@
 # Advanced Energy Card
 
-![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)  ![Version](https://img.shields.io/badge/version-1.0.23-blue.svg)
+![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)  ![Version](https://img.shields.io/badge/version-1.0.24-blue.svg)
 
 Advanced Energy Card repository is [https://github.com/ratava/advanced-energy-card](https://github.com/ratava/advanced-energy-card).
 

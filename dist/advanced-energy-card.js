@@ -1,7 +1,7 @@
 ﻿/**
  * Advanced Energy Card
  * Custom Home Assistant card for energy flow visualization
- * Version: 1.0.23
+ * Version: 1.0.24
  * Tested with Home Assistant 2025.12+
  */
 
@@ -5749,8 +5749,8 @@ class AdvancedEnergyCard extends HTMLElement {
       // Keep Array 1 visible even when Array 2 is generating so both flows animate together.
       pv1: { stroke: pvPrimaryColor, glowColor: pvPrimaryColor, active: pv_primary_w > 0 },
       pv2: { stroke: pvSecondaryColor, glowColor: pvSecondaryColor, active: inverter2ConfiguredForPv && pv_secondary_w > 0 },
-      'array-inverter1': { stroke: pvPrimaryColor, glowColor: pvPrimaryColor, active: inverter1Configured && !inverter2Active },
-      'array-inverter2': { stroke: pvSecondaryColor, glowColor: pvSecondaryColor, active: inverter2Configured },
+      'array-inverter1': { stroke: pvPrimaryColor, glowColor: pvPrimaryColor, active: inverter1Configured && !inverter2Active && total_pv_w > 0 },
+      'array-inverter2': { stroke: pvSecondaryColor, glowColor: pvSecondaryColor, active: inverter2Configured && total_pv_w > 0 },
       'windmill-inverter1': { stroke: windmillFlowColor, glowColor: windmillFlowColor, active: windmillFlowActive, direction: 1 },
       'windmill-inverter2': { stroke: windmillFlowColor, glowColor: windmillFlowColor, active: inverter2Active && windmillFlowActive, direction: 1, forceHidden: !inverter2Active },
       load: { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: loadMagnitude > 10, direction: 1 },
