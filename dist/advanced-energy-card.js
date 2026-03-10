@@ -1,7 +1,7 @@
 ﻿/**
  * Advanced Energy Card
  * Custom Home Assistant card for energy flow visualization
- * Version: 1.0.27
+ * Version: 1.0.28
  * Tested with Home Assistant 2025.12+
  * 
  * SECURITY FEATURES:
@@ -4197,10 +4197,24 @@ class AdvancedEnergyCard extends HTMLElement {
       'https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js?module',
       'https://cdn.jsdelivr.net/npm/gsap@3.12.5/index.js'
     ];
+    // Security: Whitelist of trusted GSAP CDN sources with SRI hashes
     const scriptCandidates = [
-      'https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js',
-      'https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js'
+      {
+        url: 'https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js',
+        integrity: 'sha384-g4NTh/Iv5PPU4xPyhEWqPcwtNXOvdaDI8LLnyYfyNZOjKJeYQyjzQ9X5275eBjpt',
+        crossorigin: 'anonymous'
+      },
+      {
+        url: 'https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js',
+        integrity: 'sha384-g4NTh/Iv5PPU4xPyhEWqPcwtNXOvdaDI8LLnyYfyNZOjKJeYQyjzQ9X5275eBjpt',
+        crossorigin: 'anonymous'
+      }
     ];
+
+    // Security: Validate URL against whitelist
+    const isValidGsapUrl = (url) => {
+      return scriptCandidates.some(candidate => candidate.url === url);
+    };
 
     const resolveCandidate = (module) => {
       const candidate = module && (module.gsap || module.default || module);
@@ -4235,9 +4249,16 @@ class AdvancedEnergyCard extends HTMLElement {
         });
     };
 
-    const loadScript = (url) => {
+    const loadScript = (candidateObj) => {
       if (typeof document === 'undefined') {
         return Promise.reject(new Error('Advanced Energy Card: document not available for GSAP script load'));
+      }
+
+      const url = candidateObj.url;
+      
+      // Security: Validate URL is in whitelist
+      if (!isValidGsapUrl(url)) {
+        return Promise.reject(new Error('Advanced Energy Card: GSAP script URL not in whitelist'));
       }
 
       const existing = document.querySelector(`script[data-advanced-gsap="${url}"]`);
@@ -4262,10 +4283,19 @@ class AdvancedEnergyCard extends HTMLElement {
       }
 
       return new Promise((resolve, reject) => {
+        // Security: Create script element with validated URL and security attributes
         const script = document.createElement('script');
         script.src = url;
         script.async = true;
         script.dataset.advancedGsap = url;
+        
+        // Security: Add SRI and CORS attributes for CDN script integrity
+        if (candidateObj.integrity) {
+          script.integrity = candidateObj.integrity;
+        }
+        if (candidateObj.crossorigin) {
+          script.crossOrigin = candidateObj.crossorigin;
+        }
         script.addEventListener('load', () => {
           script.dataset.loaded = 'true';
           try {
@@ -4288,7 +4318,7 @@ class AdvancedEnergyCard extends HTMLElement {
       }
       return loadScript(scriptCandidates[index])
         .catch((error) => {
-          console.warn('Advanced Energy Card: GSAP script load failed', scriptCandidates[index], error);
+          console.warn('Advanced Energy Card: GSAP script load failed', scriptCandidates[index].url, error);
           return attemptScriptLoad(index + 1);
         });
     };
@@ -12170,7 +12200,7 @@ class AdvancedEnergyCard extends HTMLElement {
   }
 
   static get version() {
-    return '1.0.27';
+    return '1.0.28';
   }
 }
 
