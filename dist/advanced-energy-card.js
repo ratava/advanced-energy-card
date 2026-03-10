@@ -1,7 +1,7 @@
 ﻿/**
  * Advanced Energy Card
  * Custom Home Assistant card for energy flow visualization
- * Version: 1.0.26
+ * Version: 1.0.27
  * Tested with Home Assistant 2025.12+
  * 
  * SECURITY FEATURES:
@@ -12170,7 +12170,7 @@ class AdvancedEnergyCard extends HTMLElement {
   }
 
   static get version() {
-    return '1.0.26';
+    return '1.0.27';
   }
 }
 
