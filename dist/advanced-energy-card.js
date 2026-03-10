@@ -1,8 +1,18 @@
 ﻿/**
  * Advanced Energy Card
  * Custom Home Assistant card for energy flow visualization
- * Version: 1.0.24
+ * Version: 1.0.26
  * Tested with Home Assistant 2025.12+
+ * 
+ * SECURITY FEATURES:
+ * - SVG Sanitization: All external SVG content is sanitized before rendering
+ * - URL Validation: Background URLs are validated to prevent malicious content loading
+ * - Input Validation: Configuration values are validated for type, format, and bounds
+ * - XSS Prevention: HTML/SVG text is properly escaped when building templates
+ * - Prototype Pollution Protection: Dangerous configuration keys are blocked
+ * - Rate Limiting: Resource loading is rate-limited to prevent DoS attacks
+ * - Safe DOM Manipulation: textContent is used over innerHTML where possible
+ * - Event Handler Security: Event handlers are statically defined, not dynamically constructed
  */
 
 // ============================================================
@@ -229,6 +239,253 @@ const FLOW_ARROW_COUNT = ANIMATION.FLOW_ARROW_COUNT;
 // ============================================================
 // SECTION 5: UTILITY FUNCTIONS
 // ============================================================
+
+// Security Helpers
+const SecurityHelpers = {
+  /**
+   * Sanitize SVG content to prevent XSS attacks
+   * Removes dangerous elements and attributes
+   */
+  sanitizeSvg(svgText) {
+    if (typeof svgText !== 'string' || !svgText.trim()) {
+      return '';
+    }
+
+    // List of dangerous tags that should be removed
+    const dangerousTags = [
+      'script', 'iframe', 'object', 'embed', 'link', 'style',
+      'meta', 'base', 'form', 'input', 'button', 'textarea'
+    ];
+
+    // List of dangerous attributes that should be removed
+    const dangerousAttrs = [
+      'onload', 'onerror', 'onclick', 'onmouseover', 'onmouseout',
+      'onmouseenter', 'onmouseleave', 'onfocus', 'onblur', 'onchange',
+      'onsubmit', 'onkeydown', 'onkeyup', 'onkeypress', 'ontouchstart',
+      'ontouchmove', 'ontouchend'
+    ];
+
+    // Parse SVG
+    const parser = new DOMParser();
+    const svgDoc = parser.parseFromString(svgText, 'image/svg+xml');
+    
+    // Check for parse errors
+    const parserError = svgDoc.querySelector('parsererror');
+    if (parserError) {
+      console.error('SVG parsing error:', parserError.textContent);
+      return '';
+    }
+
+    const svgElement = svgDoc.documentElement;
+    if (!svgElement || svgElement.tagName.toLowerCase() !== 'svg') {
+      console.error('Invalid SVG: root element is not <svg>');
+      return '';
+    }
+
+    // Remove dangerous elements
+    dangerousTags.forEach(tag => {
+      const elements = svgElement.querySelectorAll(tag);
+      elements.forEach(el => {
+        if (el && el.parentNode) {
+          el.parentNode.removeChild(el);
+        }
+      });
+    });
+
+    // Remove dangerous attributes from all elements
+    const allElements = svgElement.querySelectorAll('*');
+    allElements.forEach(el => {
+      // Remove event handler attributes
+      dangerousAttrs.forEach(attr => {
+        if (el.hasAttribute(attr)) {
+          el.removeAttribute(attr);
+        }
+      });
+
+      // Sanitize href and xlink:href to prevent javascript: URLs
+      ['href', 'xlink:href'].forEach(attrName => {
+        const attrValue = el.getAttribute(attrName);
+        if (attrValue && typeof attrValue === 'string') {
+          const trimmed = attrValue.trim().toLowerCase();
+          if (trimmed.startsWith('javascript:') || 
+              trimmed.startsWith('data:text/html') ||
+              trimmed.startsWith('vbscript:')) {
+            el.removeAttribute(attrName);
+          }
+        }
+      });
+    });
+
+    // Return sanitized SVG as string
+    return new XMLSerializer().serializeToString(svgElement);
+  },
+
+  /**
+   * Validate URL to ensure it's from a trusted source
+   * Only allows relative paths, http/https, and local file references
+   */
+  validateUrl(url, allowedOrigins = []) {
+    if (typeof url !== 'string' || !url.trim()) {
+      return { valid: false, error: 'Empty or invalid URL' };
+    }
+
+    const trimmed = url.trim();
+
+    // Allow relative paths
+    if (trimmed.startsWith('/') && !trimmed.startsWith('//')) {
+      return { valid: true, sanitized: trimmed };
+    }
+
+    // Block dangerous protocols
+    const dangerousProtocols = ['javascript:', 'data:', 'vbscript:', 'file:', 'about:'];
+    const lowerUrl = trimmed.toLowerCase();
+    for (const protocol of dangerousProtocols) {
+      if (lowerUrl.startsWith(protocol)) {
+        return { valid: false, error: `Blocked dangerous protocol: ${protocol}` };
+      }
+    }
+
+    // Validate HTTP/HTTPS URLs
+    if (/^https?:\/\//i.test(trimmed)) {
+      try {
+        const parsedUrl = new URL(trimmed);
+        
+        // If allowed origins specified, check against them
+        if (allowedOrigins.length > 0) {
+          const origin = parsedUrl.origin.toLowerCase();
+          const allowed = allowedOrigins.some(allowed => 
+            origin === allowed.toLowerCase() || 
+            origin.endsWith('.' + allowed.toLowerCase())
+          );
+          
+          if (!allowed) {
+            return { valid: false, error: 'URL origin not in allowed list' };
+          }
+        }
+
+        return { valid: true, sanitized: parsedUrl.href };
+      } catch (e) {
+        return { valid: false, error: `Invalid URL: ${e.message}` };
+      }
+    }
+
+    // Allow unqualified paths (no protocol)
+    if (!trimmed.includes(':')) {
+      return { valid: true, sanitized: trimmed };
+    }
+
+    return { valid: false, error: 'Unrecognized URL format' };
+  },
+
+  /**
+   * Sanitize text content for safe DOM insertion
+   * Escapes HTML/SVG special characters
+   */
+  sanitizeText(text) {
+    if (typeof text !== 'string') {
+      return String(text || '');
+    }
+    
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+  },
+
+  /**
+   * Escape HTML/SVG text for safe inclusion in templates
+   * Use when building HTML/SVG strings with user-provided content
+   */
+  escapeHtml(text) {
+    if (typeof text !== 'string') {
+      return String(text || '');
+    }
+    
+    const escapeMap = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#x27;',
+      '/': '&#x2F;'
+    };
+    
+    return text.replace(/[&<>"'\/]/g, char => escapeMap[char]);
+  },
+
+  /**
+   * Validate configuration value against expected type and constraints
+   */
+  validateConfigValue(value, type, constraints = {}) {
+    switch (type) {
+      case 'string':
+        if (typeof value !== 'string') return { valid: false };
+        if (constraints.maxLength && value.length > constraints.maxLength) {
+          return { valid: false, error: 'String too long' };
+        }
+        if (constraints.pattern && !constraints.pattern.test(value)) {
+          return { valid: false, error: 'Pattern mismatch' };
+        }
+        return { valid: true, sanitized: value };
+
+      case 'number':
+        const num = Number(value);
+        if (!Number.isFinite(num)) return { valid: false };
+        if (constraints.min !== undefined && num < constraints.min) {
+          return { valid: false, error: 'Below minimum' };
+        }
+        if (constraints.max !== undefined && num > constraints.max) {
+          return { valid: false, error: 'Above maximum' };
+        }
+        return { valid: true, sanitized: num };
+
+      case 'boolean':
+        return { valid: true, sanitized: Boolean(value) };
+
+      case 'color':
+        if (typeof value !== 'string') return { valid: false };
+        // Allow hex colors, rgb/rgba, hsl/hsla, and named colors
+        const colorPattern = /^(#[0-9A-Fa-f]{3,8}|rgb\(|rgba\(|hsl\(|hsla\(|[a-z]+)$/i;
+        if (!colorPattern.test(value.trim())) {
+          return { valid: false, error: 'Invalid color format' };
+        }
+        return { valid: true, sanitized: value.trim() };
+
+      default:
+        return { valid: true, sanitized: value };
+    }
+  }
+};
+
+// Rate Limiter for resource loading
+const ResourceRateLimiter = {
+  requests: new Map(),
+  
+  /**
+   * Check if a resource request should be allowed based on rate limiting
+   */
+  checkLimit(resourceKey, maxRequests = 10, windowMs = 60000) {
+    const now = Date.now();
+    const existing = this.requests.get(resourceKey) || [];
+    
+    // Remove old requests outside the time window
+    const recent = existing.filter(timestamp => now - timestamp < windowMs);
+    
+    if (recent.length >= maxRequests) {
+      return false;
+    }
+    
+    recent.push(now);
+    this.requests.set(resourceKey, recent);
+    return true;
+  },
+  
+  /**
+   * Clear rate limit for a resource
+   */
+  clearLimit(resourceKey) {
+    this.requests.delete(resourceKey);
+  }
+};
 
 // Legacy Configuration Migration
 const LEGACY_CAR_VISIBILITY_KEYS = ['show_car', 'show_car2', 'show_car_2', 'show_car_soc', 'show_car_soc2'];
@@ -972,6 +1229,14 @@ class PopupManager {
       this._addHouseAutoEntries(config, lineData, usedEntityIds);
     }
 
+    // Handle special "battery" type with datetime/timeuntil entries
+    if (type === 'battery') {
+      // Get battery states to check which are configured
+      const batteryStates = this.card._batteryManager ? 
+        this.card._batteryManager.getAllBatteryStates(config) : [];
+      this._addBatteryTimeEntries(config, lineData, batteryStates);
+    }
+
     // Add manually configured popup entries (1-6)
     this._addConfiguredEntries(config, prefix, lineData, usedEntityIds);
 
@@ -980,7 +1245,7 @@ class PopupManager {
     }
 
     // Render lines
-    this._renderPopupLines(lineData);
+    this._renderPopupLines(lineData, type);
 
     // Show and position popup
     this._showAndPositionPopup(type, lineData);
@@ -1053,10 +1318,139 @@ class PopupManager {
   }
 
   /**
+   * Add battery datetime/timeuntil entries to popup
+   * @private
+   */
+  _addBatteryTimeEntries(config, lineData, batteryStates) {
+    const lang = (this.card._viewState && typeof this.card._viewState.language === 'string')
+      ? this.card._viewState.language
+      : 'en';
+    const i18n = new LocalizationManager(lang);
+    const viewState = this.card._viewState || {};
+
+    // Get datetime/timeuntil values from viewState
+    const inv1DateTime = viewState.inv1DateTime?.text || '';
+    const inv1TimeUntil = viewState.inv1TimeUntil?.text || '';
+    const inv2DateTime = viewState.inv2DateTime?.text || '';
+    const inv2TimeUntil = viewState.inv2TimeUntil?.text || '';
+
+    // Detect if 2 inverters are configured (inv2 has data)
+    const hasTwoInverters = inv2DateTime || inv2TimeUntil;
+
+    // Get global battery popup styling
+    const globalFontSize = Number(config.battery_popup_font_size) || 16;
+    const globalColor = config.battery_popup_color || '#00FFFF';
+
+    // Determine which inverter data to use for each battery
+    const batteryEntries = [
+      { 
+        num: 1, 
+        datetime: inv1DateTime, 
+        timeuntil: inv1TimeUntil, 
+        fontSize: globalFontSize, 
+        color: globalColor 
+      },
+      { 
+        num: 2, 
+        datetime: inv1DateTime, 
+        timeuntil: inv1TimeUntil, 
+        fontSize: globalFontSize, 
+        color: globalColor 
+      },
+      { 
+        num: 3, 
+        datetime: hasTwoInverters ? inv2DateTime : inv1DateTime, 
+        timeuntil: hasTwoInverters ? inv2TimeUntil : inv1TimeUntil, 
+        fontSize: globalFontSize, 
+        color: globalColor 
+      },
+      { 
+        num: 4, 
+        datetime: hasTwoInverters ? inv2DateTime : inv1DateTime, 
+        timeuntil: hasTwoInverters ? inv2TimeUntil : inv1TimeUntil, 
+        fontSize: globalFontSize, 
+        color: globalColor 
+      }
+    ];
+
+    // Only process batteries that are configured (visible)
+    batteryEntries.forEach((bat) => {
+      // Check if this battery is configured
+      const batteryState = batteryStates.find(b => b.index === bat.num);
+      
+      if (!batteryState || !batteryState.visible) {
+        return; // Skip unconfigured batteries
+      }
+
+      // Check if battery has capacity configured
+      const capacityWh = this.card._batteryManager ? 
+        this.card._batteryManager.getBatteryCapacity(bat.num, config) : null;
+      const hasCapacity = capacityWh !== null && capacityWh > 0;
+      // Add battery header
+      lineData.push({
+        text: i18n.t(`battery_${bat.num}`),
+        fontSize: globalFontSize,
+        color: '#ffffff',
+        isHeader: true,
+        isBatteryTime: true
+      });
+
+      // Show datetime/timeuntil or "Not configured" if no capacity
+      if (!hasCapacity) {
+        lineData.push({
+          text: i18n.t('not_configured'),
+          fontSize: bat.fontSize,
+          color: '#ff8c00',
+          isBatteryTime: true
+        });
+      } else {
+        // Add datetime on first line
+        if (bat.datetime) {
+          lineData.push({
+            text: `${i18n.t('battery_datetime')} ${bat.datetime}`,
+            fontSize: bat.fontSize,
+            color: bat.color,
+            isBatteryTime: true
+          });
+        } else {
+          lineData.push({
+            text: `${i18n.t('battery_datetime')} --`,
+            fontSize: bat.fontSize,
+            color: bat.color,
+            isBatteryTime: true
+          });
+        }
+        
+        // Add timeuntil on second line
+        if (bat.timeuntil) {
+          lineData.push({
+            text: `${i18n.t('battery_timeuntil')} ${bat.timeuntil}`,
+            fontSize: bat.fontSize,
+            color: bat.color,
+            isBatteryTime: true
+          });
+        } else {
+          lineData.push({
+            text: `${i18n.t('battery_timeuntil')} --`,
+            fontSize: bat.fontSize,
+            color: bat.color,
+            isBatteryTime: true
+          });
+        }
+      }
+    });
+  }
+
+  /**
    * Add manually configured popup entries
    * @private
    */
   _addConfiguredEntries(config, prefix, lineData, usedEntityIds) {
+    // Check if this is battery popup to use global styling
+    const isBatteryPopup = prefix === 'sensor_popup_bat_';
+    const globalColor = isBatteryPopup ? (config.battery_popup_color || '#00FFFF') : null;
+    const globalFontSize = isBatteryPopup ? (Number(config.battery_popup_font_size) || 16) : null;
+
     for (let i = 1; i <= 6; i++) {
       const entityKey = `${prefix}${i}`;
       const nameKey = `${entityKey}_name`;
@@ -1079,8 +1473,9 @@ class PopupManager {
         ? nameOverride.trim()
         : this.card.getEntityName(entityId);
 
-      const fontSize = Number(config[fontKey]) || 16;
-      const color = (typeof config[colorKey] === 'string' && config[colorKey]) ? config[colorKey] : '#80ffff';
+      // Use global settings for battery popup, per-entity for others
+      const fontSize = isBatteryPopup ? globalFontSize : (Number(config[fontKey]) || 16);
+      const color = isBatteryPopup ? globalColor : ((typeof config[colorKey] === 'string' && config[colorKey]) ? config[colorKey] : '#80ffff');
 
       lineData.push({
         text: `${name}: ${valueText}`,
@@ -1096,21 +1491,82 @@ class PopupManager {
    * Render popup lines in the DOM
    * @private
    */
-  _renderPopupLines(lineData) {
+  _renderPopupLines(lineData, type) {
     this.domRefs.popupLines.innerHTML = '';
-    lineData.forEach((line) => {
-      const div = document.createElement('div');
-      div.className = 'popup-line';
-      div.textContent = line.text;
-      div.style.color = line.color;
-      if (line.entityId) {
-        div.dataset.entityId = line.entityId;
-      }
-      div.tabIndex = 0;
-      div.setAttribute('role', 'button');
-      div.setAttribute('aria-label', line.text);
-      this.domRefs.popupLines.appendChild(div);
-    });
+
+    // Check if this is a battery popup with two-column layout
+    const isBatteryPopup = type === 'battery';
+    const hasBatteryTime = lineData.some(line => line.isBatteryTime);
+
+    if (isBatteryPopup && hasBatteryTime) {
+      // Two-column layout for battery popup
+      const container = document.createElement('div');
+      container.style.display = 'grid';
+      container.style.gridTemplateColumns = '1.2fr 1fr';
+      container.style.gap = '16px';
+      container.style.width = '100%';
+
+      const leftColumn = document.createElement('div');
+      leftColumn.style.display = 'flex';
+      leftColumn.style.flexDirection = 'column';
+      leftColumn.style.gap = '4px';
+
+      const rightColumn = document.createElement('div');
+      rightColumn.style.display = 'flex';
+      rightColumn.style.flexDirection = 'column';
+      rightColumn.style.gap = '4px';
+
+      // Populate columns
+      lineData.forEach((line) => {
+        const div = document.createElement('div');
+        
+        if (line.isHeader) {
+          div.className = 'popup-header';
+          div.style.fontWeight = 'bold';
+          div.style.marginTop = line.isSensorHeader ? '8px' : '0';
+          div.style.marginBottom = '4px';
+          div.style.borderBottom = '1px solid rgba(255, 255, 255, 0.3)';
+          div.style.paddingBottom = '4px';
+        } else {
+          div.className = 'popup-line';
+          div.tabIndex = 0;
+          div.setAttribute('role', 'button');
+          div.setAttribute('aria-label', line.text);
+          if (line.entityId) {
+            div.dataset.entityId = line.entityId;
+          }
+        }
+
+        div.textContent = line.text;
+        div.style.color = line.color;
+
+        // Add to appropriate column
+        if (line.isBatteryTime) {
+          leftColumn.appendChild(div);
+        } else {
+          rightColumn.appendChild(div);
+        }
+      });
+
+      container.appendChild(leftColumn);
+      container.appendChild(rightColumn);
+      this.domRefs.popupLines.appendChild(container);
+    } else {
+      // Single-column layout for other popups
+      lineData.forEach((line) => {
+        const div = document.createElement('div');
+        div.className = 'popup-line';
+        div.textContent = line.text;
+        div.style.color = line.color;
+        if (line.entityId) {
+          div.dataset.entityId = line.entityId;
+        }
+        div.tabIndex = 0;
+        div.setAttribute('role', 'button');
+        div.setAttribute('aria-label', line.text);
+        this.domRefs.popupLines.appendChild(div);
+      });
+    }
   }
 
   /**
@@ -1136,8 +1592,15 @@ class PopupManager {
     const paddingX = Math.max(8, 20 * scaleX);
     const paddingY = Math.max(8, 20 * scaleX);
     refs.popupOverlay.style.padding = `${paddingY}px ${paddingX}px`;
-    refs.popupOverlay.style.minWidth = `${Math.max(0, 240 * scaleX)}px`;
-    refs.popupOverlay.style.maxWidth = `${Math.max(0, 540 * scaleX)}px`;
+    
+    // Battery popup needs more width for two-column layout
+    if (type === 'battery') {
+      refs.popupOverlay.style.minWidth = `${Math.max(0, 480 * scaleX)}px`;
+      refs.popupOverlay.style.maxWidth = `${Math.max(0, 800 * scaleX)}px`;
+    } else {
+      refs.popupOverlay.style.minWidth = `${Math.max(0, 240 * scaleX)}px`;
+      refs.popupOverlay.style.maxWidth = `${Math.max(0, 540 * scaleX)}px`;
+    }
 
     const children = Array.from(refs.popupLines.children);
     children.forEach((child, idx) => {
@@ -1362,6 +1825,172 @@ class BatteryManager {
     const num = Number(raw);
     return Number.isFinite(num) ? num : null;
   }
+
+  /**
+   * Get usable battery capacity in Wh (accounting for reserve percentage)
+   * @param {number} index - Battery index (1-4)
+   * @param {object} config - Card configuration
+   * @returns {number|null} Usable capacity in Wh, or null if not configured
+   */
+  getBatteryCapacity(index, config) {
+    const capacitySensorKey = `sensor_bat${index}_capacity_sensor`;
+    const capacityManualKey = `bat${index}_capacity_manual`;
+    const reserveKey = `bat${index}_reserve_percentage`;
+
+    // Try sensor first
+    let capacityWh = this._getNumericState(config[capacitySensorKey]);
+    
+    // Fallback to manual entry
+    if (capacityWh === null) {
+      const manualValue = config[capacityManualKey];
+      if (manualValue !== undefined && manualValue !== null && manualValue !== '') {
+        const num = Number(manualValue);
+        if (Number.isFinite(num) && num > 0) {
+          capacityWh = num;
+          // Convert from kWh to Wh if display_unit is kW
+          const display_unit = config.display_unit || 'W';
+          if (display_unit.toUpperCase() === 'KW') {
+            capacityWh = capacityWh * 1000;
+          }
+        }
+      }
+    }
+
+    if (capacityWh === null || capacityWh <= 0) {
+      return null;
+    }
+
+    // Apply reserve percentage if configured
+    const reservePercent = config[reserveKey];
+    if (reservePercent !== undefined && reservePercent !== null && reservePercent !== '') {
+      const reserve = Number(reservePercent);
+      if (Number.isFinite(reserve) && reserve > 0 && reserve <= 100) {
+        // Reduce usable capacity by reserve percentage
+        capacityWh = capacityWh * (1 - reserve / 100);
+      }
+    }
+
+    return capacityWh;
+  }
+
+  /**
+   * Calculate time until battery full or empty for an inverter
+   * @param {Array} batteryIndices - Array of battery indices for this inverter
+   * @param {Array} batteryStates - All battery states
+   * @param {object} config - Card configuration
+   * @param {object} hass - Home Assistant object
+   * @returns {object} Time calculation result
+   */
+  calculateInverterBatteryTime(batteryIndices, batteryStates, config, hass) {
+    // Filter batteries for this inverter
+    const inverterBatteries = batteryStates.filter(bat => 
+      batteryIndices.includes(bat.index) && bat.visible
+    );
+
+    if (inverterBatteries.length === 0) {
+      return {
+        datetime: null,
+        timeUntil: null,
+        hoursUntil: null,
+        minutesUntil: null,
+        direction: 'none' // 'charging', 'discharging', or 'none'
+      };
+    }
+
+    // Calculate total capacity and current energy
+    let totalCapacityWh = 0;
+    let totalCurrentEnergyWh = 0;
+    let totalPowerW = 0;
+    let hasCapacity = false;
+
+    for (const bat of inverterBatteries) {
+      const capacityWh = this.getBatteryCapacity(bat.index, config);
+      if (capacityWh !== null && capacityWh > 0) {
+        hasCapacity = true;
+        totalCapacityWh += capacityWh;
+        
+        // Calculate current energy based on SOC
+        if (bat.soc !== null && Number.isFinite(bat.soc)) {
+          totalCurrentEnergyWh += capacityWh * (bat.soc / 100);
+        }
+      }
+      
+      // Sum power (positive = charging, negative = discharging)
+      if (bat.power !== null && Number.isFinite(bat.power)) {
+        totalPowerW += bat.power;
+      }
+    }
+
+    // Can't calculate without capacity or if no power flow
+    if (!hasCapacity || totalCapacityWh <= 0 || Math.abs(totalPowerW) < 10) {
+      return {
+        datetime: null,
+        timeUntil: null,
+        hoursUntil: null,
+        minutesUntil: null,
+        direction: 'none'
+      };
+    }
+
+    // Calculate time based on direction
+    let hoursToTarget = 0;
+    let direction = 'none';
+
+    if (totalPowerW > 0) {
+      // Charging: time to full (100% of usable capacity)
+      direction = 'charging';
+      const energyNeededWh = totalCapacityWh - totalCurrentEnergyWh;
+      if (energyNeededWh > 0) {
+        hoursToTarget = energyNeededWh / totalPowerW;
+      }
+    } else if (totalPowerW < 0) {
+      // Discharging: time to empty (0% of usable capacity)
+      direction = 'discharging';
+      const energyAvailableWh = totalCurrentEnergyWh;
+      if (energyAvailableWh > 0) {
+        hoursToTarget = energyAvailableWh / Math.abs(totalPowerW);
+      }
+    }
+
+    if (hoursToTarget <= 0 || !Number.isFinite(hoursToTarget)) {
+      return {
+        datetime: null,
+        timeUntil: null,
+        hoursUntil: 0,
+        minutesUntil: 0,
+        direction
+      };
+    }
+
+    // Calculate target datetime using Home Assistant timezone
+    const now = new Date();
+    const targetMs = now.getTime() + (hoursToTarget * 3600 * 1000);
+    const targetDate = new Date(targetMs);
+
+    // Format datetime string (locale-aware format: date + time without seconds)
+    const dateStr = targetDate.toLocaleDateString();
+    const timeStr = targetDate.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    const datetimeStr = `${dateStr} - ${timeStr}`;
+
+    // Calculate hours and minutes until target
+    const totalMinutes = Math.round(hoursToTarget * 60);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    // Format time until string
+    const timeUntilStr = hours > 0 
+      ? `${hours}h ${minutes}m`
+      : `${minutes}m`;
+
+    return {
+      datetime: datetimeStr,
+      timeUntil: timeUntilStr,
+      hoursUntil: hours,
+      minutesUntil: minutes,
+      direction,
+      targetDate
+    };
+  }
 }
 
 /**
@@ -1383,8 +2012,105 @@ class ConfigValidator {
     const migrated = this.migrate(config);
     const sanitized = this.stripLegacyKeys(migrated);
     const normalized = this.normalize(sanitized);
+    const secured = this.securityValidate(normalized);
     
-    return { ...defaults, ...normalized };
+    return { ...defaults, ...secured };
+  }
+
+  /**
+   * Apply security validation to configuration values
+   * @param {object} config - Configuration to validate
+   * @returns {object} Security-validated configuration
+   */
+  static securityValidate(config) {
+    if (!config || typeof config !== 'object') {
+      return config;
+    }
+
+    const result = { ...config };
+
+    // Validate background URLs
+    const bgFields = ['background_day', 'background_night', 'background_image'];
+    bgFields.forEach(field => {
+      if (result[field]) {
+        const validation = SecurityHelpers.validateUrl(result[field]);
+        if (!validation.valid) {
+          console.warn(`Invalid ${field} URL, removing:`, validation.error);
+          delete result[field];
+        } else if (validation.sanitized !== result[field]) {
+          result[field] = validation.sanitized;
+        }
+      }
+    });
+
+    // Validate color fields
+    const colorFields = [
+      'solar_color', 'grid_color', 'home_color', 'battery_color',
+      'car_color', 'car2_color', 'car_name_color', 'car2_name_color',
+      'car_pct_color', 'car2_pct_color', 'heat_pump_color',
+      'battery_fill_high_color', 'battery_fill_low_color'
+    ];
+    
+    colorFields.forEach(field => {
+      if (result[field]) {
+        const validation = SecurityHelpers.validateConfigValue(result[field], 'color');
+        if (!validation.valid) {
+          console.warn(`Invalid ${field} color format, removing`);
+          delete result[field];
+        }
+      }
+    });
+
+    // Validate numeric fields with reasonable bounds
+    const numericFields = [
+      { key: 'update_interval', min: 0, max: 3600000 }, // max 1 hour
+      { key: 'battery_low_threshold', min: 0, max: 100 },
+      { key: 'solar_font_size', min: 1, max: 200 },
+      { key: 'grid_font_size', min: 1, max: 200 },
+      { key: 'home_font_size', min: 1, max: 200 },
+      { key: 'battery_font_size', min: 1, max: 200 },
+      { key: 'car_name_font_size', min: 1, max: 200 },
+      { key: 'car_power_font_size', min: 1, max: 200 },
+      { key: 'car2_name_font_size', min: 1, max: 200 },
+      { key: 'car2_power_font_size', min: 1, max: 200 }
+    ];
+
+    numericFields.forEach(({ key, min, max }) => {
+      if (result[key] !== undefined && result[key] !== null) {
+        const validation = SecurityHelpers.validateConfigValue(result[key], 'number', { min, max });
+        if (!validation.valid) {
+          console.warn(`Invalid ${key} value, resetting to default`);
+          delete result[key];
+        }
+      }
+    });
+
+    // Validate string fields for length (prevent DoS via long strings)
+    const stringFields = [
+      'title', 'solar_label', 'grid_label', 'home_label', 'battery_label',
+      'car_label', 'car2_label', 'heat_pump_label'
+    ];
+    
+    stringFields.forEach(field => {
+      if (result[field]) {
+        const validation = SecurityHelpers.validateConfigValue(result[field], 'string', { maxLength: 500 });
+        if (!validation.valid) {
+          console.warn(`String too long for ${field}, truncating`);
+          result[field] = String(result[field]).substring(0, 500);
+        }
+      }
+    });
+
+    // Prevent prototype pollution by checking for dangerous keys
+    const dangerousKeys = ['__proto__', 'constructor', 'prototype'];
+    dangerousKeys.forEach(key => {
+      if (key in result) {
+        delete result[key];
+        console.warn(`Removed dangerous configuration key: ${key}`);
+      }
+    });
+
+    return result;
   }
 
   /**
@@ -1860,6 +2586,38 @@ class LocalizationManager {
         nl: 'EXPORTEREN',
         es: 'EXPORTANDO'
       },
+      importing: {
+        en: 'IMPORTING',
+        it: 'IMPORTAZIONE',
+        de: 'IMPORTIEREN',
+        fr: 'IMPORTATION',
+        nl: 'IMPORTEREN',
+        es: 'IMPORTANDO'
+      },
+      charging: {
+        en: 'CHARGING',
+        it: 'RICARICA',
+        de: 'LADEN',
+        fr: 'CHARGE',
+        nl: 'OPLADEN',
+        es: 'CARGANDO'
+      },
+      discharging: {
+        en: 'DISCHARGING',
+        it: 'SCARICA',
+        de: 'ENTLADEN',
+        fr: 'DÉCHARGE',
+        nl: 'ONTLADEN',
+        es: 'DESCARGANDO'
+      },
+      standby: {
+        en: 'STANDBY',
+        it: 'STANDBY',
+        de: 'BEREITSCHAFT',
+        fr: 'VEILLE',
+        nl: 'STANDBY',
+        es: 'ESPERA'
+      },
 
       // Grid Labels
       grid_current_power: {
@@ -1993,6 +2751,80 @@ class LocalizationManager {
         fr: 'Piscine',
         nl: 'Zwembad',
         es: 'Piscina'
+      },
+      freezer_full: {
+        en: 'Freezer',
+        it: 'Congelatore',
+        de: 'Gefrierschrank',
+        fr: 'Congélateur',
+        nl: 'Vriezer',
+        es: 'Congelador'
+      },
+
+      // Battery Popup Labels
+      battery_1: {
+        en: 'Battery 1',
+        it: 'Batteria 1',
+        de: 'Batterie 1',
+        fr: 'Batterie 1',
+        nl: 'Batterij 1',
+        es: 'Batería 1'
+      },
+      battery_2: {
+        en: 'Battery 2',
+        it: 'Batteria 2',
+        de: 'Batterie 2',
+        fr: 'Batterie 2',
+        nl: 'Batterij 2',
+        es: 'Batería 2'
+      },
+      battery_3: {
+        en: 'Battery 3',
+        it: 'Batteria 3',
+        de: 'Batterie 3',
+        fr: 'Batterie 3',
+        nl: 'Batterij 3',
+        es: 'Batería 3'
+      },
+      battery_4: {
+        en: 'Battery 4',
+        it: 'Batteria 4',
+        de: 'Batterie 4',
+        fr: 'Batterie 4',
+        nl: 'Batterij 4',
+        es: 'Batería 4'
+      },
+      battery_datetime: {
+        en: 'Full/Discharged Date/Time:',
+        it: 'Data/Ora Carica/Scarica:',
+        de: 'Voll/Entladen Datum/Zeit:',
+        fr: 'Date/Heure Pleine/Déchargée:',
+        nl: 'Vol/Ontladen Datum/Tijd:',
+        es: 'Fecha/Hora Carga/Descarga:'
+      },
+      battery_timeuntil: {
+        en: 'Full/Discharged in:',
+        it: 'Carica/Scarica in:',
+        de: 'Voll/Entladen in:',
+        fr: 'Pleine/Déchargée dans:',
+        nl: 'Vol/Ontladen over:',
+        es: 'Carga/Descarga en:'
+      },
+      battery_sensors: {
+        en: 'Battery Sensors',
+        it: 'Sensori Batteria',
+        de: 'Batteriesensoren',
+        fr: 'Capteurs de Batterie',
+        nl: 'Batterijsensoren',
+        es: 'Sensores de Batería'
+      },
+      not_configured: {
+        en: 'Not configured',
+        it: 'Non configurato',
+        de: 'Nicht konfiguriert',
+        fr: 'Non configuré',
+        nl: 'Niet geconfigureerd',
+        es: 'No configurado'
       }
     };
   }
@@ -2326,6 +3158,14 @@ class AdvancedEnergyCard extends HTMLElement {
       pv_font_size: 12,
       battery_soc_font_size: 8,
       battery_power_font_size: 8,
+      inv1_datetime_color: '',
+      inv1_datetime_font_size: 8,
+      inv1_timeuntil_color: '',
+      inv1_timeuntil_font_size: 8,
+      inv2_datetime_color: '',
+      inv2_datetime_font_size: 8,
+      inv2_timeuntil_color: '',
+      inv2_timeuntil_font_size: 8,
       load_font_size: 8,
       inv1_power_font_size: 8,
       inv2_power_font_size: 8,
@@ -2338,6 +3178,8 @@ class AdvancedEnergyCard extends HTMLElement {
       freezer_font_size: 8,
       grid_font_size: 8,
       grid_daily_font_size: '8',
+      inverter1_status_text_color: '',
+      inverter1_status_font_size: 8,
       grid_current_odometer: true,
       grid_current_odometer_duration: 950,
       car_power_font_size: 10,
@@ -2368,18 +3210,30 @@ class AdvancedEnergyCard extends HTMLElement {
       sensor_bat1_power: '',
       sensor_bat1_charge_power: '',
       sensor_bat1_discharge_power: '',
+      sensor_bat1_capacity_sensor: '',
+      bat1_capacity_manual: '',
+      bat1_reserve_percentage: '',
       sensor_bat2_soc: '',
       sensor_bat2_power: '',
       sensor_bat2_charge_power: '',
       sensor_bat2_discharge_power: '',
+      sensor_bat2_capacity_sensor: '',
+      bat2_capacity_manual: '',
+      bat2_reserve_percentage: '',
       sensor_bat3_soc: '',
       sensor_bat3_power: '',
       sensor_bat3_charge_power: '',
       sensor_bat3_discharge_power: '',
+      sensor_bat3_capacity_sensor: '',
+      bat3_capacity_manual: '',
+      bat3_reserve_percentage: '',
       sensor_bat4_soc: '',
       sensor_bat4_power: '',
       sensor_bat4_charge_power: '',
       sensor_bat4_discharge_power: '',
+      sensor_bat4_capacity_sensor: '',
+      bat4_capacity_manual: '',
+      bat4_reserve_percentage: '',
       sensor_home_load: '',
       sensor_home_load_secondary: '',
       sensor_heat_pump_consumption: '',
@@ -2517,6 +3371,10 @@ class AdvancedEnergyCard extends HTMLElement {
       sensor_popup_house_6_font_size: 12,
       house_auto_appliance_font_size: 12,
       house_auto_appliance_color: '#00FFFF',
+
+      // Global battery popup styling
+      battery_popup_color: '#00FFFF',
+      battery_popup_font_size: 16,
 
       sensor_popup_bat_1: '',
       sensor_popup_bat_1_name: '',
@@ -5005,6 +5863,10 @@ class AdvancedEnergyCard extends HTMLElement {
     const avg_soc = this._batteryManager.getAverageSOC(batteryStates);
     const activeSocCount = activeBatteries.length;
 
+    // Battery time calculations (inverter 1: batteries 1-2, inverter 2: batteries 3-4)
+    const inv1BatteryTime = this._batteryManager.calculateInverterBatteryTime([1, 2], batteryStates, config, this._hass);
+    const inv2BatteryTime = this._batteryManager.calculateInverterBatteryTime([3, 4], batteryStates, config, this._hass);
+
     // Get other sensors
     const toNumber = (value) => {
       if (value === undefined || value === null || value === '') {
@@ -5538,6 +6400,20 @@ class AdvancedEnergyCard extends HTMLElement {
     const windmillSpin = windmillTotalAvailable && windmillTotalW > 0;
     const windmillFlowActive = windmillTotalAvailable && windmillTotalW > 10;
 
+    // Inverter 1 Temperature
+    const inverter1TempSensorId = (typeof config.sensor_inverter1_temp === 'string') ? config.sensor_inverter1_temp.trim() : '';
+    const hasInverter1TempSensor = Boolean(inverter1TempSensorId);
+    const inverter1TempValue = hasInverter1TempSensor ? this.formatPopupValue(null, inverter1TempSensorId) : '';
+    const inverter1TempColor = resolveColor(config.inverter1_temp_color, C_WHITE);
+    const inverter1TempFontSize = clampValue(config.inverter1_temp_font_size, 4, 28, 8);
+
+    // Battery 1 Temperature
+    const battery1TempSensorId = (typeof config.sensor_battery1_temp === 'string') ? config.sensor_battery1_temp.trim() : '';
+    const hasBattery1TempSensor = Boolean(battery1TempSensorId);
+    const battery1TempValue = hasBattery1TempSensor ? this.formatPopupValue(null, battery1TempSensorId) : '';
+    const battery1TempColor = resolveColor(config.battery1_temp_color, C_WHITE);
+    const battery1TempFontSize = clampValue(config.battery1_temp_font_size, 4, 28, 8);
+
     const computeEffectiveGridColor = (directionSign, magnitude, importColor, exportColor, warningThreshold, criticalThreshold, warningColor, criticalColor) => {
       const baseColor = (directionSign >= 0 ? importColor : exportColor);
       // Export is always the base export color; thresholds apply only for import.
@@ -5844,6 +6720,16 @@ class AdvancedEnergyCard extends HTMLElement {
       return gridValueText;
     })();
 
+    // Battery time display styling
+    const inv1DatetimeColor = resolveColor(config.inv1_datetime_color, '#FFFFFF');
+    const inv1DatetimeFontSize = clampValue(config.inv1_datetime_font_size, 4, 32, 8);
+    const inv1TimeuntilColor = resolveColor(config.inv1_timeuntil_color, '#FFFFFF');
+    const inv1TimeuntilFontSize = clampValue(config.inv1_timeuntil_font_size, 4, 32, 8);
+    const inv2DatetimeColor = resolveColor(config.inv2_datetime_color, '#FFFFFF');
+    const inv2DatetimeFontSize = clampValue(config.inv2_datetime_font_size, 4, 32, 8);
+    const inv2TimeuntilColor = resolveColor(config.inv2_timeuntil_color, '#FFFFFF');
+    const inv2TimeuntilFontSize = clampValue(config.inv2_timeuntil_font_size, 4, 32, 8);
+
     // ============================================================
     // SECTION 3: VIEW STATE CONSTRUCTION
     // Build the viewState object for rendering
@@ -5870,6 +6756,8 @@ class AdvancedEnergyCard extends HTMLElement {
       pv2Total: { text: this.formatPower(pv_secondary_w, use_kw), fontSize: pv_font_size, fill: pvTotColor, visible: pv_secondary_w > 10 },
       pvTotal: { text: this.formatPower(total_pv_w, use_kw), fontSize: pv_font_size, fill: pvTotColor, visible: hasPvConfigured },
       windmillPower: { text: windmillTotalAvailable ? this.formatPower(windmillTotalW, use_kw) : '', fontSize: windmill_power_font_size, fill: windmillTextColor, visible: Boolean(windmillTotalId) },
+      inverter1Temp: { text: inverter1TempValue, fontSize: inverter1TempFontSize, fill: inverter1TempColor, visible: hasInverter1TempSensor },
+      battery1Temp: { text: battery1TempValue, fontSize: battery1TempFontSize, fill: battery1TempColor, visible: hasBattery1TempSensor },
       load: (loadLines && loadLines.length) ? { lines: loadLines, y: loadY, fontSize: load_font_size, fill: effectiveLoadTextColor } : { text: this.formatPower(loadValue, use_kw), fontSize: load_font_size, fill: effectiveLoadTextColor },
       houseLoad: { text: this.formatPower(loadValue, use_kw), fontSize: load_font_size, fill: effectiveLoadFlowColor, visible: true, odometer: grid_current_odometer, odometerDuration: grid_current_odometer_duration },
       grid: { text: gridText, fontSize: grid_font_size, fill: effectiveGridColor, lines: gridLines },
@@ -5945,6 +6833,10 @@ class AdvancedEnergyCard extends HTMLElement {
         hasContent: popupPvValues.some((valueText) => Boolean(valueText))
       },
       batteries: batteryStates,
+      inv1DateTime: { text: inv1BatteryTime.datetime, fontSize: inv1DatetimeFontSize, fill: inv1DatetimeColor },
+      inv1TimeUntil: { text: inv1BatteryTime.timeUntil, fontSize: inv1TimeuntilFontSize, fill: inv1TimeuntilColor },
+      inv2DateTime: { text: inv2BatteryTime.datetime, fontSize: inv2DatetimeFontSize, fill: inv2DatetimeColor },
+      inv2TimeUntil: { text: inv2BatteryTime.timeUntil, fontSize: inv2TimeuntilFontSize, fill: inv2TimeuntilColor },
       pvUiEnabled,
       gridPowerOnly,
       showDailyGrid,
@@ -5961,6 +6853,7 @@ class AdvancedEnergyCard extends HTMLElement {
     // Apply viewState to DOM
     // ============================================================
 
+    this._viewState = viewState; // Store for popup access
     this._applyViewState(viewState);
   }
 
@@ -6160,6 +7053,21 @@ class AdvancedEnergyCard extends HTMLElement {
           background: rgba(0, 255, 255, 0.15);
           box-shadow: 0 0 6px rgba(0, 255, 255, 0.4);
         }
+
+        /* Header rows inside popup overlay */
+        .popup-header {
+          font-family: sans-serif;
+          white-space: nowrap;
+          line-height: 1.25;
+          user-select: none;
+          padding: 4px 6px;
+          outline: none;
+          font-weight: bold;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.3);
+          margin-top: 8px;
+          margin-bottom: 4px;
+        }
+
         /* Echo Alive iframe styles - Small transparent hotspot bottom-left */
         .echo-alive-container {
           position: absolute;
@@ -7658,7 +8566,22 @@ class AdvancedEnergyCard extends HTMLElement {
       };
 
       const backgroundUrl = resolveBackgroundUrl(viewState.backgroundImage);
-      fetch(backgroundUrl)
+      
+      // Validate URL before fetching
+      const urlValidation = SecurityHelpers.validateUrl(backgroundUrl);
+      if (!urlValidation.valid) {
+        console.error('Invalid background URL:', urlValidation.error, backgroundUrl);
+        return;
+      }
+      
+      // Rate limiting to prevent resource exhaustion
+      const rateLimitKey = `bg-svg-${backgroundUrl}`;
+      if (!ResourceRateLimiter.checkLimit(rateLimitKey, 5, 30000)) {
+        console.warn('Background SVG load rate limit exceeded for:', backgroundUrl);
+        return;
+      }
+      
+      fetch(urlValidation.sanitized)
         .then(response => {
           if (!response || !response.ok) {
             const status = response ? `${response.status} ${response.statusText}` : 'No response';
@@ -7667,9 +8590,26 @@ class AdvancedEnergyCard extends HTMLElement {
           return response.text();
         })
         .then(svgText => {
+          // Sanitize SVG content before parsing to prevent XSS
+          const sanitizedSvg = SecurityHelpers.sanitizeSvg(svgText);
+          if (!sanitizedSvg) {
+            throw new Error('SVG sanitization failed or produced empty result');
+          }
+          
           const parser = new DOMParser();
-          const svgDoc = parser.parseFromString(svgText, 'image/svg+xml');
+          const svgDoc = parser.parseFromString(sanitizedSvg, 'image/svg+xml');
+          
+          // Check for parsing errors
+          const parserError = svgDoc.querySelector('parsererror');
+          if (parserError) {
+            throw new Error(`SVG parsing error: ${parserError.textContent}`);
+          }
+          
           const svgElement = svgDoc.documentElement;
+          if (!svgElement || svgElement.tagName.toLowerCase() !== 'svg') {
+            throw new Error('Invalid SVG: root element is not <svg>');
+          }
+          
           // Clear existing content
           refs.backgroundSvg.innerHTML = '';
           // Import the entire <svg> element so its viewBox/preserveAspectRatio are preserved.
@@ -7823,7 +8763,7 @@ class AdvancedEnergyCard extends HTMLElement {
       const svgRoot = refs.backgroundSvg || refs.svgRoot;
       if (svgRoot) {
         const clamp01 = (v) => Math.min(Math.max(v, 0), 1);
-        const ensureClipRect = (target) => {
+        const ensureClipPolygon = (target) => {
           if (!target || !target.ownerSVGElement) return null;
           const svg = target.ownerSVGElement;
           const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -7845,19 +8785,16 @@ class AdvancedEnergyCard extends HTMLElement {
           if (!clipPath) {
             clipPath = document.createElementNS(SVG_NS, 'clipPath');
             clipPath.setAttribute('id', clipId);
-            clipPath.setAttribute('clipPathUnits', 'objectBoundingBox');
-            const rect = document.createElementNS(SVG_NS, 'rect');
-            rect.setAttribute('x', '0');
-            rect.setAttribute('y', '0');
-            rect.setAttribute('width', '1');
-            rect.setAttribute('height', '1');
-            clipPath.appendChild(rect);
+            clipPath.setAttribute('clipPathUnits', 'userSpaceOnUse');
+            const polygon = document.createElementNS(SVG_NS, 'polygon');
+            polygon.setAttribute('points', '0,0 1,0 1,1 0,1');
+            clipPath.appendChild(polygon);
             defs.appendChild(clipPath);
-          } else if (clipPath.getAttribute('clipPathUnits') !== 'objectBoundingBox') {
-            clipPath.setAttribute('clipPathUnits', 'objectBoundingBox');
+          } else if (clipPath.getAttribute('clipPathUnits') !== 'userSpaceOnUse') {
+            clipPath.setAttribute('clipPathUnits', 'userSpaceOnUse');
           }
-          const rect = clipPath.querySelector('rect');
-          return rect || null;
+          const polygon = clipPath.querySelector('polygon');
+          return polygon || null;
         };
         const getWorldBBox = (target) => {
           if (!target || typeof target.getBBox !== 'function') {
@@ -7909,7 +8846,8 @@ class AdvancedEnergyCard extends HTMLElement {
           if (!role) return;
           const fillEl = svgRoot.querySelector(`[data-role="${role}-fill-level"]`);
           const topEl = svgRoot.querySelector(`[data-role="${role}-fill-top"]`);
-          const bottomEl = svgRoot.querySelector(`[data-role="${role}-fill-bottom"]`);
+          const bottomEl = svgRoot.querySelector(`[data-role="${role}-fill-bottom"]`) 
+            || svgRoot.querySelector(`[data-role="${role}-filll-bottom"]`);
           if (!fillEl) return;
 
           const config = this._config || this.config || {};
@@ -7960,27 +8898,103 @@ class AdvancedEnergyCard extends HTMLElement {
             return;
           }
 
-          const topYRaw = (topBox && Number.isFinite(topBox.y)) ? topBox.y : fillBox.y;
-          const bottomYRaw = (bottomBox && Number.isFinite(bottomBox.y) && Number.isFinite(bottomBox.height))
-            ? (bottomBox.y + bottomBox.height)
-            : (fillBox.y + fillBox.height);
-          const topY = Math.min(topYRaw, bottomYRaw);
-          const bottomY = Math.max(topYRaw, bottomYRaw);
-          const range = Math.max(bottomY - topY, 1);
+          // Function to parse all points from a path
+          const parsePathPoints = (pathEl) => {
+            if (!pathEl) return [];
+            const d = pathEl.getAttribute('d');
+            if (!d) return [];
+            const points = [];
+            let currentX = 0, currentY = 0;
+            
+            const commands = d.match(/[MmLlHhVvCcSsQqTtAaZz][^MmLlHhVvCcSsQqTtAaZz]*/g) || [];
+            commands.forEach(cmd => {
+              const type = cmd[0];
+              const coords = cmd.slice(1).trim().split(/[\s,]+/).map(parseFloat).filter(Number.isFinite);
+              
+              if (type === 'M') {
+                currentX = coords[0];
+                currentY = coords[1];
+                points.push({ x: currentX, y: currentY });
+                for (let i = 2; i < coords.length; i += 2) {
+                  currentX = coords[i];
+                  currentY = coords[i + 1];
+                  points.push({ x: currentX, y: currentY });
+                }
+              } else if (type === 'm') {
+                currentX += coords[0];
+                currentY += coords[1];
+                points.push({ x: currentX, y: currentY });
+                for (let i = 2; i < coords.length; i += 2) {
+                  currentX += coords[i];
+                  currentY += coords[i + 1];
+                  points.push({ x: currentX, y: currentY });
+                }
+              } else if (type === 'L') {
+                for (let i = 0; i < coords.length; i += 2) {
+                  currentX = coords[i];
+                  currentY = coords[i + 1];
+                  points.push({ x: currentX, y: currentY });
+                }
+              } else if (type === 'l') {
+                for (let i = 0; i < coords.length; i += 2) {
+                  currentX += coords[i];
+                  currentY += coords[i + 1];
+                  points.push({ x: currentX, y: currentY });
+                }
+              }
+            });
+            return points;
+          };
+
+          const topPoints = parsePathPoints(topEl);
+          const bottomPoints = parsePathPoints(bottomEl);
+
           const level = clamp01(socValue / 100);
-          const currentHeight = range * level;
-          const y = bottomY - currentHeight;
 
-          const rectY = clamp01((y - fillBox.y) / fillBox.height);
-          const rectH = clamp01(currentHeight / fillBox.height);
+          if (topPoints.length > 0 && bottomPoints.length > 0) {
+            // Use path-based polygon clipping with userSpaceOnUse coordinates
+            // Interpolate clip points between top and bottom paths
+            // Use (1 - level) because we want high SOC to show more fill (clip line near top)
+            const clipPoints = topPoints.map((topPt, i) => {
+              const bottomPt = bottomPoints[i] || bottomPoints[bottomPoints.length - 1];
+              return {
+                x: topPt.x + (bottomPt.x - topPt.x) * (1 - level),
+                y: topPt.y + (bottomPt.y - topPt.y) * (1 - level)
+              };
+            });
 
-          const rect = ensureClipRect(fillEl);
-          if (!rect) return;
-          rect.setAttribute('x', '0');
-          rect.setAttribute('y', String(rectY));
-          rect.setAttribute('width', '1');
-          rect.setAttribute('height', String(rectH));
-          fillEl.setAttribute('clip-path', `url(#${fillEl.dataset.fillClipId})`);
+            // Build polygon: clip points + bottom points reversed (using actual SVG coordinates)
+            const polygonPoints = [
+              ...clipPoints.map(p => `${p.x},${p.y}`),
+              ...bottomPoints.slice().reverse().map(p => `${p.x},${p.y}`)
+            ].join(' ');
+
+            const polygon = ensureClipPolygon(fillEl);
+            if (polygon) {
+              polygon.setAttribute('points', polygonPoints);
+              fillEl.setAttribute('clip-path', `url(#${fillEl.dataset.fillClipId})`);
+            }
+          } else {
+            // Fallback to rectangle clipping if no paths found
+            const topYRaw = (topBox && Number.isFinite(topBox.y)) ? topBox.y : fillBox.y;
+            const bottomYRaw = (bottomBox && Number.isFinite(bottomBox.y) && Number.isFinite(bottomBox.height))
+              ? (bottomBox.y + bottomBox.height)
+              : (fillBox.y + fillBox.height);
+            const topY = Math.min(topYRaw, bottomYRaw);
+            const bottomY = Math.max(topYRaw, bottomYRaw);
+            const range = Math.max(bottomY - topY, 1);
+            const currentHeight = range * level;
+            const y = bottomY - currentHeight;
+
+            const rectY = clamp01((y - fillBox.y) / fillBox.height);
+            const rectH = clamp01(currentHeight / fillBox.height);
+
+            const polygon = ensureClipPolygon(fillEl);
+            if (polygon) {
+              polygon.setAttribute('points', `0,${rectY} 1,${rectY} 1,1 0,1`);
+              fillEl.setAttribute('clip-path', `url(#${fillEl.dataset.fillClipId})`);
+            }
+          }
         });
       }
     }
@@ -8024,6 +9038,150 @@ class AdvancedEnergyCard extends HTMLElement {
             group.style.opacity = opacity;
           }
         });
+      }
+    }
+
+    // Update inverter1-status text based on battery and grid state
+    if (viewState.batteries || viewState.grid) {
+      const svgRoot = refs.backgroundSvg || refs.svgRoot;
+      if (svgRoot) {
+        const statusEl = svgRoot.querySelector('[data-role="inverter1-status"]');
+        if (statusEl) {
+          const config = this._config || this.config || {};
+          const i18n = new LocalizationManager(this._config && this._config.language || 'en');
+          let statusText = '';
+
+          // Determine status based on battery and grid state
+          // Get battery power (from first battery or total)
+          let batteryPower = 0;
+          if (viewState.batteries && viewState.batteries.length > 0) {
+            const bat1 = viewState.batteries[0];
+            if (bat1 && Number.isFinite(bat1.power)) {
+              batteryPower = bat1.power;
+            }
+          }
+
+          // Get grid power
+          let gridPower = 0;
+          if (viewState.grid && Number.isFinite(viewState.grid.power)) {
+            gridPower = viewState.grid.power;
+          }
+
+          // Priority: Battery charging/discharging > Grid importing/exporting
+          if (Math.abs(batteryPower) > 100) {
+            if (batteryPower > 0) {
+              statusText = i18n.t('charging');
+            } else {
+              statusText = i18n.t('discharging');
+            }
+          } else if (Math.abs(gridPower) > 100) {
+            if (gridPower > 0) {
+              statusText = i18n.t('importing');
+            } else {
+              statusText = i18n.t('exporting');
+            }
+          } else {
+            statusText = i18n.t('standby');
+          }
+
+          if (statusEl.textContent !== statusText) {
+            statusEl.textContent = statusText;
+          }
+
+          // Apply color and font size from config
+          if (config.inverter1_status_text_color) {
+            const statusColor = config.inverter1_status_text_color;
+            if (statusEl.style.fill !== statusColor) {
+              statusEl.style.fill = statusColor;
+            }
+          }
+
+          if (config.inverter1_status_font_size !== undefined) {
+            const num = Number(config.inverter1_status_font_size);
+            const statusFontSize = Number.isFinite(num) ? Math.min(Math.max(num, 4), 28) : 8;
+            if (statusEl.style.fontSize !== `${statusFontSize}px`) {
+              statusEl.style.fontSize = `${statusFontSize}px`;
+            }
+          }
+        }
+      }
+    }
+
+    // Update battery time calculation attributes
+    if (viewState.inv1DateTime || viewState.inv1TimeUntil || viewState.inv2DateTime || viewState.inv2TimeUntil) {
+      const svgRoot = refs.backgroundSvg || refs.svgRoot;
+      if (svgRoot) {
+        // Update inverter 1 datetime
+        const inv1DateEl = svgRoot.querySelector('[data-feature="inv1-datetime"]');
+        if (inv1DateEl && viewState.inv1DateTime) {
+          const newText = viewState.inv1DateTime.text || '';
+          if (inv1DateEl.textContent !== newText) {
+            inv1DateEl.textContent = newText;
+          }
+          if (viewState.inv1DateTime.fill && inv1DateEl.style.fill !== viewState.inv1DateTime.fill) {
+            inv1DateEl.style.fill = viewState.inv1DateTime.fill;
+          }
+          if (viewState.inv1DateTime.fontSize) {
+            const fontSize = `${viewState.inv1DateTime.fontSize}px`;
+            if (inv1DateEl.style.fontSize !== fontSize) {
+              inv1DateEl.style.fontSize = fontSize;
+            }
+          }
+        }
+
+        // Update inverter 1 time until
+        const inv1TimeEl = svgRoot.querySelector('[data-feature="inv1-timeuntil"]');
+        if (inv1TimeEl && viewState.inv1TimeUntil) {
+          const newText = viewState.inv1TimeUntil.text || '';
+          if (inv1TimeEl.textContent !== newText) {
+            inv1TimeEl.textContent = newText;
+          }
+          if (viewState.inv1TimeUntil.fill && inv1TimeEl.style.fill !== viewState.inv1TimeUntil.fill) {
+            inv1TimeEl.style.fill = viewState.inv1TimeUntil.fill;
+          }
+          if (viewState.inv1TimeUntil.fontSize) {
+            const fontSize = `${viewState.inv1TimeUntil.fontSize}px`;
+            if (inv1TimeEl.style.fontSize !== fontSize) {
+              inv1TimeEl.style.fontSize = fontSize;
+            }
+          }
+        }
+
+        // Update inverter 2 datetime
+        const inv2DateEl = svgRoot.querySelector('[data-feature="inv2-datetime"]');
+        if (inv2DateEl && viewState.inv2DateTime) {
+          const newText = viewState.inv2DateTime.text || '';
+          if (inv2DateEl.textContent !== newText) {
+            inv2DateEl.textContent = newText;
+          }
+          if (viewState.inv2DateTime.fill && inv2DateEl.style.fill !== viewState.inv2DateTime.fill) {
+            inv2DateEl.style.fill = viewState.inv2DateTime.fill;
+          }
+          if (viewState.inv2DateTime.fontSize) {
+            const fontSize = `${viewState.inv2DateTime.fontSize}px`;
+            if (inv2DateEl.style.fontSize !== fontSize) {
+              inv2DateEl.style.fontSize = fontSize;
+            }
+          }
+        }
+
+        // Update inverter 2 time until
+        const inv2TimeEl = svgRoot.querySelector('[data-feature="inv2-timeuntil"]');
+        if (inv2TimeEl && viewState.inv2TimeUntil) {
+          const newText = viewState.inv2TimeUntil.text || '';
+          if (inv2TimeEl.textContent !== newText) {
+            inv2TimeEl.textContent = newText;
+          }
+          if (viewState.inv2TimeUntil.fill && inv2TimeEl.style.fill !== viewState.inv2TimeUntil.fill) {
+            inv2TimeEl.style.fill = viewState.inv2TimeUntil.fill;
+          }
+          if (viewState.inv2TimeUntil.fontSize) {
+            const fontSize = `${viewState.inv2TimeUntil.fontSize}px`;
+            if (inv2TimeEl.style.fontSize !== fontSize) {
+              inv2TimeEl.style.fontSize = fontSize;
+            }
+          }
+        }
       }
     }
 
@@ -10397,6 +11555,20 @@ class AdvancedEnergyCard extends HTMLElement {
       fontSize: viewState.windmillPower ? viewState.windmillPower.fontSize : undefined
     });
 
+    // Inverter 1 Temperature (direct binding)
+    updateRole('inverter1-temp', viewState.inverter1Temp ? viewState.inverter1Temp.text : '', {
+      visible: Boolean(viewState.inverter1Temp && viewState.inverter1Temp.visible),
+      fill: viewState.inverter1Temp ? viewState.inverter1Temp.fill : undefined,
+      fontSize: viewState.inverter1Temp ? viewState.inverter1Temp.fontSize : undefined
+    });
+
+    // Battery 1 Temperature (direct binding)
+    updateRole('battery1-temp', viewState.battery1Temp ? viewState.battery1Temp.text : '', {
+      visible: Boolean(viewState.battery1Temp && viewState.battery1Temp.visible),
+      fill: viewState.battery1Temp ? viewState.battery1Temp.fill : undefined,
+      fontSize: viewState.battery1Temp ? viewState.battery1Temp.fontSize : undefined
+    });
+
     if (Array.isArray(viewState.batteryText) && viewState.batteryText.length) {
       viewState.batteryText.forEach((bat) => {
         const index = bat && Number.isFinite(bat.index) ? bat.index : null;
@@ -10670,7 +11842,7 @@ class AdvancedEnergyCard extends HTMLElement {
       try {
         this._listenersAttachedTo.svgRoot.removeEventListener('click', this._handlePopupSvgClickBound);
       } catch (e) {
-        // ignore
+        console.warn('Error removing listener:', e);
       }
       this._listenersAttachedTo.svgRoot = null;
     }
@@ -10679,7 +11851,7 @@ class AdvancedEnergyCard extends HTMLElement {
         svgRoot.addEventListener('click', this._handlePopupSvgClickBound);
         this._listenersAttachedTo.svgRoot = svgRoot;
       } catch (e) {
-        // ignore
+        console.error('Error attaching listener:', e);
       }
     }
 
@@ -10882,7 +12054,7 @@ class AdvancedEnergyCard extends HTMLElement {
       }
       this._popupManager.togglePopup(type);
     } catch (e) {
-      // ignore
+      console.error('Error in popup click handler:', e);
     }
   }
 
@@ -10998,7 +12170,7 @@ class AdvancedEnergyCard extends HTMLElement {
   }
 
   static get version() {
-    return '1.0.24';
+    return '1.0.26';
   }
 }
 
@@ -11179,18 +12351,33 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           sensor_bat1_power: { label: 'Battery 1 Power', helper: 'Provide this combined power sensor or both charge/discharge sensors so Battery 1 becomes active.' },
           sensor_bat1_charge_power: { label: 'Battery 1 Charge Power', helper: 'Sensor for Battery 1 charging power.' },
           sensor_bat1_discharge_power: { label: 'Battery 1 Discharge Power', helper: 'Sensor for Battery 1 discharging power.' },
+          sensor_bat1_capacity_sensor: { label: 'Battery 1 Usable Capacity Sensor', helper: 'Optional sensor entity reporting Battery 1 usable capacity in Wh or kWh. Used with reserve percentage to calculate effective capacity.' },
+          bat1_capacity_manual: { label: 'Battery 1 Usable Capacity (Manual)', helper: 'Alternative manual entry for Battery 1 usable capacity. Enter value in the units specified by your display_unit setting (Wh or kWh). Ignored if capacity sensor is provided.' },
+          bat1_reserve_percentage: { label: 'Battery 1 Reserve Percentage', helper: 'Optional reserve percentage for Battery 1 (0-100). Some systems maintain a reserve to preserve battery health. This reduces the effective usable capacity displayed.' },
+          sensor_battery1_temp: { label: 'Battery 1 Temperature Sensor', helper: 'Temperature sensor for Battery 1 (linked to data-role="battery1-temp").' },
+          battery1_temp_font_size: { label: 'Battery 1 Temp Font Size (px)', helper: 'Font size for Battery 1 temperature text. Default 8' },
+          battery1_temp_color: { label: 'Battery 1 Temp Text Color', helper: 'Color applied to the Battery 1 temperature text.' },
           sensor_bat2_soc: { label: 'Battery 2 SOC', helper: 'State of Charge sensor for Battery 2 (percentage).' },
           sensor_bat2_power: { label: 'Battery 2 Power', helper: 'Provide this combined power sensor or both charge/discharge sensors so Battery 2 becomes active.' },
           sensor_bat2_charge_power: { label: 'Battery 2 Charge Power', helper: 'Sensor for Battery 2 charging power.' },
           sensor_bat2_discharge_power: { label: 'Battery 2 Discharge Power', helper: 'Sensor for Battery 2 discharging power.' },
+          sensor_bat2_capacity_sensor: { label: 'Battery 2 Usable Capacity Sensor', helper: 'Optional sensor entity reporting Battery 2 usable capacity in Wh or kWh. Used with reserve percentage to calculate effective capacity.' },
+          bat2_capacity_manual: { label: 'Battery 2 Usable Capacity (Manual)', helper: 'Alternative manual entry for Battery 2 usable capacity. Enter value in the units specified by your display_unit setting (Wh or kWh). Ignored if capacity sensor is provided.' },
+          bat2_reserve_percentage: { label: 'Battery 2 Reserve Percentage', helper: 'Optional reserve percentage for Battery 2 (0-100). Some systems maintain a reserve to preserve battery health. This reduces the effective usable capacity displayed.' },
           sensor_bat3_soc: { label: 'Battery 3 SOC', helper: 'State of Charge sensor for Battery 3 (percentage).' },
           sensor_bat3_power: { label: 'Battery 3 Power', helper: 'Provide this combined power sensor or both charge/discharge sensors so Battery 3 becomes active.' },
           sensor_bat3_charge_power: { label: 'Battery 3 Charge Power', helper: 'Sensor for Battery 3 charging power.' },
           sensor_bat3_discharge_power: { label: 'Battery 3 Discharge Power' },
+          sensor_bat3_capacity_sensor: { label: 'Battery 3 Usable Capacity Sensor', helper: 'Optional sensor entity reporting Battery 3 usable capacity in Wh or kWh. Used with reserve percentage to calculate effective capacity.' },
+          bat3_capacity_manual: { label: 'Battery 3 Usable Capacity (Manual)', helper: 'Alternative manual entry for Battery 3 usable capacity. Enter value in the units specified by your display_unit setting (Wh or kWh). Ignored if capacity sensor is provided.' },
+          bat3_reserve_percentage: { label: 'Battery 3 Reserve Percentage', helper: 'Optional reserve percentage for Battery 3 (0-100). Some systems maintain a reserve to preserve battery health. This reduces the effective usable capacity displayed.' },
           sensor_bat4_soc: { label: 'Battery 4 SOC', helper: 'State of Charge sensor for Battery 4 (percentage).' },
           sensor_bat4_power: { label: 'Battery 4 Power', helper: 'Provide this combined power sensor or both charge/discharge sensors so Battery 4 becomes active.' },
           sensor_bat4_charge_power: { label: 'Battery 4 Charge Power', helper: 'Sensor for Battery 4 charging power.' },
           sensor_bat4_discharge_power: { label: 'Battery 4 Discharge Power', helper: 'Sensor for Battery 4 discharging power.' },
+          sensor_bat4_capacity_sensor: { label: 'Battery 4 Usable Capacity Sensor', helper: 'Optional sensor entity reporting Battery 4 usable capacity in Wh or kWh. Used with reserve percentage to calculate effective capacity.' },
+          bat4_capacity_manual: { label: 'Battery 4 Usable Capacity (Manual)', helper: 'Alternative manual entry for Battery 4 usable capacity. Enter value in the units specified by your display_unit setting (Wh or kWh). Ignored if capacity sensor is provided.' },
+          bat4_reserve_percentage: { label: 'Battery 4 Reserve Percentage', helper: 'Optional reserve percentage for Battery 4 (0-100). Some systems maintain a reserve to preserve battery health. This reduces the effective usable capacity displayed.' },
           sensor_home_load: { label: 'Home Load/Consumption (Required)', helper: 'Total household consumption sensor.' },
           sensor_home_load_secondary: { label: 'Home Load (Inverter 2)', helper: 'Optional house load sensor for the second inverter.' },
           sensor_heat_pump_consumption: { label: 'Heat Pump Consumption', helper: 'Sensor for heat pump energy consumption.' },
@@ -11220,6 +12407,11 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           grid_current_odometer: { label: 'Odometer: Grid Current', helper: 'Animate Grid Current with a per-digit rolling effect.' },
           grid_current_odometer_duration: { label: 'Odometer Duration (ms)', helper: 'Animation duration in milliseconds. Default 350.' },
           show_grid_flow_label: { label: 'Show Grid Import/Export Name', helper: 'Prepend the importing/exporting label before the grid value when enabled.' },
+          inverter1_status_text_color: { label: 'Inverter Status Text Color', helper: 'Color applied to the inverter status text (Charging/Discharging/Importing/Exporting).' },
+          inverter1_status_font_size: { label: 'Inverter Status Font Size (px)', helper: 'Font size for inverter status text. Default 8' },
+          sensor_inverter1_temp: { label: 'Inverter 1 Temperature Sensor', helper: 'Temperature sensor for Inverter 1 (linked to data-role="inverter1-temp").' },
+          inverter1_temp_font_size: { label: 'Inverter 1 Temp Font Size (px)', helper: 'Font size for Inverter 1 temperature text. Default 8' },
+          inverter1_temp_color: { label: 'Inverter 1 Temp Text Color', helper: 'Color applied to the Inverter 1 temperature text.' },
           enable_echo_alive: { label: 'Enable Echo Alive', helper: 'Enables an invisible iframe to keep the Silk browser open on Echo Show. The button will be positioned in a corner of the card.' },
           pv_tot_color: { label: 'PV Total Color', helper: 'Colour applied to the PV TOTAL text line.' },
           pv_primary_color: { label: 'PV 1 Flow Color', helper: 'Colour used for the primary PV animation line.' },
@@ -11297,6 +12489,14 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           windmill_power_font_size: { label: 'Windmill Power Font Size (px)', helper: 'Default 8' },
           battery_soc_font_size: { label: 'Battery SOC Font Size (px)', helper: 'Default 20' },
           battery_power_font_size: { label: 'Battery Power Font Size (px)', helper: 'Default 8' },
+          inv1_datetime_color: { label: 'Inverter 1 DateTime Color', helper: 'Color for Inverter 1 battery datetime display' },
+          inv1_datetime_font_size: { label: 'Inverter 1 DateTime Font Size (px)', helper: 'Font size for Inverter 1 battery datetime. Default 8' },
+          inv1_timeuntil_color: { label: 'Inverter 1 Time Until Color', helper: 'Color for Inverter 1 battery time until display' },
+          inv1_timeuntil_font_size: { label: 'Inverter 1 Time Until Font Size (px)', helper: 'Font size for Inverter 1 battery time until. Default 8' },
+          inv2_datetime_color: { label: 'Inverter 2 DateTime Color', helper: 'Color for Inverter 2 battery datetime display' },
+          inv2_datetime_font_size: { label: 'Inverter 2 DateTime Font Size (px)', helper: 'Font size for Inverter 2 battery datetime. Default 8' },
+          inv2_timeuntil_color: { label: 'Inverter 2 Time Until Color', helper: 'Color for Inverter 2 battery time until display' },
+          inv2_timeuntil_font_size: { label: 'Inverter 2 Time Until Font Size (px)', helper: 'Font size for Inverter 2 battery time until. Default 8' },
           load_font_size: { label: 'Load Font Size (px)', helper: 'Default 8' },
           inv1_power_font_size: { label: 'INV 1 Power Font Size (px)', helper: 'Font size for the INV 1 power line. Default uses Load Font Size.' },
           inv2_power_font_size: { label: 'INV 2 Power Font Size (px)', helper: 'Font size for the INV 2 power line. Default uses Load Font Size.' },
@@ -11361,30 +12561,20 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           sensor_popup_house_6_name: { label: 'House Popup 6 Name', helper: 'Optional custom name for house popup line 6. Leave blank to use entity name.' },
           sensor_popup_house_6_color: { label: 'House Popup 6 Color', helper: 'Color for house popup line 6 text.' },
           sensor_popup_house_6_font_size: { label: 'House Popup 6 Font Size (px)', helper: 'Font size for house popup line 6. Default 8' },
+          battery_popup_color: { label: 'Battery Popup Text Color', helper: 'Global color for all battery popup text (datetime, timeuntil, and custom sensors). Default #00FFFF' },
+          battery_popup_font_size: { label: 'Battery Popup Font Size (px)', helper: 'Global font size for all battery popup text. Default 16' },
           sensor_popup_bat_1: { label: 'Battery Popup 1', helper: 'Entity for battery popup line 1.' },
           sensor_popup_bat_1_name: { label: 'Battery Popup 1 Name', helper: 'Optional custom name for battery popup line 1. Leave blank to use entity name.' },
-          sensor_popup_bat_1_color: { label: 'Battery Popup 1 Color', helper: 'Color for battery popup line 1 text.' },
-          sensor_popup_bat_1_font_size: { label: 'Battery Popup 1 Font Size (px)', helper: 'Font size for battery popup line 1. Default 8' },
           sensor_popup_bat_2: { label: 'Battery Popup 2', helper: 'Entity for battery popup line 2.' },
           sensor_popup_bat_2_name: { label: 'Battery Popup 2 Name', helper: 'Optional custom name for battery popup line 2. Leave blank to use entity name.' },
-          sensor_popup_bat_2_color: { label: 'Battery Popup 2 Color', helper: 'Color for battery popup line 2 text.' },
-          sensor_popup_bat_2_font_size: { label: 'Battery Popup 2 Font Size (px)', helper: 'Font size for battery popup line 2. Default 8' },
           sensor_popup_bat_3: { label: 'Battery Popup 3', helper: 'Entity for battery popup line 3.' },
           sensor_popup_bat_3_name: { label: 'Battery Popup 3 Name', helper: 'Optional custom name for battery popup line 3. Leave blank to use entity name.' },
-          sensor_popup_bat_3_color: { label: 'Battery Popup 3 Color', helper: 'Color for battery popup line 3 text.' },
-          sensor_popup_bat_3_font_size: { label: 'Battery Popup 3 Font Size (px)', helper: 'Font size for battery popup line 3. Default 8' },
           sensor_popup_bat_4: { label: 'Battery Popup 4', helper: 'Entity for battery popup line 4.' },
           sensor_popup_bat_4_name: { label: 'Battery Popup 4 Name', helper: 'Optional custom name for battery popup line 4. Leave blank to use entity name.' },
-          sensor_popup_bat_4_color: { label: 'Battery Popup 4 Color', helper: 'Color for battery popup line 4 text.' },
-          sensor_popup_bat_4_font_size: { label: 'Battery Popup 4 Font Size (px)', helper: 'Font size for battery popup line 4. Default 8' },
           sensor_popup_bat_5: { label: 'Battery Popup 5', helper: 'Entity for battery popup line 5.' },
           sensor_popup_bat_5_name: { label: 'Battery Popup 5 Name', helper: 'Optional custom name for battery popup line 5. Leave blank to use entity name.' },
-          sensor_popup_bat_5_color: { label: 'Battery Popup 5 Color', helper: 'Color for battery popup line 5 text.' },
-          sensor_popup_bat_5_font_size: { label: 'Battery Popup 5 Font Size (px)', helper: 'Font size for battery popup line 5. Default 8' },
           sensor_popup_bat_6: { label: 'Battery Popup 6', helper: 'Entity for battery popup line 6.' },
           sensor_popup_bat_6_name: { label: 'Battery Popup 6 Name', helper: 'Optional custom name for battery popup line 6. Leave blank to use entity name.' },
-          sensor_popup_bat_6_color: { label: 'Battery Popup 6 Color', helper: 'Color for battery popup line 6 text.' },
-          sensor_popup_bat_6_font_size: { label: 'Battery Popup 6 Font Size (px)', helper: 'Font size for battery popup line 6. Default 8' },
           sensor_popup_grid_1: { label: 'Grid Popup 1', helper: 'Entity for grid popup line 1.' },
           sensor_popup_grid_1_name: { label: 'Grid Popup 1 Name', helper: 'Optional custom name for grid popup line 1. Leave blank to use entity name.' },
           sensor_popup_grid_1_color: { label: 'Grid Popup 1 Color', helper: 'Color for grid popup line 1 text.' },
@@ -11466,7 +12656,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           initial_evs_2: '2'
         },
         view: {
-          daily: 'DAILY YIELD', pv_tot: 'PV TOTAL', car1: 'CAR 1', car2: 'CAR 2', importing: 'IMPORTING', exporting: 'EXPORTING'
+          daily: 'DAILY YIELD', pv_tot: 'PV TOTAL', car1: 'CAR 1', car2: 'CAR 2', importing: 'IMPORTING', exporting: 'EXPORTING', charging: 'CHARGING', discharging: 'DISCHARGING', standby: 'STANDBY'
         }
       },
       it: {
@@ -11547,18 +12737,30 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           sensor_bat1_power: { label: 'Potenza Batteria 1', helper: 'Fornire questo sensore di potenza combinato o i sensori di carica/scarica affinché la Batteria 1 diventi attiva.' },
           sensor_bat1_charge_power: { label: 'Potenza carica Batteria 1', helper: 'Sensore per la potenza in carica della Batteria 1.' },
           sensor_bat1_discharge_power: { label: 'Potenza scarica Batteria 1', helper: 'Sensore per la potenza in scarica della Batteria 1.' },
+          sensor_bat1_capacity_sensor: { label: 'Sensore capacità utilizzabile Batteria 1', helper: 'Sensore opzionale che riporta la capacità utilizzabile della Batteria 1 in Wh o kWh. Utilizzato con la percentuale di riserva per calcolare la capacità effettiva.' },
+          bat1_capacity_manual: { label: 'Capacità utilizzabile Batteria 1 (Manuale)', helper: 'Inserimento manuale alternativo per la capacità utilizzabile della Batteria 1. Inserire il valore nelle unità specificate dall\'impostazione display_unit (Wh o kWh). Ignorato se viene fornito il sensore di capacità.' },
+          bat1_reserve_percentage: { label: 'Percentuale riserva Batteria 1', helper: 'Percentuale di riserva opzionale per la Batteria 1 (0-100). Alcuni sistemi mantengono una riserva per preservare la salute della batteria. Questo riduce la capacità utilizzabile effettiva visualizzata.' },
           sensor_bat2_soc: { label: 'SOC Batteria 2', helper: 'Sensore Stato di Carica per la Batteria 2 (percentuale).' },
           sensor_bat2_power: { label: 'Potenza Batteria 2', helper: 'Fornire questo sensore di potenza combinato o i sensori di carica/scarica affinché la Batteria 2 diventi attiva.' },
           sensor_bat2_charge_power: { label: 'Potenza carica Batteria 2', helper: 'Sensore per la potenza in carica della Batteria 2.' },
           sensor_bat2_discharge_power: { label: 'Potenza scarica Batteria 2', helper: 'Sensore per la potenza in scarica della Batteria 2.' },
+          sensor_bat2_capacity_sensor: { label: 'Sensore capacità utilizzabile Batteria 2', helper: 'Sensore opzionale che riporta la capacità utilizzabile della Batteria 2 in Wh o kWh. Utilizzato con la percentuale di riserva per calcolare la capacità effettiva.' },
+          bat2_capacity_manual: { label: 'Capacità utilizzabile Batteria 2 (Manuale)', helper: 'Inserimento manuale alternativo per la capacità utilizzabile della Batteria 2. Inserire il valore nelle unità specificate dall\'impostazione display_unit (Wh o kWh). Ignorato se viene fornito il sensore di capacità.' },
+          bat2_reserve_percentage: { label: 'Percentuale riserva Batteria 2', helper: 'Percentuale di riserva opzionale per la Batteria 2 (0-100). Alcuni sistemi mantengono una riserva per preservare la salute della batteria. Questo riduce la capacità utilizzabile effettiva visualizzata.' },
           sensor_bat3_soc: { label: 'SOC Batteria 3', helper: 'Sensore Stato di Carica per la Batteria 3 (percentuale).' },
           sensor_bat3_power: { label: 'Potenza Batteria 3', helper: 'Fornire questo sensore di potenza combinato o i sensori di carica/scarica affinché la Batteria 3 diventi attiva.' },
           sensor_bat3_charge_power: { label: 'Potenza carica Batteria 3', helper: 'Sensore per la potenza in carica della Batteria 3.' },
           sensor_bat3_discharge_power: { label: 'Potenza scarica Batteria 3', helper: '' },
+          sensor_bat3_capacity_sensor: { label: 'Sensore capacità utilizzabile Batteria 3', helper: 'Sensore opzionale che riporta la capacità utilizzabile della Batteria 3 in Wh o kWh. Utilizzato con la percentuale di riserva per calcolare la capacità effettiva.' },
+          bat3_capacity_manual: { label: 'Capacità utilizzabile Batteria 3 (Manuale)', helper: 'Inserimento manuale alternativo per la capacità utilizzabile della Batteria 3. Inserire il valore nelle unità specificate dall\'impostazione display_unit (Wh o kWh). Ignorato se viene fornito il sensore di capacità.' },
+          bat3_reserve_percentage: { label: 'Percentuale riserva Batteria 3', helper: 'Percentuale di riserva opzionale per la Batteria 3 (0-100). Alcuni sistemi mantengono una riserva per preservare la salute della batteria. Questo riduce la capacità utilizzabile effettiva visualizzata.' },
           sensor_bat4_soc: { label: 'SOC Batteria 4', helper: 'Sensore Stato di Carica per la Batteria 4 (percentuale).' },
           sensor_bat4_power: { label: 'Potenza Batteria 4', helper: 'Fornire questo sensore di potenza combinato o i sensori di carica/scarica affinché la Batteria 4 diventi attiva.' },
           sensor_bat4_charge_power: { label: 'Potenza carica Batteria 4', helper: 'Sensore per la potenza in carica della Batteria 4.' },
           sensor_bat4_discharge_power: { label: 'Potenza scarica Batteria 4', helper: 'Sensore per la potenza in scarica della Batteria 4.' },
+          sensor_bat4_capacity_sensor: { label: 'Sensore capacità utilizzabile Batteria 4', helper: 'Sensore opzionale che riporta la capacità utilizzabile della Batteria 4 in Wh o kWh. Utilizzato con la percentuale di riserva per calcolare la capacità effettiva.' },
+          bat4_capacity_manual: { label: 'Capacità utilizzabile Batteria 4 (Manuale)', helper: 'Inserimento manuale alternativo per la capacità utilizzabile della Batteria 4. Inserire il valore nelle unità specificate dall\'impostazione display_unit (Wh o kWh). Ignorato se viene fornito il sensore di capacità.' },
+          bat4_reserve_percentage: { label: 'Percentuale riserva Batteria 4', helper: 'Percentuale di riserva opzionale per la Batteria 4 (0-100). Alcuni sistemi mantengono una riserva per preservare la salute della batteria. Questo riduce la capacità utilizzabile effettiva visualizzata.' },
           sensor_home_load: { label: 'Consumo domestico (obbligatorio)', helper: 'Sensore del consumo totale della casa.' },
           sensor_home_load_secondary: { label: 'Consumo domestico (Inverter 2)', helper: 'Sensore carico casa opzionale per il secondo inverter.' },
           sensor_heat_pump_consumption: { label: 'Consumo pompa di calore', helper: 'Sensore per il consumo energetico della pompa di calore.' },
@@ -11588,6 +12790,8 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           grid_current_odometer: { label: 'Odometer: Corrente rete', helper: 'Anima la corrente di rete con un effetto di rotazione per cifra.' },
           grid_current_odometer_duration: { label: 'Durata odometro (ms)', helper: 'Durata dell\'animazione in millisecondi. Default 350.' },
           show_grid_flow_label: { label: 'Mostra nome Import/Export rete', helper: 'Prependi la label importing/exporting prima del valore di rete quando abilitato.' },
+          inverter1_status_text_color: { label: 'Colore testo Stato Inverter', helper: 'Colore applicato al testo dello stato inverter (Ricarica/Scarica/Importazione/Esportazione).' },
+          inverter1_status_font_size: { label: 'Dimensione font Stato Inverter (px)', helper: 'Dimensione font per il testo dello stato inverter. Default 8' },
           enable_echo_alive: { label: 'Abilita Echo Alive', helper: 'Abilita un iframe invisibile per mantenere il browser Silk aperto su Echo Show. Il pulsante sarà posizionato in un angolo della scheda.' },
           pv_tot_color: { label: 'Colore PV Totale', helper: 'Colore applicato alla linea di testo PV TOTAL.' },
           pv_primary_color: { label: 'Colore flusso PV 1', helper: 'Colore usato per la linea di animazione primaria del PV.' },
@@ -11665,6 +12869,14 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           windmill_power_font_size: { label: 'Dimensione font potenza mulino (px)', helper: 'Default 8' },
           battery_soc_font_size: { label: 'Dimensione font SOC batteria (px)', helper: 'Default 20' },
           battery_power_font_size: { label: 'Dimensione font potenza batteria (px)', helper: 'Default 8' },
+          inv1_datetime_color: { label: 'Colore DateTime Inverter 1', helper: 'Colore per la visualizzazione datetime batteria Inverter 1' },
+          inv1_datetime_font_size: { label: 'Dimensione font DateTime Inverter 1 (px)', helper: 'Dimensione carattere per datetime batteria Inverter 1. Default 8' },
+          inv1_timeuntil_color: { label: 'Colore Tempo Fino a Inverter 1', helper: 'Colore per la visualizzazione tempo fino a batteria Inverter 1' },
+          inv1_timeuntil_font_size: { label: 'Dimensione font Tempo Fino a Inverter 1 (px)', helper: 'Dimensione carattere per tempo fino a batteria Inverter 1. Default 8' },
+          inv2_datetime_color: { label: 'Colore DateTime Inverter 2', helper: 'Colore per la visualizzazione datetime batteria Inverter 2' },
+          inv2_datetime_font_size: { label: 'Dimensione font DateTime Inverter 2 (px)', helper: 'Dimensione carattere per datetime batteria Inverter 2. Default 8' },
+          inv2_timeuntil_color: { label: 'Colore Tempo Fino a Inverter 2', helper: 'Colore per la visualizzazione tempo fino a batteria Inverter 2' },
+          inv2_timeuntil_font_size: { label: 'Dimensione font Tempo Fino a Inverter 2 (px)', helper: 'Dimensione carattere per tempo fino a batteria Inverter 2. Default 8' },
           load_font_size: { label: 'Dimensione font carico (px)', helper: 'Default 8' },
           inv1_power_font_size: { label: 'Dimensione font potenza INV 1 (px)', helper: 'Dimensione font per la linea di potenza INV 1. Di default usa Load Font Size.' },
           inv2_power_font_size: { label: 'Dimensione font potenza INV 2 (px)', helper: 'Dimensione font per la linea di potenza INV 2. Di default usa Load Font Size.' },
@@ -11738,7 +12950,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           initial_evs_2: '2'
         },
         view: {
-          daily: 'DAILY YIELD', pv_tot: 'PV TOTAL', car1: 'CAR 1', car2: 'CAR 2', importing: 'IMPORTING', exporting: 'EXPORTING'
+          daily: 'DAILY YIELD', pv_tot: 'PV TOTAL', car1: 'CAR 1', car2: 'CAR 2', importing: 'IMPORTING', exporting: 'EXPORTING', charging: 'RICARICA', discharging: 'SCARICA', standby: 'STANDBY'
         }
       },
       note: {
@@ -11821,18 +13033,30 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           sensor_bat1_power: { label: 'Batterie 1 Leistung', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batterie 1 becomes active.' },
           sensor_bat1_charge_power: { label: 'Batterie 1 Laden Leistung', helper: 'Sensor for Batterie 1 charging power.' },
           sensor_bat1_discharge_power: { label: 'Batterie 1 Entladen Leistung', helper: 'Sensor for Batterie 1 discharging power.' },
+          sensor_bat1_capacity_sensor: { label: 'Batterie 1 Nutzbare Kapazität Sensor', helper: 'Optionaler Sensor, der die nutzbare Kapazität von Batterie 1 in Wh oder kWh meldet. Wird mit dem Reserveprozentsatz verwendet, um die effektive Kapazität zu berechnen.' },
+          bat1_capacity_manual: { label: 'Batterie 1 Nutzbare Kapazität (Manuell)', helper: 'Alternative manuelle Eingabe für die nutzbare Kapazität von Batterie 1. Geben Sie den Wert in den durch Ihre display_unit-Einstellung festgelegten Einheiten (Wh oder kWh) ein. Wird ignoriert, wenn ein Kapazitätssensor bereitgestellt wird.' },
+          bat1_reserve_percentage: { label: 'Batterie 1 Reserveprozentsatz', helper: 'Optionaler Reserveprozentsatz für Batterie 1 (0-100). Einige Systeme halten eine Reserve, um die Batteriegesundheit zu erhalten. Dies reduziert die angezeigte effektive nutzbare Kapazität.' },
           sensor_bat2_soc: { label: 'Batterie 2 SOC', helper: 'Ladezustand sensor for Batterie 2 (percentage).' },
           sensor_bat2_power: { label: 'Batterie 2 Leistung', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batterie 2 becomes active.' },
           sensor_bat2_charge_power: { label: 'Batterie 2 Laden Leistung', helper: 'Sensor for Batterie 2 charging power.' },
           sensor_bat2_discharge_power: { label: 'Batterie 2 Entladen Leistung', helper: 'Sensor for Batterie 2 discharging power.' },
+          sensor_bat2_capacity_sensor: { label: 'Batterie 2 Nutzbare Kapazität Sensor', helper: 'Optionaler Sensor, der die nutzbare Kapazität von Batterie 2 in Wh oder kWh meldet. Wird mit dem Reserveprozentsatz verwendet, um die effektive Kapazität zu berechnen.' },
+          bat2_capacity_manual: { label: 'Batterie 2 Nutzbare Kapazität (Manuell)', helper: 'Alternative manuelle Eingabe für die nutzbare Kapazität von Batterie 2. Geben Sie den Wert in den durch Ihre display_unit-Einstellung festgelegten Einheiten (Wh oder kWh) ein. Wird ignoriert, wenn ein Kapazitätssensor bereitgestellt wird.' },
+          bat2_reserve_percentage: { label: 'Batterie 2 Reserveprozentsatz', helper: 'Optionaler Reserveprozentsatz für Batterie 2 (0-100). Einige Systeme halten eine Reserve, um die Batteriegesundheit zu erhalten. Dies reduziert die angezeigte effektive nutzbare Kapazität.' },
           sensor_bat3_soc: { label: 'Batterie 3 SOC', helper: 'Ladezustand sensor for Batterie 3 (percentage).' },
           sensor_bat3_power: { label: 'Batterie 3 Leistung', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batterie 3 becomes active.' },
           sensor_bat3_charge_power: { label: 'Batterie 3 Laden Leistung', helper: 'Sensor for Batterie 3 charging power.' },
           sensor_bat3_discharge_power: { label: 'Batterie 3 Entladen Leistung' },
+          sensor_bat3_capacity_sensor: { label: 'Batterie 3 Nutzbare Kapazität Sensor', helper: 'Optionaler Sensor, der die nutzbare Kapazität von Batterie 3 in Wh oder kWh meldet. Wird mit dem Reserveprozentsatz verwendet, um die effektive Kapazität zu berechnen.' },
+          bat3_capacity_manual: { label: 'Batterie 3 Nutzbare Kapazität (Manuell)', helper: 'Alternative manuelle Eingabe für die nutzbare Kapazität von Batterie 3. Geben Sie den Wert in den durch Ihre display_unit-Einstellung festgelegten Einheiten (Wh oder kWh) ein. Wird ignoriert, wenn ein Kapazitätssensor bereitgestellt wird.' },
+          bat3_reserve_percentage: { label: 'Batterie 3 Reserveprozentsatz', helper: 'Optionaler Reserveprozentsatz für Batterie 3 (0-100). Einige Systeme halten eine Reserve, um die Batteriegesundheit zu erhalten. Dies reduziert die angezeigte effektive nutzbare Kapazität.' },
           sensor_bat4_soc: { label: 'Batterie 4 SOC', helper: 'Ladezustand sensor for Batterie 4 (percentage).' },
           sensor_bat4_power: { label: 'Batterie 4 Leistung', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batterie 4 becomes active.' },
           sensor_bat4_charge_power: { label: 'Batterie 4 Laden Leistung', helper: 'Sensor for Batterie 4 charging power.' },
           sensor_bat4_discharge_power: { label: 'Batterie 4 Entladen Leistung', helper: 'Sensor for Batterie 4 discharging power.' },
+          sensor_bat4_capacity_sensor: { label: 'Batterie 4 Nutzbare Kapazität Sensor', helper: 'Optionaler Sensor, der die nutzbare Kapazität von Batterie 4 in Wh oder kWh meldet. Wird mit dem Reserveprozentsatz verwendet, um die effektive Kapazität zu berechnen.' },
+          bat4_capacity_manual: { label: 'Batterie 4 Nutzbare Kapazität (Manuell)', helper: 'Alternative manuelle Eingabe für die nutzbare Kapazität von Batterie 4. Geben Sie den Wert in den durch Ihre display_unit-Einstellung festgelegten Einheiten (Wh oder kWh) ein. Wird ignoriert, wenn ein Kapazitätssensor bereitgestellt wird.' },
+          bat4_reserve_percentage: { label: 'Batterie 4 Reserveprozentsatz', helper: 'Optionaler Reserveprozentsatz für Batterie 4 (0-100). Einige Systeme halten eine Reserve, um die Batteriegesundheit zu erhalten. Dies reduziert die angezeigte effektive nutzbare Kapazität.' },
           sensor_home_load: { label: 'Home Load/Consumption (Erforderlich)', helper: 'Total household consumption sensor.' },
           sensor_home_load_secondary: { label: 'Home Load (Wechselrichter 2)', helper: 'Optional house load sensor for the second inverter.' },
           sensor_heat_pump_consumption: { label: 'Heat Pump Consumption', helper: 'Sensor for heat pump energy consumption.' },
@@ -11862,6 +13086,8 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           grid_current_odometer: { label: 'Odometer: Netz Current', helper: 'Animate Netz Current with a per-digit rolling effect.' },
           grid_current_odometer_duration: { label: 'Odometer Dauer ((ms))', helper: 'Animation duration in milliseconds. Standard 350.' },
           show_grid_flow_label: { label: 'Show Netz Import/Export Name', helper: 'Prepend the importing/exporting label before the grid value when enabled.' },
+          inverter1_status_text_color: { label: 'Wechselrichter Status Text Farbe', helper: 'Farbe für den Wechselrichter-Statustext (Laden/Entladen/Importieren/Exportieren).' },
+          inverter1_status_font_size: { label: 'Wechselrichter Status Schriftgröße (px)', helper: 'Schriftgröße für Wechselrichter-Statustext. Standard 8' },
           enable_echo_alive: { label: 'Aktivieren Echo Alive', helper: 'Aktivierens an invisible iframe to keep the Silk browser open on Echo Show. The button will be positioned in a corner of the card.' },
           pv_tot_color: { label: 'PV Total Farbe', helper: 'Colour applied to the PV TOTAL text line.' },
           pv_primary_color: { label: 'PV 1 Flow Farbe', helper: 'Colour used for the primary PV animation line.' },
@@ -11939,6 +13165,14 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           windmill_power_font_size: { label: 'Windrad Leistung Font Size ((px))', helper: 'Standard 8' },
           battery_soc_font_size: { label: 'Batterie SOC Font Size ((px))', helper: 'Standard 20' },
           battery_power_font_size: { label: 'Batterie Leistung Font Size ((px))', helper: 'Standard 8' },
+          inv1_datetime_color: { label: 'Wechselrichter 1 DateTime Farbe', helper: 'Farbe für Wechselrichter 1 Batterie DateTime-Anzeige' },
+          inv1_datetime_font_size: { label: 'Wechselrichter 1 DateTime Font Size (px)', helper: 'Schriftgröße für Wechselrichter 1 Batterie DateTime. Standard 8' },
+          inv1_timeuntil_color: { label: 'Wechselrichter 1 Zeit Bis Farbe', helper: 'Farbe für Wechselrichter 1 Batterie Zeit Bis-Anzeige' },
+          inv1_timeuntil_font_size: { label: 'Wechselrichter 1 Zeit Bis Font Size (px)', helper: 'Schriftgröße für Wechselrichter 1 Batterie Zeit Bis. Standard 8' },
+          inv2_datetime_color: { label: 'Wechselrichter 2 DateTime Farbe', helper: 'Farbe für Wechselrichter 2 Batterie DateTime-Anzeige' },
+          inv2_datetime_font_size: { label: 'Wechselrichter 2 DateTime Font Size (px)', helper: 'Schriftgröße für Wechselrichter 2 Batterie DateTime. Standard 8' },
+          inv2_timeuntil_color: { label: 'Wechselrichter 2 Zeit Bis Farbe', helper: 'Farbe für Wechselrichter 2 Batterie Zeit Bis-Anzeige' },
+          inv2_timeuntil_font_size: { label: 'Wechselrichter 2 Zeit Bis Font Size (px)', helper: 'Schriftgröße für Wechselrichter 2 Batterie Zeit Bis. Standard 8' },
           load_font_size: { label: 'Load Font Size ((px))', helper: 'Standard 8' },
           inv1_power_font_size: { label: 'INV 1 Leistung Font Size ((px))', helper: 'Font size for the INV 1 power line. Standard uses Load Font Size.' },
           inv2_power_font_size: { label: 'INV 2 Leistung Font Size ((px))', helper: 'Font size for the INV 2 power line. Standard uses Load Font Size.' },
@@ -12003,30 +13237,20 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           sensor_popup_house_6_name: { label: 'Haus Popup 6 Name', helper: 'Optional custom name for house popup line 6. Leer lassen to use entity name.' },
           sensor_popup_house_6_color: { label: 'Haus Popup 6 Farbe', helper: 'Farbe for house popup line 6 text.' },
           sensor_popup_house_6_font_size: { label: 'Haus Popup 6 Font Size ((px))', helper: 'Font size for house popup line 6. Standard 8' },
+          battery_popup_color: { label: 'Batterie Popup Textfarbe', helper: 'Globale Farbe für allen Batterie-Popup-Text (Datum/Zeit, Zeitbis und benutzerdefinierte Sensoren). Standard #00FFFF' },
+          battery_popup_font_size: { label: 'Batterie Popup Schriftgröße (px)', helper: 'Globale Schriftgröße für allen Batterie-Popup-Text. Standard 16' },
           sensor_popup_bat_1: { label: 'Batterie Popup 1', helper: 'Entity for battery popup line 1.' },
           sensor_popup_bat_1_name: { label: 'Batterie Popup 1 Name', helper: 'Optional custom name for battery popup line 1. Leer lassen to use entity name.' },
-          sensor_popup_bat_1_color: { label: 'Batterie Popup 1 Farbe', helper: 'Farbe for battery popup line 1 text.' },
-          sensor_popup_bat_1_font_size: { label: 'Batterie Popup 1 Font Size ((px))', helper: 'Font size for battery popup line 1. Standard 8' },
           sensor_popup_bat_2: { label: 'Batterie Popup 2', helper: 'Entity for battery popup line 2.' },
           sensor_popup_bat_2_name: { label: 'Batterie Popup 2 Name', helper: 'Optional custom name for battery popup line 2. Leer lassen to use entity name.' },
-          sensor_popup_bat_2_color: { label: 'Batterie Popup 2 Farbe', helper: 'Farbe for battery popup line 2 text.' },
-          sensor_popup_bat_2_font_size: { label: 'Batterie Popup 2 Font Size ((px))', helper: 'Font size for battery popup line 2. Standard 8' },
           sensor_popup_bat_3: { label: 'Batterie Popup 3', helper: 'Entity for battery popup line 3.' },
           sensor_popup_bat_3_name: { label: 'Batterie Popup 3 Name', helper: 'Optional custom name for battery popup line 3. Leer lassen to use entity name.' },
-          sensor_popup_bat_3_color: { label: 'Batterie Popup 3 Farbe', helper: 'Farbe for battery popup line 3 text.' },
-          sensor_popup_bat_3_font_size: { label: 'Batterie Popup 3 Font Size ((px))', helper: 'Font size for battery popup line 3. Standard 8' },
           sensor_popup_bat_4: { label: 'Batterie Popup 4', helper: 'Entity for battery popup line 4.' },
           sensor_popup_bat_4_name: { label: 'Batterie Popup 4 Name', helper: 'Optional custom name for battery popup line 4. Leer lassen to use entity name.' },
-          sensor_popup_bat_4_color: { label: 'Batterie Popup 4 Farbe', helper: 'Farbe for battery popup line 4 text.' },
-          sensor_popup_bat_4_font_size: { label: 'Batterie Popup 4 Font Size ((px))', helper: 'Font size for battery popup line 4. Standard 8' },
           sensor_popup_bat_5: { label: 'Batterie Popup 5', helper: 'Entity for battery popup line 5.' },
           sensor_popup_bat_5_name: { label: 'Batterie Popup 5 Name', helper: 'Optional custom name for battery popup line 5. Leer lassen to use entity name.' },
-          sensor_popup_bat_5_color: { label: 'Batterie Popup 5 Farbe', helper: 'Farbe for battery popup line 5 text.' },
-          sensor_popup_bat_5_font_size: { label: 'Batterie Popup 5 Font Size ((px))', helper: 'Font size for battery popup line 5. Standard 8' },
           sensor_popup_bat_6: { label: 'Batterie Popup 6', helper: 'Entity for battery popup line 6.' },
           sensor_popup_bat_6_name: { label: 'Batterie Popup 6 Name', helper: 'Optional custom name for battery popup line 6. Leer lassen to use entity name.' },
-          sensor_popup_bat_6_color: { label: 'Batterie Popup 6 Farbe', helper: 'Farbe for battery popup line 6 text.' },
-          sensor_popup_bat_6_font_size: { label: 'Batterie Popup 6 Font Size ((px))', helper: 'Font size for battery popup line 6. Standard 8' },
           sensor_popup_grid_1: { label: 'Netz Popup 1', helper: 'Entity for grid popup line 1.' },
           sensor_popup_grid_1_name: { label: 'Netz Popup 1 Name', helper: 'Optional custom name for grid popup line 1. Leer lassen to use entity name.' },
           sensor_popup_grid_1_color: { label: 'Netz Popup 1 Farbe', helper: 'Farbe for grid popup line 1 text.' },
@@ -12108,7 +13332,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           initial_evs_2: '2'
         },
         view: {
-          daily: 'TAGESERTRAG', pv_tot: 'PV GESAMT', car1: 'AUTO 1', car2: 'AUTO 2', importing: 'IMPORT', exporting: 'EXPORT'
+          daily: 'TAGESERTRAG', pv_tot: 'PV GESAMT', car1: 'AUTO 1', car2: 'AUTO 2', importing: 'IMPORT', exporting: 'EXPORT', charging: 'LADEN', discharging: 'ENTLADEN', standby: 'BEREITSCHAFT'
         }
       },
       fr: {
@@ -12189,18 +13413,30 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           sensor_bat1_power: { label: 'Batterie 1 puissance', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batterie 1 becomes active.' },
           sensor_bat1_charge_power: { label: 'Batterie 1 charge puissance', helper: 'capteur for Batterie 1 charging power.' },
           sensor_bat1_discharge_power: { label: 'Batterie 1 décharge puissance', helper: 'capteur for Batterie 1 discharging power.' },
+          sensor_bat1_capacity_sensor: { label: 'Batterie 1 Capteur capacité utilisable', helper: 'Capteur optionnel rapportant la capacité utilisable de Batterie 1 en Wh ou kWh. Utilisé avec le pourcentage de réserve pour calculer la capacité effective.' },
+          bat1_capacity_manual: { label: 'Batterie 1 Capacité utilisable (Manuel)', helper: 'Saisie manuelle alternative pour la capacité utilisable de Batterie 1. Entrez la valeur dans les unités spécifiées par votre paramètre display_unit (Wh ou kWh). Ignoré si un capteur de capacité est fourni.' },
+          bat1_reserve_percentage: { label: 'Batterie 1 Pourcentage de réserve', helper: 'Pourcentage de réserve optionnel pour Batterie 1 (0-100). Certains systèmes maintiennent une réserve pour préserver la santé de la batterie. Cela réduit la capacité utilisable effective affichée.' },
           sensor_bat2_soc: { label: 'Batterie 2 SOC', helper: 'État de charge sensor for Batterie 2 (percentage).' },
           sensor_bat2_power: { label: 'Batterie 2 puissance', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batterie 2 becomes active.' },
           sensor_bat2_charge_power: { label: 'Batterie 2 charge puissance', helper: 'capteur for Batterie 2 charging power.' },
           sensor_bat2_discharge_power: { label: 'Batterie 2 décharge puissance', helper: 'capteur for Batterie 2 discharging power.' },
+          sensor_bat2_capacity_sensor: { label: 'Batterie 2 Capteur capacité utilisable', helper: 'Capteur optionnel rapportant la capacité utilisable de Batterie 2 en Wh ou kWh. Utilisé avec le pourcentage de réserve pour calculer la capacité effective.' },
+          bat2_capacity_manual: { label: 'Batterie 2 Capacité utilisable (Manuel)', helper: 'Saisie manuelle alternative pour la capacité utilisable de Batterie 2. Entrez la valeur dans les unités spécifiées par votre paramètre display_unit (Wh ou kWh). Ignoré si un capteur de capacité est fourni.' },
+          bat2_reserve_percentage: { label: 'Batterie 2 Pourcentage de réserve', helper: 'Pourcentage de réserve optionnel pour Batterie 2 (0-100). Certains systèmes maintiennent une réserve pour préserver la santé de la batterie. Cela réduit la capacité utilisable effective affichée.' },
           sensor_bat3_soc: { label: 'Batterie 3 SOC', helper: 'État de charge sensor for Batterie 3 (percentage).' },
           sensor_bat3_power: { label: 'Batterie 3 puissance', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batterie 3 becomes active.' },
           sensor_bat3_charge_power: { label: 'Batterie 3 charge puissance', helper: 'capteur for Batterie 3 charging power.' },
           sensor_bat3_discharge_power: { label: 'Batterie 3 décharge puissance' },
+          sensor_bat3_capacity_sensor: { label: 'Batterie 3 Capteur capacité utilisable', helper: 'Capteur optionnel rapportant la capacité utilisable de Batterie 3 en Wh ou kWh. Utilisé avec le pourcentage de réserve pour calculer la capacité effective.' },
+          bat3_capacity_manual: { label: 'Batterie 3 Capacité utilisable (Manuel)', helper: 'Saisie manuelle alternative pour la capacité utilisable de Batterie 3. Entrez la valeur dans les unités spécifiées par votre paramètre display_unit (Wh ou kWh). Ignoré si un capteur de capacité est fourni.' },
+          bat3_reserve_percentage: { label: 'Batterie 3 Pourcentage de réserve', helper: 'Pourcentage de réserve optionnel pour Batterie 3 (0-100). Certains systèmes maintiennent une réserve pour préserver la santé de la batterie. Cela réduit la capacité utilisable effective affichée.' },
           sensor_bat4_soc: { label: 'Batterie 4 SOC', helper: 'État de charge sensor for Batterie 4 (percentage).' },
           sensor_bat4_power: { label: 'Batterie 4 puissance', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batterie 4 becomes active.' },
           sensor_bat4_charge_power: { label: 'Batterie 4 charge puissance', helper: 'capteur for Batterie 4 charging power.' },
           sensor_bat4_discharge_power: { label: 'Batterie 4 décharge puissance', helper: 'capteur for Batterie 4 discharging power.' },
+          sensor_bat4_capacity_sensor: { label: 'Batterie 4 Capteur capacité utilisable', helper: 'Capteur optionnel rapportant la capacité utilisable de Batterie 4 en Wh ou kWh. Utilisé avec le pourcentage de réserve pour calculer la capacité effective.' },
+          bat4_capacity_manual: { label: 'Batterie 4 Capacité utilisable (Manuel)', helper: 'Saisie manuelle alternative pour la capacité utilisable de Batterie 4. Entrez la valeur dans les unités spécifiées par votre paramètre display_unit (Wh ou kWh). Ignoré si un capteur de capacité est fourni.' },
+          bat4_reserve_percentage: { label: 'Batterie 4 Pourcentage de réserve', helper: 'Pourcentage de réserve optionnel pour Batterie 4 (0-100). Certains systèmes maintiennent une réserve pour préserver la santé de la batterie. Cela réduit la capacité utilisable effective affichée.' },
           sensor_home_load: { label: 'Home Load/Consumption (Requis)', helper: 'Total household consumption sensor.' },
           sensor_home_load_secondary: { label: 'Home Load (Onduleur 2)', helper: 'Optionnel house load sensor for the second inverter.' },
           sensor_heat_pump_consumption: { label: 'Heat Pump Consumption', helper: 'capteur for heat pump energy consumption.' },
@@ -12230,6 +13466,8 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           grid_current_odometer: { label: 'Odomètre: Réseau Current', helper: 'Animate Réseau Current with a per-digit rolling effect.' },
           grid_current_odometer_duration: { label: 'Odomètre Durée (ms)', helper: 'Animation duration in milliseconds. Par défaut 350.' },
           show_grid_flow_label: { label: 'Show Réseau Import/Export Nom', helper: 'Prepend the importing/exporting label before the grid value when enabled.' },
+          inverter1_status_text_color: { label: 'Couleur Texte État Onduleur', helper: 'Couleur appliquée au texte d\'état de l\'onduleur (Charge/Décharge/Importation/Exportation).' },
+          inverter1_status_font_size: { label: 'Taille Police État Onduleur (px)', helper: 'Taille de police pour le texte d\'état de l\'onduleur. Défaut 8' },
           enable_echo_alive: { label: 'Activer Echo Alive', helper: 'Activers an invisible iframe to keep the Silk browser open on Echo Show. The button will be positioned in a corner of the card.' },
           pv_tot_color: { label: 'PV Total Couleur', helper: 'Colour applied to the PV TOTAL text line.' },
           pv_primary_color: { label: 'PV 1 Flow Couleur', helper: 'Colour used for the primary PV animation line.' },
@@ -12307,6 +13545,14 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           windmill_power_font_size: { label: 'Éolienne puissance Font Size (px)', helper: 'Par défaut 8' },
           battery_soc_font_size: { label: 'Batterie SOC Font Size (px)', helper: 'Par défaut 20' },
           battery_power_font_size: { label: 'Batterie puissance Font Size (px)', helper: 'Par défaut 8' },
+          inv1_datetime_color: { label: 'Couleur DateTime Onduleur 1', helper: 'Couleur pour l\'affichage datetime de la batterie Onduleur 1' },
+          inv1_datetime_font_size: { label: 'Taille Font DateTime Onduleur 1 (px)', helper: 'Taille de police pour datetime batterie Onduleur 1. Par défaut 8' },
+          inv1_timeuntil_color: { label: 'Couleur Temps Jusqu\'à Onduleur 1', helper: 'Couleur pour l\'affichage temps jusqu\'à de la batterie Onduleur 1' },
+          inv1_timeuntil_font_size: { label: 'Taille Font Temps Jusqu\'à Onduleur 1 (px)', helper: 'Taille de police pour temps jusqu\'à batterie Onduleur 1. Par défaut 8' },
+          inv2_datetime_color: { label: 'Couleur DateTime Onduleur 2', helper: 'Couleur pour l\'affichage datetime de la batterie Onduleur 2' },
+          inv2_datetime_font_size: { label: 'Taille Font DateTime Onduleur 2 (px)', helper: 'Taille de police pour datetime batterie Onduleur 2. Par défaut 8' },
+          inv2_timeuntil_color: { label: 'Couleur Temps Jusqu\'à Onduleur 2', helper: 'Couleur pour l\'affichage temps jusqu\'à de la batterie Onduleur 2' },
+          inv2_timeuntil_font_size: { label: 'Taille Font Temps Jusqu\'à Onduleur 2 (px)', helper: 'Taille de police pour temps jusqu\'à batterie Onduleur 2. Par défaut 8' },
           load_font_size: { label: 'Load Font Size (px)', helper: 'Par défaut 8' },
           inv1_power_font_size: { label: 'INV 1 puissance Font Size (px)', helper: 'Font size for the INV 1 power line. Par défaut uses Load Font Size.' },
           inv2_power_font_size: { label: 'INV 2 puissance Font Size (px)', helper: 'Font size for the INV 2 power line. Par défaut uses Load Font Size.' },
@@ -12371,30 +13617,20 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           sensor_popup_house_6_name: { label: 'Maison Popup 6 Nom', helper: 'Optionnel custom name for house popup line 6. Laissez vide to use entity name.' },
           sensor_popup_house_6_color: { label: 'Maison Popup 6 Couleur', helper: 'Couleur for house popup line 6 text.' },
           sensor_popup_house_6_font_size: { label: 'Maison Popup 6 Font Size (px)', helper: 'Font size for house popup line 6. Par défaut 8' },
+          battery_popup_color: { label: 'Couleur texte popup batterie', helper: 'Couleur globale pour tout le texte popup batterie (date/heure, temps restant et capteurs personnalisés). Défaut #00FFFF' },
+          battery_popup_font_size: { label: 'Taille police popup batterie (px)', helper: 'Taille police globale pour tout le texte popup batterie. Défaut 16' },
           sensor_popup_bat_1: { label: 'Batterie Popup 1', helper: 'Entity for battery popup line 1.' },
           sensor_popup_bat_1_name: { label: 'Batterie Popup 1 Nom', helper: 'Optionnel custom name for battery popup line 1. Laissez vide to use entity name.' },
-          sensor_popup_bat_1_color: { label: 'Batterie Popup 1 Couleur', helper: 'Couleur for battery popup line 1 text.' },
-          sensor_popup_bat_1_font_size: { label: 'Batterie Popup 1 Font Size (px)', helper: 'Font size for battery popup line 1. Par défaut 8' },
           sensor_popup_bat_2: { label: 'Batterie Popup 2', helper: 'Entity for battery popup line 2.' },
           sensor_popup_bat_2_name: { label: 'Batterie Popup 2 Nom', helper: 'Optionnel custom name for battery popup line 2. Laissez vide to use entity name.' },
-          sensor_popup_bat_2_color: { label: 'Batterie Popup 2 Couleur', helper: 'Couleur for battery popup line 2 text.' },
-          sensor_popup_bat_2_font_size: { label: 'Batterie Popup 2 Font Size (px)', helper: 'Font size for battery popup line 2. Par défaut 8' },
           sensor_popup_bat_3: { label: 'Batterie Popup 3', helper: 'Entity for battery popup line 3.' },
           sensor_popup_bat_3_name: { label: 'Batterie Popup 3 Nom', helper: 'Optionnel custom name for battery popup line 3. Laissez vide to use entity name.' },
-          sensor_popup_bat_3_color: { label: 'Batterie Popup 3 Couleur', helper: 'Couleur for battery popup line 3 text.' },
-          sensor_popup_bat_3_font_size: { label: 'Batterie Popup 3 Font Size (px)', helper: 'Font size for battery popup line 3. Par défaut 8' },
           sensor_popup_bat_4: { label: 'Batterie Popup 4', helper: 'Entity for battery popup line 4.' },
           sensor_popup_bat_4_name: { label: 'Batterie Popup 4 Nom', helper: 'Optionnel custom name for battery popup line 4. Laissez vide to use entity name.' },
-          sensor_popup_bat_4_color: { label: 'Batterie Popup 4 Couleur', helper: 'Couleur for battery popup line 4 text.' },
-          sensor_popup_bat_4_font_size: { label: 'Batterie Popup 4 Font Size (px)', helper: 'Font size for battery popup line 4. Par défaut 8' },
           sensor_popup_bat_5: { label: 'Batterie Popup 5', helper: 'Entity for battery popup line 5.' },
           sensor_popup_bat_5_name: { label: 'Batterie Popup 5 Nom', helper: 'Optionnel custom name for battery popup line 5. Laissez vide to use entity name.' },
-          sensor_popup_bat_5_color: { label: 'Batterie Popup 5 Couleur', helper: 'Couleur for battery popup line 5 text.' },
-          sensor_popup_bat_5_font_size: { label: 'Batterie Popup 5 Font Size (px)', helper: 'Font size for battery popup line 5. Par défaut 8' },
           sensor_popup_bat_6: { label: 'Batterie Popup 6', helper: 'Entity for battery popup line 6.' },
           sensor_popup_bat_6_name: { label: 'Batterie Popup 6 Nom', helper: 'Optionnel custom name for battery popup line 6. Laissez vide to use entity name.' },
-          sensor_popup_bat_6_color: { label: 'Batterie Popup 6 Couleur', helper: 'Couleur for battery popup line 6 text.' },
-          sensor_popup_bat_6_font_size: { label: 'Batterie Popup 6 Font Size (px)', helper: 'Font size for battery popup line 6. Par défaut 8' },
           sensor_popup_grid_1: { label: 'Réseau Popup 1', helper: 'Entity for grid popup line 1.' },
           sensor_popup_grid_1_name: { label: 'Réseau Popup 1 Nom', helper: 'Optionnel custom name for grid popup line 1. Laissez vide to use entity name.' },
           sensor_popup_grid_1_color: { label: 'Réseau Popup 1 Couleur', helper: 'Couleur for grid popup line 1 text.' },
@@ -12476,7 +13712,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           initial_evs_2: '2'
         },
         view: {
-          daily: 'PRODUCTION JOURNALIÈRE', pv_tot: 'PV TOTAL', car1: 'VOITURE 1', car2: 'VOITURE 2', importing: 'IMPORTATION', exporting: 'EXPORTATION'
+          daily: 'PRODUCTION JOURNALIÈRE', pv_tot: 'PV TOTAL', car1: 'VOITURE 1', car2: 'VOITURE 2', importing: 'IMPORTATION', exporting: 'EXPORTATION', charging: 'CHARGE', discharging: 'DÉCHARGE', standby: 'VEILLE'
         }
       },
       nl: {
@@ -12557,18 +13793,30 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           sensor_bat1_power: { label: 'Batterij 1 vermogen', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batterij 1 becomes active.' },
           sensor_bat1_charge_power: { label: 'Batterij 1 laden vermogen', helper: 'sensor for Batterij 1 charging power.' },
           sensor_bat1_discharge_power: { label: 'Batterij 1 ontladen vermogen', helper: 'sensor for Batterij 1 discharging power.' },
+          sensor_bat1_capacity_sensor: { label: 'Batterij 1 Bruikbare capaciteit sensor', helper: 'Optionele sensor die de bruikbare capaciteit van Batterij 1 in Wh of kWh rapporteert. Gebruikt met reservepercentage om de effectieve capaciteit te berekenen.' },
+          bat1_capacity_manual: { label: 'Batterij 1 Bruikbare capaciteit (Handmatig)', helper: 'Alternatieve handmatige invoer voor de bruikbare capaciteit van Batterij 1. Voer de waarde in de eenheden gespecificeerd door uw display_unit instelling (Wh of kWh) in. Wordt genegeerd als capaciteitssensor is opgegeven.' },
+          bat1_reserve_percentage: { label: 'Batterij 1 Reserve percentage', helper: 'Optioneel reservepercentage voor Batterij 1 (0-100). Sommige systemen houden een reserve aan om de batterijgezondheid te behouden. Dit vermindert de weergegeven effectieve bruikbare capaciteit.' },
           sensor_bat2_soc: { label: 'Batterij 2 SOC', helper: 'Laadstatus sensor for Batterij 2 (percentage).' },
           sensor_bat2_power: { label: 'Batterij 2 vermogen', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batterij 2 becomes active.' },
           sensor_bat2_charge_power: { label: 'Batterij 2 laden vermogen', helper: 'sensor for Batterij 2 charging power.' },
           sensor_bat2_discharge_power: { label: 'Batterij 2 ontladen vermogen', helper: 'sensor for Batterij 2 discharging power.' },
+          sensor_bat2_capacity_sensor: { label: 'Batterij 2 Bruikbare capaciteit sensor', helper: 'Optionele sensor die de bruikbare capaciteit van Batterij 2 in Wh of kWh rapporteert. Gebruikt met reservepercentage om de effectieve capaciteit te berekenen.' },
+          bat2_capacity_manual: { label: 'Batterij 2 Bruikbare capaciteit (Handmatig)', helper: 'Alternatieve handmatige invoer voor de bruikbare capaciteit van Batterij 2. Voer de waarde in de eenheden gespecificeerd door uw display_unit instelling (Wh of kWh) in. Wordt genegeerd als capaciteitssensor is opgegeven.' },
+          bat2_reserve_percentage: { label: 'Batterij 2 Reserve percentage', helper: 'Optioneel reservepercentage voor Batterij 2 (0-100). Sommige systemen houden een reserve aan om de batterijgezondheid te behouden. Dit vermindert de weergegeven effectieve bruikbare capaciteit.' },
           sensor_bat3_soc: { label: 'Batterij 3 SOC', helper: 'Laadstatus sensor for Batterij 3 (percentage).' },
           sensor_bat3_power: { label: 'Batterij 3 vermogen', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batterij 3 becomes active.' },
           sensor_bat3_charge_power: { label: 'Batterij 3 laden vermogen', helper: 'sensor for Batterij 3 charging power.' },
           sensor_bat3_discharge_power: { label: 'Batterij 3 ontladen vermogen' },
+          sensor_bat3_capacity_sensor: { label: 'Batterij 3 Bruikbare capaciteit sensor', helper: 'Optionele sensor die de bruikbare capaciteit van Batterij 3 in Wh of kWh rapporteert. Gebruikt met reservepercentage om de effectieve capaciteit te berekenen.' },
+          bat3_capacity_manual: { label: 'Batterij 3 Bruikbare capaciteit (Handmatig)', helper: 'Alternatieve handmatige invoer voor de bruikbare capaciteit van Batterij 3. Voer de waarde in de eenheden gespecificeerd door uw display_unit instelling (Wh of kWh) in. Wordt genegeerd als capaciteitssensor is opgegeven.' },
+          bat3_reserve_percentage: { label: 'Batterij 3 Reserve percentage', helper: 'Optioneel reservepercentage voor Batterij 3 (0-100). Sommige systemen houden een reserve aan om de batterijgezondheid te behouden. Dit vermindert de weergegeven effectieve bruikbare capaciteit.' },
           sensor_bat4_soc: { label: 'Batterij 4 SOC', helper: 'Laadstatus sensor for Batterij 4 (percentage).' },
           sensor_bat4_power: { label: 'Batterij 4 vermogen', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batterij 4 becomes active.' },
           sensor_bat4_charge_power: { label: 'Batterij 4 laden vermogen', helper: 'sensor for Batterij 4 charging power.' },
           sensor_bat4_discharge_power: { label: 'Batterij 4 ontladen vermogen', helper: 'sensor for Batterij 4 discharging power.' },
+          sensor_bat4_capacity_sensor: { label: 'Batterij 4 Bruikbare capaciteit sensor', helper: 'Optionele sensor die de bruikbare capaciteit van Batterij 4 in Wh of kWh rapporteert. Gebruikt met reservepercentage om de effectieve capaciteit te berekenen.' },
+          bat4_capacity_manual: { label: 'Batterij 4 Bruikbare capaciteit (Handmatig)', helper: 'Alternatieve handmatige invoer voor de bruikbare capaciteit van Batterij 4. Voer de waarde in de eenheden gespecificeerd door uw display_unit instelling (Wh of kWh) in. Wordt genegeerd als capaciteitssensor is opgegeven.' },
+          bat4_reserve_percentage: { label: 'Batterij 4 Reserve percentage', helper: 'Optioneel reservepercentage voor Batterij 4 (0-100). Sommige systemen houden een reserve aan om de batterijgezondheid te behouden. Dit vermindert de weergegeven effectieve bruikbare capaciteit.' },
           sensor_home_load: { label: 'Home Load/Consumption (Vereist)', helper: 'Total household consumption sensor.' },
           sensor_home_load_secondary: { label: 'Home Load (Omvormer 2)', helper: 'Optioneel house load sensor for the second inverter.' },
           sensor_heat_pump_consumption: { label: 'Heat Pump Consumption', helper: 'sensor for heat pump energy consumption.' },
@@ -12598,6 +13846,8 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           grid_current_odometer: { label: 'Odometer: Net Current', helper: 'Animate Net Current with a per-digit rolling effect.' },
           grid_current_odometer_duration: { label: 'Odometer Duur (ms)', helper: 'Animation duration in milliseconds. Standaard 350.' },
           show_grid_flow_label: { label: 'Show Net Import/Export Naam', helper: 'Prepend the importing/exporting label before the grid value when enabled.' },
+          inverter1_status_text_color: { label: 'Omvormer Status Tekstkleur', helper: 'Kleur toegepast op de omvormer statustekst (Opladen/Ontladen/Importeren/Exporteren).' },
+          inverter1_status_font_size: { label: 'Omvormer Status Lettergrootte (px)', helper: 'Lettergrootte voor omvormer statustekst. Standaard 8' },
           enable_echo_alive: { label: 'Inschakelen Echo Alive', helper: 'Inschakelens an invisible iframe to keep the Silk browser open on Echo Show. The button will be positioned in a corner of the card.' },
           pv_tot_color: { label: 'PV Total Kleur', helper: 'Colour applied to the PV TOTAL text line.' },
           pv_primary_color: { label: 'PV 1 Flow Kleur', helper: 'Colour used for the primary PV animation line.' },
@@ -12675,6 +13925,14 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           windmill_power_font_size: { label: 'Windmolen vermogen Font Size (px)', helper: 'Standaard 8' },
           battery_soc_font_size: { label: 'Batterij SOC Font Size (px)', helper: 'Standaard 20' },
           battery_power_font_size: { label: 'Batterij vermogen Font Size (px)', helper: 'Standaard 8' },
+          inv1_datetime_color: { label: 'Omvormer 1 DateTime Kleur', helper: 'Kleur voor Omvormer 1 batterij datetime weergave' },
+          inv1_datetime_font_size: { label: 'Omvormer 1 DateTime Font Size (px)', helper: 'Lettergrootte voor Omvormer 1 batterij datetime. Standaard 8' },
+          inv1_timeuntil_color: { label: 'Omvormer 1 Tijd Tot Kleur', helper: 'Kleur voor Omvormer 1 batterij tijd tot weergave' },
+          inv1_timeuntil_font_size: { label: 'Omvormer 1 Tijd Tot Font Size (px)', helper: 'Lettergrootte voor Omvormer 1 batterij tijd tot. Standaard 8' },
+          inv2_datetime_color: { label: 'Omvormer 2 DateTime Kleur', helper: 'Kleur voor Omvormer 2 batterij datetime weergave' },
+          inv2_datetime_font_size: { label: 'Omvormer 2 DateTime Font Size (px)', helper: 'Lettergrootte voor Omvormer 2 batterij datetime. Standaard 8' },
+          inv2_timeuntil_color: { label: 'Omvormer 2 Tijd Tot Kleur', helper: 'Kleur voor Omvormer 2 batterij tijd tot weergave' },
+          inv2_timeuntil_font_size: { label: 'Omvormer 2 Tijd Tot Font Size (px)', helper: 'Lettergrootte voor Omvormer 2 batterij tijd tot. Standaard 8' },
           load_font_size: { label: 'Load Font Size (px)', helper: 'Standaard 8' },
           inv1_power_font_size: { label: 'INV 1 vermogen Font Size (px)', helper: 'Font size for the INV 1 power line. Standaard uses Load Font Size.' },
           inv2_power_font_size: { label: 'INV 2 vermogen Font Size (px)', helper: 'Font size for the INV 2 power line. Standaard uses Load Font Size.' },
@@ -12739,30 +13997,20 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           sensor_popup_house_6_name: { label: 'Huis Popup 6 Naam', helper: 'Optioneel custom name for house popup line 6. Leeg laten to use entity name.' },
           sensor_popup_house_6_color: { label: 'Huis Popup 6 Kleur', helper: 'Kleur for house popup line 6 text.' },
           sensor_popup_house_6_font_size: { label: 'Huis Popup 6 Font Size (px)', helper: 'Font size for house popup line 6. Standaard 8' },
+          battery_popup_color: { label: 'Batterij Popup Tekstkleur', helper: 'Globale kleur voor alle batterij popup tekst (datum/tijd, tijd tot en aangepaste sensoren). Standaard #00FFFF' },
+          battery_popup_font_size: { label: 'Batterij Popup Lettergrootte (px)', helper: 'Globale lettergrootte voor alle batterij popup tekst. Standaard 16' },
           sensor_popup_bat_1: { label: 'Batterij Popup 1', helper: 'Entity for battery popup line 1.' },
           sensor_popup_bat_1_name: { label: 'Batterij Popup 1 Naam', helper: 'Optioneel custom name for battery popup line 1. Leeg laten to use entity name.' },
-          sensor_popup_bat_1_color: { label: 'Batterij Popup 1 Kleur', helper: 'Kleur for battery popup line 1 text.' },
-          sensor_popup_bat_1_font_size: { label: 'Batterij Popup 1 Font Size (px)', helper: 'Font size for battery popup line 1. Standaard 8' },
           sensor_popup_bat_2: { label: 'Batterij Popup 2', helper: 'Entity for battery popup line 2.' },
           sensor_popup_bat_2_name: { label: 'Batterij Popup 2 Naam', helper: 'Optioneel custom name for battery popup line 2. Leeg laten to use entity name.' },
-          sensor_popup_bat_2_color: { label: 'Batterij Popup 2 Kleur', helper: 'Kleur for battery popup line 2 text.' },
-          sensor_popup_bat_2_font_size: { label: 'Batterij Popup 2 Font Size (px)', helper: 'Font size for battery popup line 2. Standaard 8' },
           sensor_popup_bat_3: { label: 'Batterij Popup 3', helper: 'Entity for battery popup line 3.' },
           sensor_popup_bat_3_name: { label: 'Batterij Popup 3 Naam', helper: 'Optioneel custom name for battery popup line 3. Leeg laten to use entity name.' },
-          sensor_popup_bat_3_color: { label: 'Batterij Popup 3 Kleur', helper: 'Kleur for battery popup line 3 text.' },
-          sensor_popup_bat_3_font_size: { label: 'Batterij Popup 3 Font Size (px)', helper: 'Font size for battery popup line 3. Standaard 8' },
           sensor_popup_bat_4: { label: 'Batterij Popup 4', helper: 'Entity for battery popup line 4.' },
           sensor_popup_bat_4_name: { label: 'Batterij Popup 4 Naam', helper: 'Optioneel custom name for battery popup line 4. Leeg laten to use entity name.' },
-          sensor_popup_bat_4_color: { label: 'Batterij Popup 4 Kleur', helper: 'Kleur for battery popup line 4 text.' },
-          sensor_popup_bat_4_font_size: { label: 'Batterij Popup 4 Font Size (px)', helper: 'Font size for battery popup line 4. Standaard 8' },
           sensor_popup_bat_5: { label: 'Batterij Popup 5', helper: 'Entity for battery popup line 5.' },
           sensor_popup_bat_5_name: { label: 'Batterij Popup 5 Naam', helper: 'Optioneel custom name for battery popup line 5. Leeg laten to use entity name.' },
-          sensor_popup_bat_5_color: { label: 'Batterij Popup 5 Kleur', helper: 'Kleur for battery popup line 5 text.' },
-          sensor_popup_bat_5_font_size: { label: 'Batterij Popup 5 Font Size (px)', helper: 'Font size for battery popup line 5. Standaard 8' },
           sensor_popup_bat_6: { label: 'Batterij Popup 6', helper: 'Entity for battery popup line 6.' },
           sensor_popup_bat_6_name: { label: 'Batterij Popup 6 Naam', helper: 'Optioneel custom name for battery popup line 6. Leeg laten to use entity name.' },
-          sensor_popup_bat_6_color: { label: 'Batterij Popup 6 Kleur', helper: 'Kleur for battery popup line 6 text.' },
-          sensor_popup_bat_6_font_size: { label: 'Batterij Popup 6 Font Size (px)', helper: 'Font size for battery popup line 6. Standaard 8' },
           sensor_popup_grid_1: { label: 'Net Popup 1', helper: 'Entity for grid popup line 1.' },
           sensor_popup_grid_1_name: { label: 'Net Popup 1 Naam', helper: 'Optioneel custom name for grid popup line 1. Leeg laten to use entity name.' },
           sensor_popup_grid_1_color: { label: 'Net Popup 1 Kleur', helper: 'Kleur for grid popup line 1 text.' },
@@ -12844,7 +14092,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           initial_evs_2: '2'
         },
         view: {
-          daily: 'DAGOPBRENGST', pv_tot: 'PV TOTAAL', car1: 'AUTO 1', car2: 'AUTO 2', importing: 'IMPORT', exporting: 'EXPORT'
+          daily: 'DAGOPBRENGST', pv_tot: 'PV TOTAAL', car1: 'AUTO 1', car2: 'AUTO 2', importing: 'IMPORT', exporting: 'EXPORT', charging: 'OPLA DEN', discharging: 'ONTLADEN'
         }
       },
       es: {
@@ -12925,18 +14173,30 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           sensor_bat1_power: { label: 'Batería 1 potencia', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batería 1 becomes active.' },
           sensor_bat1_charge_power: { label: 'Batería 1 carga potencia', helper: 'sensor for Batería 1 charging power.' },
           sensor_bat1_discharge_power: { label: 'Batería 1 descarga potencia', helper: 'sensor for Batería 1 discharging power.' },
+          sensor_bat1_capacity_sensor: { label: 'Batería 1 Sensor capacidad utilizable', helper: 'Sensor opcional que informa la capacidad utilizable de Batería 1 en Wh o kWh. Se usa con el porcentaje de reserva para calcular la capacidad efectiva.' },
+          bat1_capacity_manual: { label: 'Batería 1 Capacidad utilizable (Manual)', helper: 'Entrada manual alternativa para la capacidad utilizable de Batería 1. Ingrese el valor en las unidades especificadas por su configuración display_unit (Wh o kWh). Se ignora si se proporciona un sensor de capacidad.' },
+          bat1_reserve_percentage: { label: 'Batería 1 Porcentaje de reserva', helper: 'Porcentaje de reserva opcional para Batería 1 (0-100). Algunos sistemas mantienen una reserva para preservar la salud de la batería. Esto reduce la capacidad utilizable efectiva mostrada.' },
           sensor_bat2_soc: { label: 'Batería 2 SOC', helper: 'Estado de carga sensor for Batería 2 (percentage).' },
           sensor_bat2_power: { label: 'Batería 2 potencia', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batería 2 becomes active.' },
           sensor_bat2_charge_power: { label: 'Batería 2 carga potencia', helper: 'sensor for Batería 2 charging power.' },
           sensor_bat2_discharge_power: { label: 'Batería 2 descarga potencia', helper: 'sensor for Batería 2 discharging power.' },
+          sensor_bat2_capacity_sensor: { label: 'Batería 2 Sensor capacidad utilizable', helper: 'Sensor opcional que informa la capacidad utilizable de Batería 2 en Wh o kWh. Se usa con el porcentaje de reserva para calcular la capacidad efectiva.' },
+          bat2_capacity_manual: { label: 'Batería 2 Capacidad utilizable (Manual)', helper: 'Entrada manual alternativa para la capacidad utilizable de Batería 2. Ingrese el valor en las unidades especificadas por su configuración display_unit (Wh o kWh). Se ignora si se proporciona un sensor de capacidad.' },
+          bat2_reserve_percentage: { label: 'Batería 2 Porcentaje de reserva', helper: 'Porcentaje de reserva opcional para Batería 2 (0-100). Algunos sistemas mantienen una reserva para preservar la salud de la batería. Esto reduce la capacidad utilizable efectiva mostrada.' },
           sensor_bat3_soc: { label: 'Batería 3 SOC', helper: 'Estado de carga sensor for Batería 3 (percentage).' },
           sensor_bat3_power: { label: 'Batería 3 potencia', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batería 3 becomes active.' },
           sensor_bat3_charge_power: { label: 'Batería 3 carga potencia', helper: 'sensor for Batería 3 charging power.' },
           sensor_bat3_discharge_power: { label: 'Batería 3 descarga potencia' },
+          sensor_bat3_capacity_sensor: { label: 'Batería 3 Sensor capacidad utilizable', helper: 'Sensor opcional que informa la capacidad utilizable de Batería 3 en Wh o kWh. Se usa con el porcentaje de reserva para calcular la capacidad efectiva.' },
+          bat3_capacity_manual: { label: 'Batería 3 Capacidad utilizable (Manual)', helper: 'Entrada manual alternativa para la capacidad utilizable de Batería 3. Ingrese el valor en las unidades especificadas por su configuración display_unit (Wh o kWh). Se ignora si se proporciona un sensor de capacidad.' },
+          bat3_reserve_percentage: { label: 'Batería 3 Porcentaje de reserva', helper: 'Porcentaje de reserva opcional para Batería 3 (0-100). Algunos sistemas mantienen una reserva para preservar la salud de la batería. Esto reduce la capacidad utilizable efectiva mostrada.' },
           sensor_bat4_soc: { label: 'Batería 4 SOC', helper: 'Estado de carga sensor for Batería 4 (percentage).' },
           sensor_bat4_power: { label: 'Batería 4 potencia', helper: 'Provide this combined power sensor or both charge/discharge sensors so Batería 4 becomes active.' },
           sensor_bat4_charge_power: { label: 'Batería 4 carga potencia', helper: 'sensor for Batería 4 charging power.' },
           sensor_bat4_discharge_power: { label: 'Batería 4 descarga potencia', helper: 'sensor for Batería 4 discharging power.' },
+          sensor_bat4_capacity_sensor: { label: 'Batería 4 Sensor capacidad utilizable', helper: 'Sensor opcional que informa la capacidad utilizable de Batería 4 en Wh o kWh. Se usa con el porcentaje de reserva para calcular la capacidad efectiva.' },
+          bat4_capacity_manual: { label: 'Batería 4 Capacidad utilizable (Manual)', helper: 'Entrada manual alternativa para la capacidad utilizable de Batería 4. Ingrese el valor en las unidades especificadas por su configuración display_unit (Wh o kWh). Se ignora si se proporciona un sensor de capacidad.' },
+          bat4_reserve_percentage: { label: 'Batería 4 Porcentaje de reserva', helper: 'Porcentaje de reserva opcional para Batería 4 (0-100). Algunos sistemas mantienen una reserva para preservar la salud de la batería. Esto reduce la capacidad utilizable efectiva mostrada.' },
           sensor_home_load: { label: 'Home Load/Consumption (Requerido)', helper: 'Total household consumption sensor.' },
           sensor_home_load_secondary: { label: 'Home Load (Inversor 2)', helper: 'Opcional house load sensor for the second inverter.' },
           sensor_heat_pump_consumption: { label: 'Heat Pump Consumption', helper: 'sensor for heat pump energy consumption.' },
@@ -12966,6 +14226,8 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           grid_current_odometer: { label: 'Odómetro: Red Current', helper: 'Animate Red Current with a per-digit rolling effect.' },
           grid_current_odometer_duration: { label: 'Odómetro Duración (ms)', helper: 'Animation duration in milliseconds. Predeterminado 350.' },
           show_grid_flow_label: { label: 'Show Red Import/Export Nombre', helper: 'Prepend the importing/exporting label before the grid value when enabled.' },
+          inverter1_status_text_color: { label: 'Color Texto Estado Inversor', helper: 'Color aplicado al texto del estado del inversor (Cargando/Descargando/Importando/Exportando).' },
+          inverter1_status_font_size: { label: 'Tamaño Fuente Estado Inversor (px)', helper: 'Tamaño de fuente para texto de estado del inversor. Predeterminado 8' },
           enable_echo_alive: { label: 'Habilitar Echo Alive', helper: 'Habilitars an invisible iframe to keep the Silk browser open on Echo Show. The button will be positioned in a corner of the card.' },
           pv_tot_color: { label: 'PV Total Color', helper: 'Colour applied to the PV TOTAL text line.' },
           pv_primary_color: { label: 'PV 1 Flow Color', helper: 'Colour used for the primary PV animation line.' },
@@ -13043,6 +14305,14 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           windmill_power_font_size: { label: 'Aerogenerador potencia Font Size (px)', helper: 'Predeterminado 8' },
           battery_soc_font_size: { label: 'Batería SOC Font Size (px)', helper: 'Predeterminado 20' },
           battery_power_font_size: { label: 'Batería potencia Font Size (px)', helper: 'Predeterminado 8' },
+          inv1_datetime_color: { label: 'Color DateTime Inversor 1', helper: 'Color para la visualización datetime de batería Inversor 1' },
+          inv1_datetime_font_size: { label: 'Tamaño Font DateTime Inversor 1 (px)', helper: 'Tamaño de fuente para datetime batería Inversor 1. Predeterminado 8' },
+          inv1_timeuntil_color: { label: 'Color Tiempo Hasta Inversor 1', helper: 'Color para la visualización tiempo hasta de batería Inversor 1' },
+          inv1_timeuntil_font_size: { label: 'Tamaño Font Tiempo Hasta Inversor 1 (px)', helper: 'Tamaño de fuente para tiempo hasta batería Inversor 1. Predeterminado 8' },
+          inv2_datetime_color: { label: 'Color DateTime Inversor 2', helper: 'Color para la visualización datetime de batería Inversor 2' },
+          inv2_datetime_font_size: { label: 'Tamaño Font DateTime Inversor 2 (px)', helper: 'Tamaño de fuente para datetime batería Inversor 2. Predeterminado 8' },
+          inv2_timeuntil_color: { label: 'Color Tiempo Hasta Inversor 2', helper: 'Color para la visualización tiempo hasta de batería Inversor 2' },
+          inv2_timeuntil_font_size: { label: 'Tamaño Font Tiempo Hasta Inversor 2 (px)', helper: 'Tamaño de fuente para tiempo hasta batería Inversor 2. Predeterminado 8' },
           load_font_size: { label: 'Load Font Size (px)', helper: 'Predeterminado 8' },
           inv1_power_font_size: { label: 'INV 1 potencia Font Size (px)', helper: 'Font size for the INV 1 power line. Predeterminado uses Load Font Size.' },
           inv2_power_font_size: { label: 'INV 2 potencia Font Size (px)', helper: 'Font size for the INV 2 power line. Predeterminado uses Load Font Size.' },
@@ -13107,30 +14377,20 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           sensor_popup_house_6_name: { label: 'Casa Popup 6 Nombre', helper: 'Opcional custom name for house popup line 6. Deja en blanco to use entity name.' },
           sensor_popup_house_6_color: { label: 'Casa Popup 6 Color', helper: 'Color for house popup line 6 text.' },
           sensor_popup_house_6_font_size: { label: 'Casa Popup 6 Font Size (px)', helper: 'Font size for house popup line 6. Predeterminado 8' },
+          battery_popup_color: { label: 'Color texto popup batería', helper: 'Color global para todo el texto popup batería (fecha/hora, tiempo hasta y sensores personalizados). Predeterminado #00FFFF' },
+          battery_popup_font_size: { label: 'Tamaño fuente popup batería (px)', helper: 'Tamaño fuente global para todo el texto popup batería. Predeterminado 16' },
           sensor_popup_bat_1: { label: 'Batería Popup 1', helper: 'Entity for battery popup line 1.' },
           sensor_popup_bat_1_name: { label: 'Batería Popup 1 Nombre', helper: 'Opcional custom name for battery popup line 1. Deja en blanco to use entity name.' },
-          sensor_popup_bat_1_color: { label: 'Batería Popup 1 Color', helper: 'Color for battery popup line 1 text.' },
-          sensor_popup_bat_1_font_size: { label: 'Batería Popup 1 Font Size (px)', helper: 'Font size for battery popup line 1. Predeterminado 8' },
           sensor_popup_bat_2: { label: 'Batería Popup 2', helper: 'Entity for battery popup line 2.' },
           sensor_popup_bat_2_name: { label: 'Batería Popup 2 Nombre', helper: 'Opcional custom name for battery popup line 2. Deja en blanco to use entity name.' },
-          sensor_popup_bat_2_color: { label: 'Batería Popup 2 Color', helper: 'Color for battery popup line 2 text.' },
-          sensor_popup_bat_2_font_size: { label: 'Batería Popup 2 Font Size (px)', helper: 'Font size for battery popup line 2. Predeterminado 8' },
           sensor_popup_bat_3: { label: 'Batería Popup 3', helper: 'Entity for battery popup line 3.' },
           sensor_popup_bat_3_name: { label: 'Batería Popup 3 Nombre', helper: 'Opcional custom name for battery popup line 3. Deja en blanco to use entity name.' },
-          sensor_popup_bat_3_color: { label: 'Batería Popup 3 Color', helper: 'Color for battery popup line 3 text.' },
-          sensor_popup_bat_3_font_size: { label: 'Batería Popup 3 Font Size (px)', helper: 'Font size for battery popup line 3. Predeterminado 8' },
           sensor_popup_bat_4: { label: 'Batería Popup 4', helper: 'Entity for battery popup line 4.' },
           sensor_popup_bat_4_name: { label: 'Batería Popup 4 Nombre', helper: 'Opcional custom name for battery popup line 4. Deja en blanco to use entity name.' },
-          sensor_popup_bat_4_color: { label: 'Batería Popup 4 Color', helper: 'Color for battery popup line 4 text.' },
-          sensor_popup_bat_4_font_size: { label: 'Batería Popup 4 Font Size (px)', helper: 'Font size for battery popup line 4. Predeterminado 8' },
           sensor_popup_bat_5: { label: 'Batería Popup 5', helper: 'Entity for battery popup line 5.' },
           sensor_popup_bat_5_name: { label: 'Batería Popup 5 Nombre', helper: 'Opcional custom name for battery popup line 5. Deja en blanco to use entity name.' },
-          sensor_popup_bat_5_color: { label: 'Batería Popup 5 Color', helper: 'Color for battery popup line 5 text.' },
-          sensor_popup_bat_5_font_size: { label: 'Batería Popup 5 Font Size (px)', helper: 'Font size for battery popup line 5. Predeterminado 8' },
           sensor_popup_bat_6: { label: 'Batería Popup 6', helper: 'Entity for battery popup line 6.' },
           sensor_popup_bat_6_name: { label: 'Batería Popup 6 Nombre', helper: 'Opcional custom name for battery popup line 6. Deja en blanco to use entity name.' },
-          sensor_popup_bat_6_color: { label: 'Batería Popup 6 Color', helper: 'Color for battery popup line 6 text.' },
-          sensor_popup_bat_6_font_size: { label: 'Batería Popup 6 Font Size (px)', helper: 'Font size for battery popup line 6. Predeterminado 8' },
           sensor_popup_grid_1: { label: 'Red Popup 1', helper: 'Entity for grid popup line 1.' },
           sensor_popup_grid_1_name: { label: 'Red Popup 1 Nombre', helper: 'Opcional custom name for grid popup line 1. Deja en blanco to use entity name.' },
           sensor_popup_grid_1_color: { label: 'Red Popup 1 Color', helper: 'Color for grid popup line 1 text.' },
@@ -13212,7 +14472,7 @@ class AdvancedEnergyCardEditor extends HTMLElement {
           initial_evs_2: '2'
         },
         view: {
-          daily: 'PRODUCCIÓN DIARIA', pv_tot: 'PV TOTAL', car1: 'COCHE 1', car2: 'COCHE 2', importing: 'IMPORTANDO', exporting: 'EXPORTANDO'
+          daily: 'PRODUCCIÓN DIARIA', pv_tot: 'PV TOTAL', car1: 'COCHE 1', car2: 'COCHE 2', importing: 'IMPORTANDO', exporting: 'EXPORTANDO', charging: 'CARGANDO', discharging: 'DESCARGANDO', standby: 'ESPERA'
         }
       }
     };
@@ -13359,21 +14619,36 @@ class AdvancedEnergyCardEditor extends HTMLElement {
         { name: 'sensor_bat1_power', label: fields.sensor_bat1_power.label, helper: fields.sensor_bat1_power.helper, selector: entitySelector },
         { name: 'sensor_bat1_charge_power', label: fields.sensor_bat1_charge_power.label, helper: fields.sensor_bat1_charge_power.helper, selector: entitySelector },
         { name: 'sensor_bat1_discharge_power', label: fields.sensor_bat1_discharge_power.label, helper: fields.sensor_bat1_discharge_power.helper, selector: entitySelector },
+        { name: 'sensor_bat1_capacity_sensor', label: fields.sensor_bat1_capacity_sensor.label, helper: fields.sensor_bat1_capacity_sensor.helper, selector: entitySelector },
+        { name: 'bat1_capacity_manual', label: fields.bat1_capacity_manual.label, helper: fields.bat1_capacity_manual.helper, selector: { text: { mode: 'blur' } } },
+        { name: 'bat1_reserve_percentage', label: fields.bat1_reserve_percentage.label, helper: fields.bat1_reserve_percentage.helper, selector: { number: { min: 0, max: 100, step: 1, unit_of_measurement: '%' } } },
+        { name: 'sensor_battery1_temp', label: fields.sensor_battery1_temp.label, helper: fields.sensor_battery1_temp.helper, selector: entitySelector },
+        { name: 'battery1_temp_font_size', label: fields.battery1_temp_font_size.label, helper: fields.battery1_temp_font_size.helper, selector: { text: { mode: 'blur' } } },
+        { name: 'battery1_temp_color', label: fields.battery1_temp_color.label, helper: fields.battery1_temp_color.helper, selector: { color_picker: {} } },
         { type: 'divider' },
         { name: 'sensor_bat2_soc', label: fields.sensor_bat2_soc.label, helper: fields.sensor_bat2_soc.helper, selector: entitySelector },
         { name: 'sensor_bat2_power', label: fields.sensor_bat2_power.label, helper: fields.sensor_bat2_power.helper, selector: entitySelector },
         { name: 'sensor_bat2_charge_power', label: fields.sensor_bat2_charge_power.label, helper: fields.sensor_bat2_charge_power.helper, selector: entitySelector },
         { name: 'sensor_bat2_discharge_power', label: fields.sensor_bat2_discharge_power.label, helper: fields.sensor_bat2_discharge_power.helper, selector: entitySelector },
+        { name: 'sensor_bat2_capacity_sensor', label: fields.sensor_bat2_capacity_sensor.label, helper: fields.sensor_bat2_capacity_sensor.helper, selector: entitySelector },
+        { name: 'bat2_capacity_manual', label: fields.bat2_capacity_manual.label, helper: fields.bat2_capacity_manual.helper, selector: { text: { mode: 'blur' } } },
+        { name: 'bat2_reserve_percentage', label: fields.bat2_reserve_percentage.label, helper: fields.bat2_reserve_percentage.helper, selector: { number: { min: 0, max: 100, step: 1, unit_of_measurement: '%' } } },
         { type: 'divider' },
         { name: 'sensor_bat3_soc', label: fields.sensor_bat3_soc.label, helper: fields.sensor_bat3_soc.helper, selector: entitySelector },
         { name: 'sensor_bat3_power', label: fields.sensor_bat3_power.label, helper: fields.sensor_bat3_power.helper, selector: entitySelector },
         { name: 'sensor_bat3_charge_power', label: fields.sensor_bat3_charge_power.label, helper: fields.sensor_bat3_charge_power.helper, selector: entitySelector },
         { name: 'sensor_bat3_discharge_power', label: fields.sensor_bat3_discharge_power.label, helper: fields.sensor_bat3_discharge_power.helper, selector: entitySelector },
+        { name: 'sensor_bat3_capacity_sensor', label: fields.sensor_bat3_capacity_sensor.label, helper: fields.sensor_bat3_capacity_sensor.helper, selector: entitySelector },
+        { name: 'bat3_capacity_manual', label: fields.bat3_capacity_manual.label, helper: fields.bat3_capacity_manual.helper, selector: { text: { mode: 'blur' } } },
+        { name: 'bat3_reserve_percentage', label: fields.bat3_reserve_percentage.label, helper: fields.bat3_reserve_percentage.helper, selector: { number: { min: 0, max: 100, step: 1, unit_of_measurement: '%' } } },
         { type: 'divider' },
         { name: 'sensor_bat4_soc', label: fields.sensor_bat4_soc.label, helper: fields.sensor_bat4_soc.helper, selector: entitySelector },
         { name: 'sensor_bat4_power', label: fields.sensor_bat4_power.label, helper: fields.sensor_bat4_power.helper, selector: entitySelector },
         { name: 'sensor_bat4_charge_power', label: fields.sensor_bat4_charge_power.label, helper: fields.sensor_bat4_charge_power.helper, selector: entitySelector },
         { name: 'sensor_bat4_discharge_power', label: fields.sensor_bat4_discharge_power.label, helper: fields.sensor_bat4_discharge_power.helper, selector: entitySelector },
+        { name: 'sensor_bat4_capacity_sensor', label: fields.sensor_bat4_capacity_sensor.label, helper: fields.sensor_bat4_capacity_sensor.helper, selector: entitySelector },
+        { name: 'bat4_capacity_manual', label: fields.bat4_capacity_manual.label, helper: fields.bat4_capacity_manual.helper, selector: { text: { mode: 'blur' } } },
+        { name: 'bat4_reserve_percentage', label: fields.bat4_reserve_percentage.label, helper: fields.bat4_reserve_percentage.helper, selector: { number: { min: 0, max: 100, step: 1, unit_of_measurement: '%' } } },
         { type: 'divider' },
         { name: 'invert_battery', label: fields.invert_battery.label, helper: fields.invert_battery.helper, selector: { boolean: {} } },
         { name: 'battery_soc_color', label: fields.battery_soc_color.label, helper: fields.battery_soc_color.helper, selector: { color_picker: {} } },
@@ -13385,6 +14660,15 @@ class AdvancedEnergyCardEditor extends HTMLElement {
         { name: 'battery_fill_opacity', label: fields.battery_fill_opacity.label, helper: fields.battery_fill_opacity.helper, selector: { number: { min: 0, max: 1, step: 0.05, mode: 'slider' } }, default: 1 },
         { name: 'battery_soc_font_size', label: fields.battery_soc_font_size.label, helper: fields.battery_soc_font_size.helper, selector: { text: { mode: 'blur' } } },
         { name: 'battery_power_font_size', label: fields.battery_power_font_size.label, helper: fields.battery_power_font_size.helper, selector: { text: { mode: 'blur' } } },
+        { type: 'divider' },
+        { name: 'inv1_datetime_color', label: fields.inv1_datetime_color.label, helper: fields.inv1_datetime_color.helper, selector: { color_picker: {} } },
+        { name: 'inv1_datetime_font_size', label: fields.inv1_datetime_font_size.label, helper: fields.inv1_datetime_font_size.helper, selector: { text: { mode: 'blur' } } },
+        { name: 'inv1_timeuntil_color', label: fields.inv1_timeuntil_color.label, helper: fields.inv1_timeuntil_color.helper, selector: { color_picker: {} } },
+        { name: 'inv1_timeuntil_font_size', label: fields.inv1_timeuntil_font_size.label, helper: fields.inv1_timeuntil_font_size.helper, selector: { text: { mode: 'blur' } } },
+        { name: 'inv2_datetime_color', label: fields.inv2_datetime_color.label, helper: fields.inv2_datetime_color.helper, selector: { color_picker: {} } },
+        { name: 'inv2_datetime_font_size', label: fields.inv2_datetime_font_size.label, helper: fields.inv2_datetime_font_size.helper, selector: { text: { mode: 'blur' } } },
+        { name: 'inv2_timeuntil_color', label: fields.inv2_timeuntil_color.label, helper: fields.inv2_timeuntil_color.helper, selector: { color_picker: {} } },
+        { name: 'inv2_timeuntil_font_size', label: fields.inv2_timeuntil_font_size.label, helper: fields.inv2_timeuntil_font_size.helper, selector: { text: { mode: 'blur' } } },
         
       ]),
       grid: define([
@@ -13420,6 +14704,11 @@ class AdvancedEnergyCardEditor extends HTMLElement {
         { name: 'grid_font_size', label: fields.grid_font_size.label, helper: fields.grid_font_size.helper, selector: { text: { mode: 'blur' } } },
         { name: 'grid_daily_font_size', label: fields.grid_daily_font_size.label, helper: fields.grid_daily_font_size.helper, selector: { text: { mode: 'blur' } } },
         { name: 'show_grid_flow_label', label: fields.show_grid_flow_label.label, helper: fields.show_grid_flow_label.helper, selector: { boolean: {} } },
+        { name: 'inverter1_status_text_color', label: fields.inverter1_status_text_color.label, helper: fields.inverter1_status_text_color.helper, selector: { color_picker: {} } },
+        { name: 'inverter1_status_font_size', label: fields.inverter1_status_font_size.label, helper: fields.inverter1_status_font_size.helper, selector: { text: { mode: 'blur' } } },
+        { name: 'sensor_inverter1_temp', label: fields.sensor_inverter1_temp.label, helper: fields.sensor_inverter1_temp.helper, selector: entitySelector },
+        { name: 'inverter1_temp_font_size', label: fields.inverter1_temp_font_size.label, helper: fields.inverter1_temp_font_size.helper, selector: { text: { mode: 'blur' } } },
+        { name: 'inverter1_temp_color', label: fields.inverter1_temp_color.label, helper: fields.inverter1_temp_color.helper, selector: { color_picker: {} } },
         { name: 'invert_grid', label: fields.invert_grid.label, helper: fields.invert_grid.helper, selector: { boolean: {} } },
         { name: 'inv2_color', label: fields.inv2_color.label, helper: fields.inv2_color.helper, selector: { color_picker: {} }, default: '#0080ff' },
       
@@ -13536,18 +14825,8 @@ class AdvancedEnergyCardEditor extends HTMLElement {
         { name: 'sensor_popup_bat_5_name', label: (fields.sensor_popup_bat_5_name && fields.sensor_popup_bat_5_name.label) || '', helper: (fields.sensor_popup_bat_5_name && fields.sensor_popup_bat_5_name.helper) || '', selector: { text: {} } },
         { name: 'sensor_popup_bat_6', label: (fields.sensor_popup_bat_6 && fields.sensor_popup_bat_6.label) || '', helper: (fields.sensor_popup_bat_6 && fields.sensor_popup_bat_6.helper) || '', selector: popupEntitySelector },
         { name: 'sensor_popup_bat_6_name', label: (fields.sensor_popup_bat_6_name && fields.sensor_popup_bat_6_name.label) || '', helper: (fields.sensor_popup_bat_6_name && fields.sensor_popup_bat_6_name.helper) || '', selector: { text: {} } },
-        { name: 'sensor_popup_bat_1_color', label: (fields.sensor_popup_bat_1_color && fields.sensor_popup_bat_1_color.label) || '', helper: (fields.sensor_popup_bat_1_color && fields.sensor_popup_bat_1_color.helper) || '', selector: { color_picker: {} }, default: '#80ffff' },
-        { name: 'sensor_popup_bat_2_color', label: (fields.sensor_popup_bat_2_color && fields.sensor_popup_bat_2_color.label) || '', helper: (fields.sensor_popup_bat_2_color && fields.sensor_popup_bat_2_color.helper) || '', selector: { color_picker: {} }, default: '#80ffff' },
-        { name: 'sensor_popup_bat_3_color', label: (fields.sensor_popup_bat_3_color && fields.sensor_popup_bat_3_color.label) || '', helper: (fields.sensor_popup_bat_3_color && fields.sensor_popup_bat_3_color.helper) || '', selector: { color_picker: {} }, default: '#80ffff' },
-        { name: 'sensor_popup_bat_4_color', label: (fields.sensor_popup_bat_4_color && fields.sensor_popup_bat_4_color.label) || '', helper: (fields.sensor_popup_bat_4_color && fields.sensor_popup_bat_4_color.helper) || '', selector: { color_picker: {} }, default: '#80ffff' },
-        { name: 'sensor_popup_bat_5_color', label: (fields.sensor_popup_bat_5_color && fields.sensor_popup_bat_5_color.label) || '', helper: (fields.sensor_popup_bat_5_color && fields.sensor_popup_bat_5_color.helper) || '', selector: { color_picker: {} }, default: '#80ffff' },
-        { name: 'sensor_popup_bat_6_color', label: (fields.sensor_popup_bat_6_color && fields.sensor_popup_bat_6_color.label) || '', helper: (fields.sensor_popup_bat_6_color && fields.sensor_popup_bat_6_color.helper) || '', selector: { color_picker: {} }, default: '#80ffff' },
-        { name: 'sensor_popup_bat_1_font_size', label: (fields.sensor_popup_bat_1_font_size && fields.sensor_popup_bat_1_font_size.label) || '', helper: (fields.sensor_popup_bat_1_font_size && fields.sensor_popup_bat_1_font_size.helper) || '', selector: { text: { mode: 'blur' } }, default: '12' },
-        { name: 'sensor_popup_bat_2_font_size', label: (fields.sensor_popup_bat_2_font_size && fields.sensor_popup_bat_2_font_size.label) || '', helper: (fields.sensor_popup_bat_2_font_size && fields.sensor_popup_bat_2_font_size.helper) || '', selector: { text: { mode: 'blur' } }, default: '12' },
-        { name: 'sensor_popup_bat_3_font_size', label: (fields.sensor_popup_bat_3_font_size && fields.sensor_popup_bat_3_font_size.label) || '', helper: (fields.sensor_popup_bat_3_font_size && fields.sensor_popup_bat_3_font_size.helper) || '', selector: { text: { mode: 'blur' } }, default: '12' },
-        { name: 'sensor_popup_bat_4_font_size', label: (fields.sensor_popup_bat_4_font_size && fields.sensor_popup_bat_4_font_size.label) || '', helper: (fields.sensor_popup_bat_4_font_size && fields.sensor_popup_bat_4_font_size.helper) || '', selector: { text: { mode: 'blur' } }, default: '12' },
-        { name: 'sensor_popup_bat_5_font_size', label: (fields.sensor_popup_bat_5_font_size && fields.sensor_popup_bat_5_font_size.label) || '', helper: (fields.sensor_popup_bat_5_font_size && fields.sensor_popup_bat_5_font_size.helper) || '', selector: { text: { mode: 'blur' } }, default: '12' },
-        { name: 'sensor_popup_bat_6_font_size', label: (fields.sensor_popup_bat_6_font_size && fields.sensor_popup_bat_6_font_size.label) || '', helper: (fields.sensor_popup_bat_6_font_size && fields.sensor_popup_bat_6_font_size.helper) || '', selector: { text: { mode: 'blur' } }, default: '12' }
+        { name: 'battery_popup_color', label: (fields.battery_popup_color && fields.battery_popup_color.label) || '', helper: (fields.battery_popup_color && fields.battery_popup_color.helper) || '', selector: { color_picker: {} }, default: '#00FFFF' },
+        { name: 'battery_popup_font_size', label: (fields.battery_popup_font_size && fields.battery_popup_font_size.label) || '', helper: (fields.battery_popup_font_size && fields.battery_popup_font_size.helper) || '', selector: { text: { mode: 'blur' } }, default: '16' }
       ]),
       gridPopup: define([
         { name: 'sensor_popup_grid_1', label: (fields.sensor_popup_grid_1 && fields.sensor_popup_grid_1.label) || '', helper: (fields.sensor_popup_grid_1 && fields.sensor_popup_grid_1.helper) || '', selector: popupEntitySelector },
