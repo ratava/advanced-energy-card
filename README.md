@@ -1,6 +1,6 @@
 # Advanced Energy Card
 
-![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)  ![Version](https://img.shields.io/badge/version-1.0.25-blue.svg)
+![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)  ![Version](https://img.shields.io/badge/version-1.0.27-blue.svg)
 
 Advanced Energy Card repository is [https://github.com/ratava/advanced-energy-card](https://github.com/ratava/advanced-energy-card).
 
@@ -55,6 +55,13 @@ Advanced Energy Card is a Home Assistant custom Lovelace card that renders anima
 
 #### HACS
 
+**One-click install (HACS):**  
+![Open your Home Assistant instance and add this repository to HACS](https://my.home-assistant.io/badges/hacs_repository.svg)  
+
+Click the badge → your Home Assistant opens → the repo is added to HACS. Then go to **HACS → Frontend**, search **Advanced Energy Card**, and install. Finally: **Dashboard → Edit → Add card → Advanced Energy Card**.
+
+#### MANUAL HACS
+
 1. Open HACS in Home Assistant and choose **Frontend**.
 2. Use the three-dot menu → **Custom repositories**.
 3. Enter `https://github.com/ratava/advanced-energy-card`, pick **Dashboard**, and click **Add**.
@@ -62,6 +69,8 @@ Advanced Energy Card is a Home Assistant custom Lovelace card that renders anima
 5. Restart Home Assistant if prompted.
 
 #### Manual Installation
+
+**(Note. This is not the advised method)**
 
 1. Download all files from `dist/` from the [latest release](https://github.com/ratava/advanced-energy-card/releases).
 2. Copy the files to `/config/www/community/advanced-energy-card/`.
@@ -84,6 +93,7 @@ lovelace:
 4. Many other options have been added including a fully restructured menu
 
 ### Options Table
+
 
 | Option                               | Type    | Default                                                           | Notes                                                                                                                                             |
 | ------------------------------------ | ------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -240,6 +250,7 @@ lovelace:
 | `invert_bat2`                        | boolean | `false`                                                           | Override only Battery 2 polarity when its sensors are reversed.                                                                                   |
 | `invert_bat3`                        | boolean | `false`                                                           | Override only Battery 3 polarity when its sensors are reversed.                                                                                   |
 
+
 > **Battery sensor requirement (EN):** For each battery (`bat1`..`bat4`) supply either the combined `sensor_batX_power` **or** both `sensor_batX_charge_power` and `sensor_batX_discharge_power`. Readings may be in W or kW; the card handles conversions automatically.
 
 ### Grid Flow Routing (EN)
@@ -293,6 +304,7 @@ a helper to display it.
 
 ### Additional Array 2 & Options (EN)
 
+
 | Option                                            | Type     | Default   | Notes                                                                                                                                      |
 | ------------------------------------------------- | -------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `sensor_pv_total_secondary`                       | entity   | —         | Optional second inverter total (PV2). When provided it is added to PV TOT and drives the secondary PV flow.                                |
@@ -302,6 +314,7 @@ a helper to display it.
 | `pv_tot_color`                                    | string   | `#00FFFF` | Overrides the PV TOT line/text colour (also affects string inheritance when set).                                                          |
 | `house_total_color` / `inv1_color` / `inv2_color` | string   | —         | Per-line colour overrides for HOUSE TOT, INV 1 and INV 2 flows.                                                                            |
 | `invert_battery`                                  | boolean  | `false`   | Swaps charge/discharge polarity, colours, and animation direction.                                                                         |
+
 
 Car colours & fonts: `car1_name_color`, `car2_name_color`, `car1_color`, `car2_color`, `car2_pct_color`, `car_name_font_size`, `car2_name_font_size` — new colour and name-font-size controls for Car 1 and Car 2 (power and SOC font sizes remain available as `car_power_font_size`, `car2_power_font_size`, `car_soc_font_size`, `car2_soc_font_size`).
 
@@ -359,6 +372,13 @@ Advanced Energy Card è una card personalizzata Lovelace per Home Assistant che 
 
 #### HACS
 
+**Installazione con un clic (HACS):**  
+![Apri la tua istanza Home Assistant e aggiungi questo repository a HACS](https://my.home-assistant.io/badges/hacs_repository.svg)  
+
+Fai clic sul badge → si apre Home Assistant → il repository viene aggiunto a HACS. Quindi vai su **HACS → Frontend**, cerca **Advanced Energy Card** e installa. Infine: **Dashboard → Modifica → Aggiungi card → Advanced Energy Card**.
+
+#### HACS MANUALE
+
 1. Aprire HACS in Home Assistant e scegliere **Frontend**
 2. Utilizzare il menu a tre punti → **Repository personalizzati**
 3. Inserire `https://github.com/ratava/advanced-energy-card`, selezionare **Dashboard** e fare clic su **Aggiungi**
@@ -366,6 +386,8 @@ Advanced Energy Card è una card personalizzata Lovelace per Home Assistant che 
 5. Riavviare Home Assistant se richiesto
 
 #### Installazione Manuale
+
+**(Nota. Questo non è il metodo consigliato)**
 
 1. Scaricare tutti i file da `dist/` dall'[ultima release](https://github.com/ratava/advanced-energy-card/releases)
 2. Copiare i file in `/config/www/community/advanced-energy-card/`
@@ -388,6 +410,7 @@ lovelace:
 4. Sono state aggiunte molte altre opzioni tra cui un menu completamente ristrutturato
 
 ### Tabella Opzioni
+
 
 | Opzione                              | Tipo    | Predefinito                                                       | Note                                                                                                                                                                                   |
 | ------------------------------------ | ------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -446,6 +469,7 @@ lovelace:
 | `invert_grid`                        | boolean | `false`                                                           | Inverti polarità rete se importazione/esportazione sono invertite                                                                                                                      |
 | `invert_battery`                     | boolean | `false`                                                           | Inverti polarità batteria e scambia tonalità carica/scarica                                                                                                                            |
 
+
 > **Requisito sensore batteria:** Per ogni batteria (`bat1`..`bat4`) fornire `sensor_batX_power` combinato **o** entrambi `sensor_batX_charge_power` e `sensor_batX_discharge_power`. Le letture possono essere in W o kW; la card gestisce automaticamente le conversioni.
 
 ### Modalità Kiosk
@@ -497,6 +521,13 @@ Advanced Energy Card ist eine benutzerdefinierte Lovelace-Karte für Home Assist
 
 #### HACS
 
+**Ein-Klick-Installation (HACS):**  
+![Öffnen Sie Ihre Home Assistant Instanz und fügen Sie dieses Repository zu HACS hinzu](https://my.home-assistant.io/badges/hacs_repository.svg)  
+
+Klicken Sie auf das Badge → Home Assistant öffnet sich → das Repository wird zu HACS hinzugefügt. Gehen Sie dann zu **HACS → Frontend**, suchen Sie **Advanced Energy Card** und installieren Sie. Abschließend: **Dashboard → Bearbeiten → Karte hinzufügen → Advanced Energy Card**.
+
+#### MANUELLES HACS
+
 1. Öffnen Sie HACS in Home Assistant und wählen Sie **Frontend**
 2. Verwenden Sie das Drei-Punkte-Menü → **Benutzerdefinierte Repositories**
 3. Geben Sie `https://github.com/ratava/advanced-energy-card` ein, wählen Sie **Dashboard** und klicken Sie auf **Hinzufügen**
@@ -504,6 +535,8 @@ Advanced Energy Card ist eine benutzerdefinierte Lovelace-Karte für Home Assist
 5. Starten Sie Home Assistant neu, wenn Sie dazu aufgefordert werden
 
 #### Manuelle Installation
+
+**(Hinweis. Dies ist nicht die empfohlene Methode)**
 
 1. Laden Sie alle Dateien aus `dist/` vom [neuesten Release](https://github.com/ratava/advanced-energy-card/releases) herunter
 2. Kopieren Sie die Dateien nach `/config/www/community/advanced-energy-card/`
@@ -526,6 +559,7 @@ lovelace:
 4. Viele weitere Optionen wurden hinzugefügt, einschließlich eines vollständig umstrukturierten Menüs
 
 ### Optionstabelle
+
 
 | Option                               | Typ     | Standard                                                          | Hinweise                                                                                                                                                                         |
 | ------------------------------------ | ------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -584,6 +618,7 @@ lovelace:
 | `invert_grid`                        | boolean | `false`                                                           | Netzpolarität umkehren, wenn Import/Export vertauscht sind                                                                                                                       |
 | `invert_battery`                     | boolean | `false`                                                           | Batteriepolarität umkehren und Lade-/Entladefarbton tauschen                                                                                                                     |
 
+
 > **Batteriesensor-Anforderung:** Für jede Batterie (`bat1`..`bat4`) entweder den kombinierten `sensor_batX_power` **oder** beide `sensor_batX_charge_power` und `sensor_batX_discharge_power` bereitstellen. Messwerte können in W oder kW vorliegen; die Karte führt automatisch Konvertierungen durch.
 
 ### Kiosk-Modus
@@ -635,6 +670,13 @@ Advanced Energy Card est une carte Lovelace personnalisée pour Home Assistant q
 
 #### HACS
 
+**Installation en un clic (HACS) :**  
+![Ouvrez votre instance Home Assistant et ajoutez ce dépôt à HACS](https://my.home-assistant.io/badges/hacs_repository.svg)  
+
+Cliquez sur le badge → votre Home Assistant s'ouvre → le dépôt est ajouté à HACS. Ensuite, allez dans **HACS → Frontend**, recherchez **Advanced Energy Card** et installez. Enfin : **Tableau de bord → Modifier → Ajouter une carte → Advanced Energy Card**.
+
+#### HACS MANUEL
+
 1. Ouvrez HACS dans Home Assistant et choisissez **Frontend**
 2. Utilisez le menu à trois points → **Dépôts personnalisés**
 3. Entrez `https://github.com/ratava/advanced-energy-card`, sélectionnez **Dashboard** et cliquez sur **Ajouter**
@@ -642,6 +684,8 @@ Advanced Energy Card est une carte Lovelace personnalisée pour Home Assistant q
 5. Redémarrez Home Assistant si demandé
 
 #### Installation Manuelle
+
+**(Remarque. Ce n'est pas la méthode conseillée)**
 
 1. Téléchargez tous les fichiers de `dist/` depuis la [dernière version](https://github.com/ratava/advanced-energy-card/releases)
 2. Copiez les fichiers dans `/config/www/community/advanced-energy-card/`
@@ -664,6 +708,7 @@ lovelace:
 4. De nombreuses autres options ont été ajoutées, y compris un menu entièrement restructuré
 
 ### Tableau des Options
+
 
 | Option                               | Type    | Défaut                                                            | Notes                                                                                                                                                                            |
 | ------------------------------------ | ------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -722,6 +767,7 @@ lovelace:
 | `invert_grid`                        | boolean | `false`                                                           | Inverser la polarité réseau si import/export sont inversés                                                                                                                       |
 | `invert_battery`                     | boolean | `false`                                                           | Inverser la polarité de la batterie et échanger les teintes charge/décharge                                                                                                      |
 
+
 > **Exigence de capteur de batterie :** Pour chaque batterie (`bat1`..`bat4`) fournir soit le `sensor_batX_power` combiné **ou** à la fois `sensor_batX_charge_power` et `sensor_batX_discharge_power`. Les lectures peuvent être en W ou kW ; la carte gère automatiquement les conversions.
 
 ### Mode Kiosque
@@ -773,6 +819,13 @@ Advanced Energy Card is een aangepaste Lovelace-kaart voor Home Assistant die ge
 
 #### HACS
 
+**Installatie met één klik (HACS):**  
+![Open uw Home Assistant instantie en voeg deze repository toe aan HACS](https://my.home-assistant.io/badges/hacs_repository.svg)  
+
+Klik op de badge → uw Home Assistant opent → de repo wordt toegevoegd aan HACS. Ga vervolgens naar **HACS → Frontend**, zoek **Advanced Energy Card** en installeer. Tot slot: **Dashboard → Bewerken → Kaart toevoegen → Advanced Energy Card**.
+
+#### HANDMATIGE HACS
+
 1. Open HACS in Home Assistant en kies **Frontend**
 2. Gebruik het driepuntenmenu → **Aangepaste repositories**
 3. Voer `https://github.com/ratava/advanced-energy-card` in, selecteer **Dashboard** en klik op **Toevoegen**
@@ -780,6 +833,8 @@ Advanced Energy Card is een aangepaste Lovelace-kaart voor Home Assistant die ge
 5. Herstart Home Assistant indien gevraagd
 
 #### Handmatige Installatie
+
+**(Opmerking. Dit is niet de aanbevolen methode)**
 
 1. Download alle bestanden van `dist/` van de [nieuwste release](https://github.com/ratava/advanced-energy-card/releases)
 2. Kopieer de bestanden naar `/config/www/community/advanced-energy-card/`
@@ -802,6 +857,7 @@ lovelace:
 4. Veel andere opties zijn toegevoegd, inclusief een volledig geherstructureerd menu
 
 ### Optietabel
+
 
 | Optie                                | Type    | Standaard                                                         | Opmerkingen                                                                                                                                                                  |
 | ------------------------------------ | ------- | ----------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -860,6 +916,7 @@ lovelace:
 | `invert_grid`                        | boolean | `false`                                                           | Keer netpolariteit om als import/export zijn omgedraaid                                                                                                                      |
 | `invert_battery`                     | boolean | `false`                                                           | Keer batterijpolariteit om en wissel laad-/ontlaadtinten                                                                                                                     |
 
+
 > **Batterijsensorvereiste:** Voor elke batterij (`bat1`..`bat4`) geef de gecombineerde `sensor_batX_power` **of** beide `sensor_batX_charge_power` en `sensor_batX_discharge_power` op. Metingen kunnen in W of kW zijn; de kaart verwerkt automatisch conversies.
 
 ### Kiosk Modus
@@ -911,6 +968,13 @@ Advanced Energy Card es una tarjeta Lovelace personalizada para Home Assistant q
 
 #### HACS
 
+**Instalación con un clic (HACS):**  
+![Abra su instancia de Home Assistant y agregue este repositorio a HACS](https://my.home-assistant.io/badges/hacs_repository.svg)  
+
+Haga clic en la insignia → se abre Home Assistant → el repositorio se agrega a HACS. Luego vaya a **HACS → Frontend**, busque **Advanced Energy Card** e instale. Finalmente: **Panel de control → Editar → Agregar tarjeta → Advanced Energy Card**.
+
+#### HACS MANUAL
+
 1. Abra HACS en Home Assistant y elija **Frontend**
 2. Use el menú de tres puntos → **Repositorios personalizados**
 3. Ingrese `https://github.com/ratava/advanced-energy-card`, seleccione **Dashboard** y haga clic en **Agregar**
@@ -918,6 +982,8 @@ Advanced Energy Card es una tarjeta Lovelace personalizada para Home Assistant q
 5. Reinicie Home Assistant si se solicita
 
 #### Instalación Manual
+
+**(Nota. Este no es el método recomendado)**
 
 1. Descargue todos los archivos de `dist/` desde la [última versión](https://github.com/ratava/advanced-energy-card/releases)
 2. Copie los archivos a `/config/www/community/advanced-energy-card/`
@@ -940,6 +1006,7 @@ lovelace:
 4. Se han agregado muchas otras opciones, incluyendo un menú completamente reestructurado
 
 ### Tabla de Opciones
+
 
 | Opción                               | Tipo    | Predeterminado                                                    | Notas                                                                                                                                                                            |
 | ------------------------------------ | ------- | ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -997,6 +1064,7 @@ lovelace:
 | `grid_activity_threshold`            | number  | `100`                                                             | Potencia de red absoluta mínima (W) antes de que los flujos se animen                                                                                                            |
 | `invert_grid`                        | boolean | `false`                                                           | Invertir polaridad de red si importación/exportación están invertidas                                                                                                            |
 | `invert_battery`                     | boolean | `false`                                                           | Invertir polaridad de batería e intercambiar tonos de carga/descarga                                                                                                             |
+
 
 > **Requisito de sensor de batería:** Para cada batería (`bat1`..`bat4`) proporcione el `sensor_batX_power` combinado **o** ambos `sensor_batX_charge_power` y `sensor_batX_discharge_power`. Las lecturas pueden estar en W o kW; la tarjeta maneja las conversiones automáticamente.
 
