@@ -56,7 +56,8 @@ Advanced Energy Card is a Home Assistant custom Lovelace card that renders anima
 #### HACS
 
 **One-click install (HACS):**  
-![Open your Home Assistant instance and add this repository to HACS](https://my.home-assistant.io/badges/hacs_repository.svg)  
+
+[![Open your Home Assistant instance and add this repository to HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Ratava&repository=advanced-energy-card&category=frontend)
 
 Click the badge → your Home Assistant opens → the repo is added to HACS. Then go to **HACS → Frontend**, search **Advanced Energy Card**, and install. Finally: **Dashboard → Edit → Add card → Advanced Energy Card**.
 
@@ -373,7 +374,7 @@ Advanced Energy Card è una card personalizzata Lovelace per Home Assistant che 
 #### HACS
 
 **Installazione con un clic (HACS):**  
-![Apri la tua istanza Home Assistant e aggiungi questo repository a HACS](https://my.home-assistant.io/badges/hacs_repository.svg)  
+[![Apri la tua istanza Home Assistant e aggiungi questo repository a HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Ratava&repository=advanced-energy-card&category=frontend)
 
 Fai clic sul badge → si apre Home Assistant → il repository viene aggiunto a HACS. Quindi vai su **HACS → Frontend**, cerca **Advanced Energy Card** e installa. Infine: **Dashboard → Modifica → Aggiungi card → Advanced Energy Card**.
 
@@ -522,7 +523,7 @@ Advanced Energy Card ist eine benutzerdefinierte Lovelace-Karte für Home Assist
 #### HACS
 
 **Ein-Klick-Installation (HACS):**  
-![Öffnen Sie Ihre Home Assistant Instanz und fügen Sie dieses Repository zu HACS hinzu](https://my.home-assistant.io/badges/hacs_repository.svg)  
+[![Öffnen Sie Ihre Home Assistant Instanz und fügen Sie dieses Repository zu HACS hinzu](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Ratava&repository=advanced-energy-card&category=frontend)
 
 Klicken Sie auf das Badge → Home Assistant öffnet sich → das Repository wird zu HACS hinzugefügt. Gehen Sie dann zu **HACS → Frontend**, suchen Sie **Advanced Energy Card** und installieren Sie. Abschließend: **Dashboard → Bearbeiten → Karte hinzufügen → Advanced Energy Card**.
 
@@ -671,7 +672,7 @@ Advanced Energy Card est une carte Lovelace personnalisée pour Home Assistant q
 #### HACS
 
 **Installation en un clic (HACS) :**  
-![Ouvrez votre instance Home Assistant et ajoutez ce dépôt à HACS](https://my.home-assistant.io/badges/hacs_repository.svg)  
+[![Ouvrez votre instance Home Assistant et ajoutez ce dépôt à HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Ratava&repository=advanced-energy-card&category=frontend)
 
 Cliquez sur le badge → votre Home Assistant s'ouvre → le dépôt est ajouté à HACS. Ensuite, allez dans **HACS → Frontend**, recherchez **Advanced Energy Card** et installez. Enfin : **Tableau de bord → Modifier → Ajouter une carte → Advanced Energy Card**.
 
@@ -820,7 +821,7 @@ Advanced Energy Card is een aangepaste Lovelace-kaart voor Home Assistant die ge
 #### HACS
 
 **Installatie met één klik (HACS):**  
-![Open uw Home Assistant instantie en voeg deze repository toe aan HACS](https://my.home-assistant.io/badges/hacs_repository.svg)  
+[![Open uw Home Assistant instantie en voeg deze repository toe aan HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Ratava&repository=advanced-energy-card&category=frontend)
 
 Klik op de badge → uw Home Assistant opent → de repo wordt toegevoegd aan HACS. Ga vervolgens naar **HACS → Frontend**, zoek **Advanced Energy Card** en installeer. Tot slot: **Dashboard → Bewerken → Kaart toevoegen → Advanced Energy Card**.
 
@@ -969,7 +970,7 @@ Advanced Energy Card es una tarjeta Lovelace personalizada para Home Assistant q
 #### HACS
 
 **Instalación con un clic (HACS):**  
-![Abra su instancia de Home Assistant y agregue este repositorio a HACS](https://my.home-assistant.io/badges/hacs_repository.svg)  
+[![Abra su instancia de Home Assistant y agregue este repositorio a HACS](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=Ratava&repository=advanced-energy-card&category=frontend)
 
 Haga clic en la insignia → se abre Home Assistant → el repositorio se agrega a HACS. Luego vaya a **HACS → Frontend**, busque **Advanced Energy Card** e instale. Finalmente: **Panel de control → Editar → Agregar tarjeta → Advanced Energy Card**.
 
