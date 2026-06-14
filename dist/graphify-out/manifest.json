@@ -1,0 +1,167 @@
+{
+  "advanced-energy-card.js": {
+    "mtime": 1781456852.4857776,
+    "ast_hash": "f602253c219eb955f2a8721c7ae24d9d",
+    "semantic_hash": ""
+  },
+  "modules/animation-manager.js": {
+    "mtime": 1781399775.8175168,
+    "ast_hash": "0e0983486b60a3a13ce4c8d479e02c44",
+    "semantic_hash": "0e0983486b60a3a13ce4c8d479e02c44"
+  },
+  "modules/battery-manager.js": {
+    "mtime": 1781230976.1941571,
+    "ast_hash": "ae9a1e87f066c061fb2c768f4616603a",
+    "semantic_hash": "ae9a1e87f066c061fb2c768f4616603a"
+  },
+  "modules/car-manager.js": {
+    "mtime": 1781230976.1956618,
+    "ast_hash": "5954809da16d7bf22d015a13a3162621",
+    "semantic_hash": "5954809da16d7bf22d015a13a3162621"
+  },
+  "modules/card-editor.js": {
+    "mtime": 1781422588.767732,
+    "ast_hash": "e36467a3fb973318a98a3371b306f625",
+    "semantic_hash": "e36467a3fb973318a98a3371b306f625"
+  },
+  "modules/color-utils.js": {
+    "mtime": 1781230976.1911578,
+    "ast_hash": "93c5ffb785d71332cc05397bb8ef9d86",
+    "semantic_hash": "93c5ffb785d71332cc05397bb8ef9d86"
+  },
+  "modules/config-validator.js": {
+    "mtime": 1781284165.39357,
+    "ast_hash": "7b29e4f8e7a396b4c5386173bdaa8a7d",
+    "semantic_hash": "7b29e4f8e7a396b4c5386173bdaa8a7d"
+  },
+  "modules/constants.js": {
+    "mtime": 1781401500.805993,
+    "ast_hash": "b8950abf718780f3ddccfe2345436a91",
+    "semantic_hash": "b8950abf718780f3ddccfe2345436a91"
+  },
+  "modules/entity-state-manager.js": {
+    "mtime": 1781230976.192157,
+    "ast_hash": "3ce601279eb196d661ad5817a9f45a75",
+    "semantic_hash": "3ce601279eb196d661ad5817a9f45a75"
+  },
+  "modules/loader.js": {
+    "mtime": 1781234551.7412007,
+    "ast_hash": "6b4b1ff10ef9979e9974ba1b46678286",
+    "semantic_hash": "6b4b1ff10ef9979e9974ba1b46678286"
+  },
+  "modules/localization-manager.js": {
+    "mtime": 1781291648.6504357,
+    "ast_hash": "dc391cf921d734357f58d7e61cb416c3",
+    "semantic_hash": "dc391cf921d734357f58d7e61cb416c3"
+  },
+  "modules/popup-manager.js": {
+    "mtime": 1781456346.1008432,
+    "ast_hash": "6d437ab438b4048ccb4af789f7e9d7f3",
+    "semantic_hash": ""
+  },
+  "modules/security.js": {
+    "mtime": 1781396408.154916,
+    "ast_hash": "cfc7b0336eb61811a5b8892266e9d348",
+    "semantic_hash": "cfc7b0336eb61811a5b8892266e9d348"
+  },
+  "modules/sun-moon-manager.js": {
+    "mtime": 1781423861.6007059,
+    "ast_hash": "3f72bb3ce52136dc652d71963823339d",
+    "semantic_hash": "3f72bb3ce52136dc652d71963823339d"
+  },
+  "modules/svg-layer-visibility.js": {
+    "mtime": 1781230976.196668,
+    "ast_hash": "909c661f1dfc615d500947137aa57acc",
+    "semantic_hash": "909c661f1dfc615d500947137aa57acc"
+  },
+  "svg-manifest.json": {
+    "mtime": 1781145213.9683142,
+    "ast_hash": "5ee6227e75278acd9b2b34e0b0cf9a48",
+    "semantic_hash": "5ee6227e75278acd9b2b34e0b0cf9a48"
+  },
+  "base-nopool.png": {
+    "mtime": 1780049582.9561756,
+    "ast_hash": "d20712fc6fc1df5aae951c93415aaf64",
+    "semantic_hash": "d20712fc6fc1df5aae951c93415aaf64"
+  },
+  "base.png": {
+    "mtime": 1780049582.9952996,
+    "ast_hash": "925954ce572ddadd410154c6329eb03e",
+    "semantic_hash": "925954ce572ddadd410154c6329eb03e"
+  },
+  "charger.png": {
+    "mtime": 1780049583.0051637,
+    "ast_hash": "a4a8997091846e9ca45418892183478c",
+    "semantic_hash": "a4a8997091846e9ca45418892183478c"
+  },
+  "grid_meter.png": {
+    "mtime": 1780049583.01465,
+    "ast_hash": "fe0a9252b93d428b2b6030eb69a13e88",
+    "semantic_hash": "fe0a9252b93d428b2b6030eb69a13e88"
+  },
+  "orange.png": {
+    "mtime": 1780049583.0319326,
+    "ast_hash": "f8e943278761aed18a4204d607abd386",
+    "semantic_hash": "f8e943278761aed18a4204d607abd386"
+  },
+  "overview.svg": {
+    "mtime": 1781288316.431143,
+    "ast_hash": "deb45a7905525ed7a72b6b0bbf1e565c",
+    "semantic_hash": "deb45a7905525ed7a72b6b0bbf1e565c"
+  },
+  "overview_day_1_EV.jpg": {
+    "mtime": 1781062030.3196154,
+    "ast_hash": "4f55d36c05180a9b719f9e4d3d2c3f76",
+    "semantic_hash": "4f55d36c05180a9b719f9e4d3d2c3f76"
+  },
+  "overview_day_2_EV.jpg": {
+    "mtime": 1781057639.0649695,
+    "ast_hash": "8cb0d21a35d06c5a5e0e54efa284b557",
+    "semantic_hash": "8cb0d21a35d06c5a5e0e54efa284b557"
+  },
+  "overview_day_no_EV.jpg": {
+    "mtime": 1781057506.4210203,
+    "ast_hash": "198f2c82820965ec8974c53b1b19ff87",
+    "semantic_hash": "198f2c82820965ec8974c53b1b19ff87"
+  },
+  "overview_night_1_EV.jpg": {
+    "mtime": 1781062092.0866117,
+    "ast_hash": "e99c31053ece09db8f73afac584cbcb2",
+    "semantic_hash": "e99c31053ece09db8f73afac584cbcb2"
+  },
+  "overview_night_2_EV.jpg": {
+    "mtime": 1781057716.5607107,
+    "ast_hash": "1c38ec073109639042ba14995fc78001",
+    "semantic_hash": "1c38ec073109639042ba14995fc78001"
+  },
+  "overview_night_no_EV.jpg": {
+    "mtime": 1781057704.0474062,
+    "ast_hash": "aa0ccd1238f098c0726a820461d4bc13",
+    "semantic_hash": "aa0ccd1238f098c0726a820461d4bc13"
+  },
+  "tech.svg": {
+    "mtime": 1781287121.9606667,
+    "ast_hash": "fcbc2b6a85371ed5a6105fe5857c812d",
+    "semantic_hash": "fcbc2b6a85371ed5a6105fe5857c812d"
+  },
+  "trans_blue.png": {
+    "mtime": 1780049583.059833,
+    "ast_hash": "b83cc12a424c1516d24789d9ff5711c1",
+    "semantic_hash": "b83cc12a424c1516d24789d9ff5711c1"
+  },
+  "windmill.png": {
+    "mtime": 1780049583.0683675,
+    "ast_hash": "549ba07c9ee356d048190f1de2d68e9d",
+    "semantic_hash": "549ba07c9ee356d048190f1de2d68e9d"
+  },
+  "modules/text-bindings.js": {
+    "mtime": 1781439666.5493805,
+    "ast_hash": "86bee83bd8c7dfd22ac81fe13a57ebee",
+    "semantic_hash": ""
+  },
+  "modules/render-manager.js": {
+    "mtime": 1781456780.1376793,
+    "ast_hash": "701b95d6e47fc7b9a1db18751df7c549",
+    "semantic_hash": ""
+  }
+}
