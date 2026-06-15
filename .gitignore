@@ -10,7 +10,4 @@ archive/
 CLAUDE.md
 scripts/
 .claude/
-dist/graphify-out/cache/
-dist/graphify-out/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]/
-dist/graphify-out/.graphify_python
-dist/graphify-out/.graphify_root
+src/
