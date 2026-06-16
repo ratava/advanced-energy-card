@@ -106,6 +106,80 @@ export class BatteryManager {
   }
 
   /**
+   * Get combined battery state for all active batteries (used by overview profile SVGs).
+   * Returns a synthetic state with role 'battery' driven by aggregated values.
+   * SOC: weighted by capacity when ALL active batteries have capacity configured,
+   * otherwise falls back to simple average.
+   * @param {Array} batteryStates - All battery states from getAllBatteryStates()
+   * @param {object} config - Card configuration
+   * @returns {object|null} Combined state or null if no batteries are active
+   */
+  getCombinedBatteryState(batteryStates, config) {
+    const active = this.getActiveBatteries(batteryStates);
+    if (active.length === 0) return null;
+
+    const combinedPower = active.reduce((sum, b) => sum + (b.power || 0), 0);
+
+    const capacities = active.map(b => this.getBatteryCapacity(b.index, config));
+    const allHaveCapacity = capacities.every(c => c !== null && c > 0);
+
+    let combinedSoc;
+    if (allHaveCapacity) {
+      const totalCapacity = capacities.reduce((s, c) => s + c, 0);
+      combinedSoc = active.reduce((s, b, i) => s + (b.soc || 0) * capacities[i], 0) / totalCapacity;
+    } else {
+      combinedSoc = active.reduce((s, b) => s + (b.soc || 0), 0) / active.length;
+    }
+
+    return {
+      index: null,
+      role: 'battery',
+      soc: combinedSoc,
+      power: combinedPower,
+      visible: true
+    };
+  }
+
+  /**
+   * Calculate combined time-until for all batteries (total energy ÷ total power).
+   * Delegates to calculateInverterBatteryTime with all four indices.
+   * @param {Array} batteryStates - All battery states
+   * @param {object} config - Card configuration
+   * @param {object} hass - Home Assistant object
+   * @returns {object} Time calculation result
+   */
+  getCombinedTimeUntil(batteryStates, config, hass) {
+    return this.calculateInverterBatteryTime([1, 2, 3, 4], batteryStates, config, hass);
+  }
+
+  /**
+   * Get average temperature across all batteries that have temp sensors configured.
+   * Returns the numeric average (rounded to 1dp) and the unit from the first sensor,
+   * or null if no temp sensors are configured/available.
+   * @param {object} config - Card configuration
+   * @returns {{ value: number, unit: string }|null}
+   */
+  getCombinedTempAverage(config) {
+    const samples = [];
+    let unit = '';
+    for (let i = 1; i <= 4; i++) {
+      const sensorId = typeof config[`sensor_battery${i}_temp`] === 'string'
+        ? config[`sensor_battery${i}_temp`].trim()
+        : '';
+      if (!sensorId) continue;
+      const raw = this.card.getStateSafe(sensorId);
+      if (!Number.isFinite(raw)) continue;
+      samples.push(raw);
+      if (!unit && this.card._hass && this.card._hass.states && this.card._hass.states[sensorId]) {
+        unit = this.card._hass.states[sensorId].attributes.unit_of_measurement || '';
+      }
+    }
+    if (samples.length === 0) return null;
+    const avg = samples.reduce((s, t) => s + t, 0) / samples.length;
+    return { value: Math.round(avg * 10) / 10, unit };
+  }
+
+  /**
    * Helper: Get numeric state from entity ID
    * @private
    */
@@ -129,9 +203,10 @@ export class BatteryManager {
     const capacityManualKey = `bat${index}_capacity_manual`;
     const reserveKey = `bat${index}_reserve_percentage`;
 
-    // Try sensor first
-    let capacityWh = this._getNumericState(config[capacitySensorKey]);
-    
+    // Try sensor first — use getStateSafe so kWh units are auto-converted to Wh
+    const capacitySensorId = config[capacitySensorKey];
+    let capacityWh = capacitySensorId ? this.card.getStateSafe(capacitySensorId) || null : null;
+
     // Fallback to manual entry
     if (capacityWh === null) {
       const manualValue = config[capacityManualKey];

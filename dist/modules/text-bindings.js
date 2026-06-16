@@ -2270,6 +2270,40 @@ export class TextBindingsManager {
       });
     }
 
+    // Combined battery text — drives data-role="battery-*" in overview-profile SVGs
+    if (viewState.combinedBatteryText) {
+      const cb = viewState.combinedBatteryText;
+      updateRole('battery-soc', cb.socText || '', {
+        visible: Boolean(cb.visible && cb.socText),
+        fill: cb.socColor,
+        fontSize: cb.socFontSize,
+        onlyWhenConfigStyle: true
+      });
+      updateRole('battery-power', cb.powerText || '', {
+        visible: Boolean(cb.visible && cb.powerText),
+        fill: cb.powerColor,
+        fontSize: cb.powerFontSize,
+        onlyWhenConfigStyle: true
+      });
+      updateRole('battery-time-until', cb.timeUntilText || '', {
+        visible: Boolean(cb.visible && cb.timeUntilText),
+        fill: cb.timeUntilColor,
+        fontSize: cb.timeUntilFontSize,
+        onlyWhenConfigStyle: true
+      });
+      updateRole('battery-state', cb.stateText || '', {
+        visible: Boolean(cb.visible && cb.stateText),
+        fill: cb.stateColor,
+        fontSize: cb.stateFontSize,
+        onlyWhenConfigStyle: true
+      });
+      updateRole('battery-temp', cb.tempText || '', {
+        visible: Boolean(cb.tempVisible),
+        fill: cb.tempColor,
+        fontSize: cb.tempFontSize
+      });
+    }
+
     // Load
     const hasLoadLines = Boolean(viewState.load && Array.isArray(viewState.load.lines) && viewState.load.lines.length);
     updateRole('load-power', viewState.load ? viewState.load.text : '', {

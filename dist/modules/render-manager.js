@@ -1295,6 +1295,9 @@ export class RenderManager {
       || (Boolean(config.sensor_grid2_import) && Boolean(config.sensor_grid2_export)));
     const inverter2Active = inverter2Configured;
 
+    // Combined battery state for overview-profile SVGs (data-role="battery-*")
+    const combinedBatteryState = this.card._batteryManager.getCombinedBatteryState(batteryStates, config);
+
     const batteryFlowStates = batteryStates.map((bat) => {
       const powerValue = Number.isFinite(bat.power) ? bat.power : 0;
       const magnitude = Math.abs(powerValue);
@@ -1370,7 +1373,15 @@ export class RenderManager {
         glowColor: state.glowColor,
         active: state.active,
         direction: state.direction
-      }]))
+      }])),
+      'inverter-battery': (() => {
+        if (!combinedBatteryState) return { stroke: batteryChargeColor, glowColor: batteryChargeColor, active: false, direction: 1 };
+        const magnitude = Math.abs(combinedBatteryState.power || 0);
+        const direction = (combinedBatteryState.power || 0) >= 0 ? 1 : -1;
+        const color = direction >= 0 ? batteryChargeColor : batteryDischargeColor;
+        return { stroke: color, glowColor: color, active: magnitude > 10, direction };
+      })(),
+      'array-inverter': { stroke: pvPrimaryColor, glowColor: pvPrimaryColor, active: total_pv_w > 0, direction: 1 },
     };
 
     flows.pv1.direction = 1;
@@ -1405,25 +1416,23 @@ export class RenderManager {
       }
       let stateText = '';
       let stateColor = batteryStateChargingColor;
-      if (bat.visible) {
-        const stateSensorId = (typeof config[`sensor_bat${bat.index}_state`] === 'string')
-          ? config[`sensor_bat${bat.index}_state`].trim()
-          : '';
-        if (stateSensorId) {
-          const raw = this.card.formatPopupValue(null, stateSensorId);
-          stateText = (raw !== null && raw !== undefined) ? String(raw) : '';
-          const _batStateRaw = (this.card._hass && this.card._hass.states && this.card._hass.states[stateSensorId])
-            ? String(this.card._hass.states[stateSensorId].state).toLowerCase()
-            : stateText.toLowerCase();
-          stateColor = (_batStateRaw.includes('fully') && _batStateRaw.includes('charg'))
-            ? batteryStateFullyChargedColor
-            : (_batStateRaw.includes('fully') && _batStateRaw.includes('disch'))
-            ? batteryStateFullyDischargedColor
-            : _batStateRaw.includes('reserve')
-            ? batteryStateReserveColor
-            : _batStateRaw.includes('disch')
-            ? batteryStateDischargingColor
-            : batteryStateChargingColor;
+      if (bat.visible && Number.isFinite(bat.soc)) {
+        const reserve = Number(config[`bat${bat.index}_reserve_percentage`]) || 0;
+        if (bat.soc >= 100) {
+          stateText = 'Full';
+          stateColor = batteryStateFullyChargedColor;
+        } else if (bat.soc <= 0) {
+          stateText = 'Flat';
+          stateColor = batteryStateFullyDischargedColor;
+        } else if (reserve > 0 && bat.soc <= reserve) {
+          stateText = 'Reserve';
+          stateColor = batteryStateReserveColor;
+        } else if (Number.isFinite(bat.power) && bat.power > 0) {
+          stateText = 'Charging';
+          stateColor = batteryStateChargingColor;
+        } else if (Number.isFinite(bat.power) && bat.power < 0) {
+          stateText = 'Discharging';
+          stateColor = batteryStateDischargingColor;
         }
       }
       return {
@@ -1443,6 +1452,63 @@ export class RenderManager {
         stateFontSize: batteryStateFontSize
       };
     });
+
+    // Combined battery text for overview-profile SVGs (data-role="battery-soc" etc.)
+    const combinedBatteryText = (() => {
+      if (!combinedBatteryState) return null;
+      const power = combinedBatteryState.power || 0;
+      const socText = Number.isFinite(combinedBatteryState.soc) ? `${Math.round(combinedBatteryState.soc)}%` : '';
+      const powerText = Number.isFinite(power) ? this.card.formatPower(power, use_kw) : '';
+      const powerColor = power < 0 ? batteryDischargeColor : batteryChargeColor;
+      const combinedTime = this.card._batteryManager.getCombinedTimeUntil(batteryStates, config, this.card._hass);
+      const timeUntilText = combinedTime.timeUntil || '';
+      const tempData = this.card._batteryManager.getCombinedTempAverage(config);
+      const tempText = tempData ? `${tempData.value}${tempData.unit ? ' ' + tempData.unit : ''}` : '';
+      return {
+        visible: true,
+        socText,
+        socColor: batterySocColor,
+        socFontSize: battery_soc_font_size,
+        powerText,
+        powerColor,
+        powerFontSize: battery_power_font_size,
+        timeUntilText,
+        timeUntilColor: batteryTimeUntilColor,
+        timeUntilFontSize: battery_time_until_font_size,
+        stateText: (() => {
+          const avgSoc = combinedBatteryState.soc;
+          if (!Number.isFinite(avgSoc)) return '';
+          const activeBats = batteryStates.filter(b => b.visible);
+          const avgReserve = activeBats.length
+            ? activeBats.reduce((sum, b) => sum + (Number(config[`bat${b.index}_reserve_percentage`]) || 0), 0) / activeBats.length
+            : 0;
+          if (avgSoc >= 100) return 'Full';
+          if (avgSoc <= 0) return 'Flat';
+          if (avgReserve > 0 && avgSoc <= avgReserve) return 'Reserve';
+          if (Number.isFinite(power) && power > 0) return 'Charging';
+          if (Number.isFinite(power) && power < 0) return 'Discharging';
+          return '';
+        })(),
+        stateColor: (() => {
+          const avgSoc = combinedBatteryState.soc;
+          if (!Number.isFinite(avgSoc)) return batteryStateChargingColor;
+          const activeBats = batteryStates.filter(b => b.visible);
+          const avgReserve = activeBats.length
+            ? activeBats.reduce((sum, b) => sum + (Number(config[`bat${b.index}_reserve_percentage`]) || 0), 0) / activeBats.length
+            : 0;
+          if (avgSoc >= 100) return batteryStateFullyChargedColor;
+          if (avgSoc <= 0) return batteryStateFullyDischargedColor;
+          if (avgReserve > 0 && avgSoc <= avgReserve) return batteryStateReserveColor;
+          if (Number.isFinite(power) && power < 0) return batteryStateDischargingColor;
+          return batteryStateChargingColor;
+        })(),
+        stateFontSize: batteryStateFontSize,
+        tempText,
+        tempColor: battery1TempColor,
+        tempFontSize: battery1TempFontSize,
+        tempVisible: Boolean(tempText),
+      };
+    })();
 
     // Build car views (using CarManager)
     const car1View = this.card._carManager.buildCarView(1, car1State, config, carLayout.car1, car1Transforms, use_kw, this.card.formatPower.bind(this.card), resolveColor);
@@ -1591,7 +1657,7 @@ export class RenderManager {
         lines: popupPvValues.map((valueText, i) => (valueText ? `${popupPvNames[i]}: ${valueText}` : '')),
         hasContent: popupPvValues.some((valueText) => Boolean(valueText))
       },
-      batteries: batteryStates,
+      batteries: combinedBatteryState ? [...batteryStates, combinedBatteryState] : batteryStates,
       inv1DateTime: { text: inv1BatteryTime.datetime, fontSize: inv1DatetimeFontSize, fill: inv1DatetimeColor },
       inv1TimeUntil: { text: inv1BatteryTime.timeUntil, fontSize: inv1TimeuntilFontSize, fill: inv1TimeuntilColor },
       inv2DateTime: { text: inv2BatteryTime.datetime, fontSize: inv2DatetimeFontSize, fill: inv2DatetimeColor },
@@ -1602,6 +1668,7 @@ export class RenderManager {
       flows,
       flowDurations,
       batteryText,
+      combinedBatteryText,
       windmillSpin,
       headlightFlash: headlightFlashState,
       sunMoon: sunMoonViewState,
@@ -2628,5 +2695,40 @@ export class RenderManager {
 
       container.appendChild(arrowGroup);
     });
+  }
+
+  _snapshotViewState(viewState) {
+    return {
+      backgroundImage: viewState.backgroundImage,
+      animationStyle: viewState.animationStyle,
+      title: { ...viewState.title },
+      daily: { ...viewState.daily },
+      pv: {
+        fontSize: viewState.pv.fontSize,
+        lines: viewState.pv.lines.map((line) => ({ ...line }))
+      },
+      load: { ...viewState.load },
+      grid: { ...viewState.grid },
+      heatPump: { ...viewState.heatPump },
+      pool: viewState.pool ? { ...viewState.pool } : undefined,
+      car1: viewState.car1 ? {
+        visible: viewState.car1.visible,
+        label: { ...viewState.car1.label },
+        power: { ...viewState.car1.power },
+        soc: { ...viewState.car1.soc }
+      } : undefined,
+      car2: viewState.car2 ? {
+        visible: viewState.car2.visible,
+        label: { ...viewState.car2.label },
+        power: { ...viewState.car2.power },
+        soc: { ...viewState.car2.soc }
+      } : undefined,
+      flows: Object.fromEntries(Object.entries(viewState.flows).map(([key, value]) => [key, { ...value }])),
+      headlightFlash: viewState.headlightFlash ? {
+        enabled: Boolean(viewState.headlightFlash.enabled),
+        car1: viewState.headlightFlash.car1 ? { ...viewState.headlightFlash.car1 } : undefined,
+        car2: viewState.headlightFlash.car2 ? { ...viewState.headlightFlash.car2 } : undefined
+      } : undefined
+    };
   }
 }

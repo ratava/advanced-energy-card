@@ -11,4 +11,9 @@ archive/
 CLAUDE.md
 scripts/
 .claude/
-src/
+archive/
+images/
+dist/
+*.png
+*.jpg
+*.jpeg
