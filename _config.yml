@@ -1,0 +1,51 @@
+title: Advanced Energy Card
+subtitle: "Home Assistant Lovelace Card v2.0"
+description: "A feature-rich energy monitoring card for Home Assistant, showing solar, battery, grid, load, and EV data in a live animated layout."
+url: "https://ratava.github.io"
+baseurl: "/advanced-energy-card"
+
+remote_theme: mmistakes/minimal-mistakes@4.26.2
+
+minimal_mistakes_skin: "dark"
+
+# Build
+markdown: kramdown
+highlighter: rouge
+permalink: /:categories/:title/
+timezone: Australia/Brisbane
+
+# Plugins
+plugins:
+  - jekyll-paginate
+  - jekyll-sitemap
+  - jekyll-gist
+  - jekyll-feed
+  - jekyll-include-cache
+
+# Author
+author:
+  name: "Advanced Energy Card"
+  uri: "https://github.com/ratava/advanced-energy-card"
+
+# Defaults
+defaults:
+  - scope:
+      path: ""
+      type: pages
+    values:
+      layout: single
+      author_profile: false
+      sidebar:
+        nav: "docs"
+      toc: true
+      toc_sticky: true
+
+# Navigation
+include:
+  - _pages
+
+# Exclude
+exclude:
+  - Gemfile
+  - Gemfile.lock
+  - vendor

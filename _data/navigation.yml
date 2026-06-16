@@ -1,0 +1,42 @@
+docs:
+  - title: "Getting Started"
+    children:
+      - title: "Home"
+        url: /
+      - title: "Installation"
+        url: /getting-started/installation/
+      - title: "Quick Start"
+        url: /getting-started/quick-start/
+
+  - title: "Configuration"
+    children:
+      - title: "Display & Style"
+        url: /configuration/display-style/
+      - title: "Solar / PV"
+        url: /configuration/solar-pv/
+      - title: "Battery"
+        url: /configuration/battery/
+      - title: "Grid"
+        url: /configuration/grid/
+      - title: "House / Load"
+        url: /configuration/house-load/
+      - title: "EV / Car"
+        url: /configuration/ev-car/
+      - title: "Popups"
+        url: /configuration/popups/
+
+  - title: "Reference"
+    children:
+      - title: "Profiles"
+        url: /reference/profiles/
+      - title: "Sensors Reference"
+        url: /reference/sensors/
+      - title: "Data Roles"
+        url: /reference/data-roles/
+      - title: "Localization"
+        url: /reference/localization/
+
+  - title: "Changelog"
+    children:
+      - title: "v2.0"
+        url: /changelog/
