@@ -5,11 +5,15 @@ docs:
         url: /
       - title: "Installation"
         url: /getting-started/installation/
+      - title: "Background Images & Profiles"
+        url: /reference/profiles/
       - title: "Quick Start"
         url: /getting-started/quick-start/
 
   - title: "Configuration"
     children:
+      - title: "General Settings"
+        url: /configuration/general-settings/
       - title: "Display & Style"
         url: /configuration/display-style/
       - title: "Solar / PV"
@@ -27,16 +31,11 @@ docs:
 
   - title: "Reference"
     children:
-      - title: "Profiles"
-        url: /reference/profiles/
-      - title: "Sensors Reference"
-        url: /reference/sensors/
       - title: "SVG Elements"
         url: /reference/svg-elements/
       - title: "Localization"
         url: /reference/localization/
-
-  - title: "Changelog"
-    children:
-      - title: "v2.0"
+      - title: "Getting Help"
+        url: /reference/getting-help/
+      - title: "Changelog"
         url: /changelog/
