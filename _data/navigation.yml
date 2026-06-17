@@ -31,8 +31,8 @@ docs:
         url: /reference/profiles/
       - title: "Sensors Reference"
         url: /reference/sensors/
-      - title: "Data Roles"
-        url: /reference/data-roles/
+      - title: "SVG Elements"
+        url: /reference/svg-elements/
       - title: "Localization"
         url: /reference/localization/
 
