@@ -5,6 +5,12 @@ permalink: /configuration/grid/
 
 Configure grid import/export sensors for up to 2 inverters, flow colors, and grid state display. The Tech profile adds color thresholds, daily totals display, inverter status text, and inverter temperature sensors.
 
+## How Profiles Handle Multiple Inverters
+
+**Tech profile** — Inverter 1 and Inverter 2 grid flows are shown as separate animated lines in the SVG. Each inverter has its own import/export color, threshold settings, and daily totals displayed independently.
+
+**Overview profile** — grid flows from both inverters are **combined into a single grid value** for the card display. The card sums the import and export readings across Inverter 1 and Inverter 2 and shows one net grid figure. You still configure each inverter's sensors individually so the card knows what to read, but the SVG renders a single grid connection.
+
 ## Inverter 1 Grid Sensors
 
 Provide either a combined power sensor **or** separate import and export sensors.

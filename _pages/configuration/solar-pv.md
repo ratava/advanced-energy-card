@@ -5,6 +5,12 @@ permalink: /configuration/solar-pv/
 
 Configure up to 2 solar PV arrays with up to 6 string sensors each, plus an optional windmill generator. The core array sensors are available in both profiles; the windmill and several display options are Tech-only.
 
+## How Profiles Handle Multiple Arrays
+
+**Tech profile** — Array 1 (Inverter 1) and Array 2 (Inverter 2) are shown as separate flows in the SVG. Each inverter has its own animated line and its own daily production figure displayed independently.
+
+**Overview profile** — production from both arrays is **combined into a single PV total** for the card display. The card adds Array 1 and Array 2 power together and shows one combined figure. You still configure each array's sensors individually so the card knows what to read, but the SVG renders a single solar production value.
+
 ## Common PV Settings
 
 These options appear at the top of the Solar/PV section in both profiles.

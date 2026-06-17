@@ -7,6 +7,14 @@ The card supports up to 4 independent battery packs. Core sensors and state colo
 
 > **Note:** "Battery" here means a battery pack or energy storage system — not an individual cell or module.
 
+## How Profiles Handle Multiple Batteries
+
+The two profiles treat multiple batteries very differently:
+
+**Tech profile** — each battery is displayed individually. Battery 1 through 4 each have their own SOC readout, power value, fill animation, and state label rendered in the SVG at separate positions.
+
+**Overview profile** — all configured batteries are **combined into a single value** for display. The card sums the power readings from batteries 1–4 to produce one combined power figure, and averages (or combines) the SOC values into one overall SOC shown on the card. You still configure each battery's sensors individually (so the card knows what to read), but the SVG only shows one battery element representing the whole bank.
+
 ## Battery Sensors
 
 Replace `N` with the battery number (1–4).

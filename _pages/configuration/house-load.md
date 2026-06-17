@@ -5,6 +5,12 @@ permalink: /configuration/house-load/
 
 Configure house consumption sensors, load flow styling, and individual appliance monitoring. The two primary home load sensors are available in both profiles. All appliance sub-circuits, flow colors, font sizes, and load thresholds are Tech-only.
 
+## How Profiles Handle Multiple Inverters
+
+**Tech profile** — the primary house load (`sensor_home_load`) and the secondary load (`sensor_home_load_secondary`) are displayed as separate inverter flows in the SVG. Each inverter's contribution to the house is shown with its own animated line and power value.
+
+**Overview profile** — the load readings from both inverters are **combined into a single house consumption value** for the card display. The card adds `sensor_home_load` and `sensor_home_load_secondary` together and shows one total house figure. Both sensors should still be configured when using two inverters so the combined total is accurate.
+
 ## Home Load Sensors
 
 | Config key | Type | Description | Profiles |

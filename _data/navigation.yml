@@ -28,9 +28,13 @@ docs:
         url: /configuration/ev-car/
       - title: "Popups"
         url: /configuration/popups/
+      - title: "Footer Cards"
+        url: /configuration/footer-cards/
 
   - title: "Reference"
     children:
+      - title: "Custom SVG Backgrounds"
+        url: /reference/custom-svg/
       - title: "SVG Elements"
         url: /reference/svg-elements/
       - title: "Localization"

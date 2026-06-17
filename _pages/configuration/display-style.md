@@ -48,22 +48,4 @@ The Overview profile uses SVG elements tagged with `data-style="config"` to appl
 | `card_value_css` | text | — | Extra CSS declarations applied to all config-styled value elements. | Overview |
 | `card_background_color` | color | — | Default fill color for elements with `data-style="config"` and `data-role="card"`. | Overview |
 
-## Overview Profile — Footer Cards
-
-The Overview layout supports up to **6 footer cards**, each with two data slots. Each slot takes an entity and an optional custom label.
-
-Replace `N` with the card number (1–6) and `S` with the slot number (1 or 2).
-
-| Config key | Type | Description | Profiles |
-|---|---|---|---|
-| `footer_card{N}_slot{S}_entity` | entity | Sensor entity to display in this slot. | Overview |
-| `footer_card{N}_slot{S}_label` | text | Optional custom label. Leave blank to use the entity's friendly name. | Overview |
-
-**Example** — populating card 1:
-
-```yaml
-footer_card1_slot1_entity: sensor.daily_solar_production
-footer_card1_slot1_label: Solar Today
-footer_card1_slot2_entity: sensor.daily_grid_import
-footer_card1_slot2_label: Grid Import
-```
+See [Footer Cards](/configuration/footer-cards/) for the Overview-only footer card configuration.
