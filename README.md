@@ -1,6 +1,6 @@
 # Advanced Energy Card
 
-![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg) ![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)
+![Version](https://img.shields.io/badge/version-2.0.0-green.svg)![maintained](https://img.shields.io/maintenance/yes/2026.svg)[![hacs_badge](https://img.shields.io/badge/hacs-default-green.svg)](https://github.com/custom-components/hacs)[![ha_version](https://img.shields.io/badge/home%20assistant-2025.10%2B-green.svg)](https://www.home-assistant.io)![stability](https://img.shields.io/badge/stability-stable-green.svg)[![hassfest](https://github.com/ratava/http_agent/workflows/Validate%20with%20hassfest/badge.svg)](https://github.com/ratava/http_agent/actions/workflows/hassfest.yaml)[![HACS](https://github.com/ratava/advanced-energy-card/actions/workflows/validate.yml/badge.svg?branch=main)](https://github.com/ratava/advanced-energy-card/actions/workflows/validate.yml)[![maintainer](https://img.shields.io/badge/maintainer-ratava-green.svg)](https://github.com/ratava)[![License](https://img.shields.io/badge/License-MIT-green.svg)](https://opensource.org/licenses/MIT)
 
 > **Repository:** [https://github.com/ratava/advanced-energy-card](https://github.com/ratava/advanced-energy-card)  
 > **Wiki & full documentation:** [https://ratava.github.io/advanced-energy-card/](https://ratava.github.io/advanced-energy-card/)
