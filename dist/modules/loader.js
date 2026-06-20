@@ -9,6 +9,7 @@ export {
   DEBUG_LAYER_2ARRAY_ENABLED,
   LEGACY_CAR_VISIBILITY_KEYS,
   LEGACY_DEPRECATED_KEYS,
+  GENERAL_CONFIG_KEYS,
 } from './constants.js';
 
 // Tier-1 utility classes, re-exported for Tier-2 modules

@@ -28,6 +28,23 @@ export class TextBindingsManager {
       ? viewState.odometerFontFamily.trim()
       : (globalFontFamily || null);
 
+    const globalValueFontSize = (viewState && viewState.configStyles && viewState.configStyles.valueFontSize != null && viewState.configStyles.valueFontSize !== '')
+      ? (Number(viewState.configStyles.valueFontSize) || null)
+      : null;
+
+    const globalLabelFontSize = (viewState && viewState.configStyles && viewState.configStyles.labelFontSize != null && viewState.configStyles.labelFontSize !== '')
+      ? (Number(viewState.configStyles.labelFontSize) || null)
+      : null;
+
+    const profileId = (() => {
+      if (!svgRoot) return '';
+      const direct = (svgRoot.getAttribute('data-profile-id') || '').trim().toLowerCase();
+      if (direct) return direct;
+      const inner = svgRoot.querySelector('svg[data-profile-id]');
+      return inner ? (inner.getAttribute('data-profile-id') || '').trim().toLowerCase() : '';
+    })();
+    const isOverviewProfile = profileId === 'overview';
+
 
     const hasFeatureToken = (el, token) => {
       try {
@@ -976,7 +993,7 @@ export class TextBindingsManager {
         localeStaticText = null;
       }
 
-      const nodes = svgRoot.querySelectorAll('[data-role$="-label"]');
+      const nodes = svgRoot.querySelectorAll('[data-role$="-label"], [data-role$="-text"]');
       if (!nodes || !nodes.length) return;
 
       const syncLabelStylesFromBase = () => {
@@ -985,12 +1002,12 @@ export class TextBindingsManager {
           try {
             if (!node || typeof node.getAttribute !== 'function') return;
             const role = (node.getAttribute('data-role') || '').trim();
-            if (!role || !role.endsWith('-label')) return;
+            if (!role || (!role.endsWith('-label') && !role.endsWith('-text'))) return;
             const entry = STATIC_TEXT_TRANSLATIONS[role];
             const explicitLinkTo = (entry && typeof entry === 'object') ? (entry.linkTo || entry._linkTo) : null;
             const baseRole = (typeof explicitLinkTo === 'string' && explicitLinkTo.trim())
               ? explicitLinkTo.trim()
-              : role.slice(0, -6);
+              : role.endsWith('-label') ? role.slice(0, -6) : role.endsWith('-text') ? role.slice(0, -5) : '';
             if (!baseRole) return;
 
             const baseNode = svgRoot.querySelector(`[data-role="${baseRole}"]`);
@@ -1044,9 +1061,10 @@ export class TextBindingsManager {
                 return '';
               }
             })();
-            // Don't copy fill color to icon elements (paths) - only to text elements
+            // Icon elements (paths) only need opacity managed — skip fill/font entirely.
             const isIconElement = labelTarget.tagName && labelTarget.tagName.toLowerCase() === 'path';
-            if (fill && !isIconElement && !isConfigStyledLabel) {
+            if (isIconElement) return;
+            if (fill && !isConfigStyledLabel) {
               labelTarget.setAttribute('fill', fill);
               if (labelTarget.style) labelTarget.style.fill = fill;
             }
@@ -1157,7 +1175,7 @@ export class TextBindingsManager {
             const explicitLinkTo = (entry && typeof entry === 'object') ? (entry.linkTo || entry._linkTo) : null;
             const baseRole = (typeof explicitLinkTo === 'string' && explicitLinkTo.trim())
               ? explicitLinkTo.trim()
-              : role.endsWith('-label') ? role.slice(0, -6) : '';
+              : role.endsWith('-label') ? role.slice(0, -6) : role.endsWith('-text') ? role.slice(0, -5) : '';
             const labelTarget = getVisibilityTarget(node) || node;
             // Labels are non-animated: always use the normal configured font, not the odometer font.
             if (typeof globalFontFamily === 'string' && globalFontFamily) {
@@ -1499,24 +1517,32 @@ export class TextBindingsManager {
           } catch (e) {
             // ignore
           }
-          if (typeof nodeOptions.fontSize === 'number' && Number.isFinite(nodeOptions.fontSize)) {
-            node.setAttribute('font-size', String(nodeOptions.fontSize));
-            node.style.fontSize = `${nodeOptions.fontSize}px`;
+          const _isLabelRole = (role === 'label' || (typeof role === 'string' && role.endsWith('-label')));
+          const _globalFs = _isLabelRole ? globalLabelFontSize : globalValueFontSize;
+          const _elemFs = (typeof nodeOptions.fontSize === 'number' && Number.isFinite(nodeOptions.fontSize)) ? nodeOptions.fontSize : null;
+          const _effectiveFontSize = isConfigStyledTextNode(node)
+            ? (isOverviewProfile
+                ? (_globalFs !== null ? _globalFs : _elemFs)
+                : (_elemFs !== null ? _elemFs : _globalFs))
+            : _elemFs;
+          if (_effectiveFontSize !== null) {
+            node.setAttribute('font-size', String(_effectiveFontSize));
+            node.style.fontSize = `${_effectiveFontSize}px`;
 
             const tag = (node.tagName || '').toLowerCase();
             if (tag === 'text') {
               const tspans = node.querySelectorAll(':scope > tspan');
               if (tspans && tspans.length) {
                 tspans.forEach((tspan) => {
-                  tspan.setAttribute('font-size', String(nodeOptions.fontSize));
-                  tspan.style.fontSize = `${nodeOptions.fontSize}px`;
+                  tspan.setAttribute('font-size', String(_effectiveFontSize));
+                  tspan.style.fontSize = `${_effectiveFontSize}px`;
                 });
               }
             } else if (tag === 'tspan') {
               const host = getVisibilityTarget(node);
               if (host && host !== node && host.style) {
-                host.setAttribute('font-size', String(nodeOptions.fontSize));
-                host.style.fontSize = `${nodeOptions.fontSize}px`;
+                host.setAttribute('font-size', String(_effectiveFontSize));
+                host.style.fontSize = `${_effectiveFontSize}px`;
               }
             }
           }
@@ -1530,7 +1556,7 @@ export class TextBindingsManager {
       // single source of truth for card_label_color/card_label_font_size/font_family.
       try {
         if (role && !String(role).endsWith('-label')) {
-          const labelNodes = svgRoot.querySelectorAll(`[data-role="${role}-label"]`);
+          const labelNodes = svgRoot.querySelectorAll(`[data-role="${role}-label"], [data-role="${role}-text"]`);
           if (labelNodes && labelNodes.length) {
             labelNodes.forEach((ln) => {
               const labelTarget = getVisibilityTarget(ln) || ln;
@@ -1547,6 +1573,34 @@ export class TextBindingsManager {
                 }
                 if (labelTarget.getAttribute && labelTarget.getAttribute('opacity') === '0') {
                   labelTarget.removeAttribute('opacity');
+                }
+                // Propagate the value fill colour so -text companions match their paired value.
+                const companionFill = options && typeof options.fill === 'string' && options.fill.trim() ? options.fill.trim() : null;
+                if (companionFill && labelTarget.setAttribute) {
+                  labelTarget.setAttribute('fill', companionFill);
+                  if (labelTarget.style) labelTarget.style.fill = companionFill;
+                }
+                // Propagate the value font size so -text companions match their paired value.
+                const _compElemFs = (options && typeof options.fontSize === 'number' && Number.isFinite(options.fontSize)) ? options.fontSize : null;
+                const companionFontSize = isOverviewProfile
+                  ? (globalValueFontSize !== null ? globalValueFontSize : _compElemFs)
+                  : (_compElemFs !== null ? _compElemFs : globalValueFontSize);
+                if (companionFontSize !== null && labelTarget.setAttribute) {
+                  labelTarget.setAttribute('font-size', String(companionFontSize));
+                  if (labelTarget.style) labelTarget.style.fontSize = `${companionFontSize}px`;
+                  labelTarget.querySelectorAll('tspan').forEach(ts => {
+                    ts.setAttribute('font-size', String(companionFontSize));
+                    ts.style.fontSize = `${companionFontSize}px`;
+                  });
+                }
+                // Propagate the profile font family (not odometer) to -text companions.
+                if (globalFontFamily && labelTarget.setAttribute) {
+                  labelTarget.setAttribute('font-family', globalFontFamily);
+                  if (labelTarget.style) labelTarget.style.fontFamily = globalFontFamily;
+                  labelTarget.querySelectorAll('tspan').forEach(ts => {
+                    ts.setAttribute('font-family', globalFontFamily);
+                    ts.style.fontFamily = globalFontFamily;
+                  });
                 }
               } catch (e) {
                 // ignore
@@ -1579,12 +1633,17 @@ export class TextBindingsManager {
         if (!role || role === 'card' || role === 'car1-card' || role === 'car2-card') return;
 
         const isLabel = (role === 'label' || role.endsWith('-label'));
+        // Companion static-text elements: visible only when their paired value is active.
+        // Fill is propagated by updateRole; SVG defines their font-size/family — don't override.
+        const isTextCompanion = role.endsWith('-text');
 
         // Alignment from data-style: ONLY for label roles. Plain value roles
         // keep whatever text-anchor/transform the SVG already defines.
         if (isLabel) {
           applyAlignment(el, getConfiguredAlignment(el));
         }
+
+        if (isTextCompanion) return;
 
         if (isLabel) {
           if (cs.labelColor) {
@@ -1598,6 +1657,10 @@ export class TextBindingsManager {
           if (cs.labelFontFamily) {
             el.setAttribute('font-family', cs.labelFontFamily);
             el.style.fontFamily = cs.labelFontFamily;
+            el.querySelectorAll('tspan').forEach(tspan => {
+              tspan.setAttribute('font-family', cs.labelFontFamily);
+              tspan.style.fontFamily = cs.labelFontFamily;
+            });
           }
           if (cs.labelCss) {
             cs.labelCss.split(';').forEach(decl => {
@@ -1615,6 +1678,16 @@ export class TextBindingsManager {
           if (cs.valueColor) {
             el.setAttribute('fill', cs.valueColor);
             el.style.fill = cs.valueColor;
+          }
+          const isOdometer = (el.getAttribute('data-feature') || '').trim() === 'animate';
+          const fontFamily = isOdometer ? cs.odometerFontFamily : cs.valueFontFamily;
+          if (fontFamily) {
+            el.setAttribute('font-family', fontFamily);
+            el.style.fontFamily = fontFamily;
+            el.querySelectorAll('tspan').forEach(tspan => {
+              tspan.setAttribute('font-family', fontFamily);
+              tspan.style.fontFamily = fontFamily;
+            });
           }
           if (cs.valueFontSize) {
             el.setAttribute('font-size', cs.valueFontSize);
@@ -2327,8 +2400,13 @@ export class TextBindingsManager {
 
     // Grid
     const showDailyGridConfig = Boolean(viewState && viewState.showDailyGrid);
-    const gridCurrentYOffset = showDailyGridConfig ? 0 : GRID_CURRENT_HIDE_DAILY_OFFSET;
+    const hasDailyGridElements = Boolean(svgRoot && (
+      svgRoot.querySelector('[data-role="grid-daily-import"]') ||
+      svgRoot.querySelector('[data-role="grid-daily-export"]')
+    ));
+    const gridCurrentYOffset = (hasDailyGridElements && !showDailyGridConfig) ? GRID_CURRENT_HIDE_DAILY_OFFSET : 0;
     applyRoleYOffset('grid-current-power-label', gridCurrentYOffset);
+    applyRoleYOffset('grid-current-power-text', gridCurrentYOffset);
     applyRoleYOffset('grid-current-power', gridCurrentYOffset);
     updateRole('grid-power', viewState.grid ? viewState.grid.text : '', {
       visible: Boolean(viewState.grid),
@@ -2368,39 +2446,6 @@ export class TextBindingsManager {
       fill: viewState.weatherForecast ? viewState.weatherForecast.fill : undefined,
       fontSize: viewState.weatherForecast ? viewState.weatherForecast.fontSize : undefined
     });
-    // Stats Section
-    const _statsLabelSnapshots = [];
-    (viewState.statsData || []).forEach((stat) => {
-      updateRole(stat.role, stat.value.text, {
-        visible: stat.value.visible,
-        fill: stat.value.fill,
-        fontSize: stat.value.fontSize
-      });
-      updateRole(`${stat.role}-label`, stat.label.text, {
-        visible: stat.label.visible,
-        fill: stat.label.fill,
-        fontSize: stat.label.fontSize
-      });
-      _statsLabelSnapshots.push({
-        role: `${stat.role}-label`,
-        text: stat.label.text,
-        fill: stat.label.fill,
-        fontSize: stat.label.fontSize,
-        visible: stat.label.visible
-      });
-    });
-    // Re-apply stats label styles after the deferred syncLabelStylesFromBase() in
-    // applyStaticTextTranslations() runs. That helper copies the value node's fill/fontSize
-    // onto every paired -label node, which would otherwise overwrite the distinct label
-    // color and font-size configured for stats. Scheduling our correction as a second
-    // microtask guarantees it runs after syncLabelStylesFromBase.
-    if (_statsLabelSnapshots.length) {
-      Promise.resolve().then(() => {
-        _statsLabelSnapshots.forEach(({ role, text, fill, fontSize, visible }) => {
-          updateRole(role, text, { visible, fill, fontSize });
-        });
-      }).catch(() => {});
-    }
     // Footer cards (overview.svg): no dedicated colors/sizes here - the
     // card_value_color/card_value_font_size baseline (applyBaselineConfigStyles)
     // and label-sync handle styling for both value and label nodes.
@@ -2408,13 +2453,19 @@ export class TextBindingsManager {
       updateRole(slot.role, slot.value.text, { visible: slot.value.visible });
       updateRole(`${slot.role}-label`, slot.label.text, { visible: slot.label.visible });
     });
+    const gridCurrentPowerVisible = Boolean(viewState.gridCurrentPower && viewState.gridCurrentPower.visible !== false);
     updateRole('grid-current-power', viewState.gridCurrentPower ? viewState.gridCurrentPower.text : '', {
-      visible: Boolean(viewState.gridCurrentPower),
+      visible: gridCurrentPowerVisible,
       fill: viewState.gridCurrentPower ? viewState.gridCurrentPower.fill : undefined,
       fontSize: viewState.gridCurrentPower ? viewState.gridCurrentPower.fontSize : undefined,
       odometer: Boolean(viewState.gridCurrentPower && viewState.gridCurrentPower.odometer),
       odometerDuration: viewState.gridCurrentPower ? viewState.gridCurrentPower.odometerDuration : undefined
     });
+    if (svgRoot) {
+      svgRoot.querySelectorAll('[data-role="grid-current-power-label"]').forEach((el) => {
+        el.style.opacity = gridCurrentPowerVisible ? '' : '0';
+      });
+    }
     const gridDailyImportVisible = Boolean(showDailyGridConfig && viewState.gridDailyImport && viewState.gridDailyImport.visible);
     updateRole('grid-daily-import', gridDailyImportVisible ? viewState.gridDailyImport.text : '', {
       visible: gridDailyImportVisible,
@@ -2436,7 +2487,9 @@ export class TextBindingsManager {
       fontSize: viewState.grid ? viewState.grid.fontSize : undefined
     });
     setRoleVisibilityOnly('grid-daily-import-label', showDailyGridConfig);
+    setRoleVisibilityOnly('grid-daily-import-text', showDailyGridConfig);
     setRoleVisibilityOnly('grid-daily-export-label', showDailyGridConfig);
+    setRoleVisibilityOnly('grid-daily-export-text', showDailyGridConfig);
     setRoleVisibilityOnly('grid-daily-import', gridDailyImportVisible);
     setRoleVisibilityOnly('grid-daily-export', gridDailyExportVisible);
     setRoleVisibilityOnly('inverter1', !(viewState && viewState.gridPowerOnly));
@@ -2486,6 +2539,7 @@ export class TextBindingsManager {
       fontSize: viewState.washingMachine ? viewState.washingMachine.fontSize : undefined
     });
     setRoleVisibilityOnly('washing-machine-power-label', washingMachineVisible);
+    setRoleVisibilityOnly('washing-machine-power-text', washingMachineVisible);
     const dishwasherVisible = Boolean(viewState.dishwasher && viewState.dishwasher.visible);
     updateRole('dishwasher-power', viewState.dishwasher ? viewState.dishwasher.text : '', {
       visible: dishwasherVisible,
@@ -2493,6 +2547,7 @@ export class TextBindingsManager {
       fontSize: viewState.dishwasher ? viewState.dishwasher.fontSize : undefined
     });
     setRoleVisibilityOnly('dishwasher-power-label', dishwasherVisible);
+    setRoleVisibilityOnly('dishwasher-power-text', dishwasherVisible);
     const dryerVisible = Boolean(viewState.dryer && viewState.dryer.visible);
     updateRole('dryer-power', viewState.dryer ? viewState.dryer.text : '', {
       visible: dryerVisible,
@@ -2500,6 +2555,7 @@ export class TextBindingsManager {
       fontSize: viewState.dryer ? viewState.dryer.fontSize : undefined
     });
     setRoleVisibilityOnly('dryer-power-label', dryerVisible);
+    setRoleVisibilityOnly('dryer-power-text', dryerVisible);
     const refrigeratorVisible = Boolean(viewState.refrigerator && viewState.refrigerator.visible);
     updateRole('refrigerator-power', viewState.refrigerator ? viewState.refrigerator.text : '', {
       visible: refrigeratorVisible,
@@ -2507,6 +2563,7 @@ export class TextBindingsManager {
       fontSize: viewState.refrigerator ? viewState.refrigerator.fontSize : undefined
     });
     setRoleVisibilityOnly('refrigerator-power-label', refrigeratorVisible);
+    setRoleVisibilityOnly('refrigerator-power-text', refrigeratorVisible);
     const freezerVisible = Boolean(viewState.freezer && viewState.freezer.visible);
     updateRole('freezer-power', viewState.freezer ? viewState.freezer.text : '', {
       visible: freezerVisible,
@@ -2514,14 +2571,47 @@ export class TextBindingsManager {
       fontSize: viewState.freezer ? viewState.freezer.fontSize : undefined
     });
     setRoleVisibilityOnly('freezer-power-label', freezerVisible);
+    setRoleVisibilityOnly('freezer-power-text', freezerVisible);
 
     // Cars
     const car1Visible = Boolean(viewState.car1 && viewState.car1.visible);
+    const car1HasName = Boolean(viewState.car1 && viewState.car1.label && viewState.car1.label.text);
     updateRole('car1-name', viewState.car1 && viewState.car1.label ? viewState.car1.label.text : '', {
-      visible: car1Visible,
+      visible: car1HasName,
       fill: viewState.car1 && viewState.car1.label ? viewState.car1.label.fill : undefined,
       fontSize: viewState.car1 && viewState.car1.label ? viewState.car1.label.fontSize : undefined
     });
+    // Name plate card — visibility tied to car name being set; fill from car_name_plate_color
+    const car1NamePlateVisible = car1Visible && car1HasName;
+    const carNamePlateColor = viewState.carNamePlateColor || '';
+    // Special case (overview only): car name — fill/font size/vertical centering overrides.
+    if (isOverviewProfile) {
+      const car1NameEl = svgRoot && svgRoot.querySelector('[data-role="car1-name"]');
+      if (car1NameEl) {
+        car1NameEl.setAttribute('dominant-baseline', 'central');
+        const car1NameFill = viewState.car1 && viewState.car1.label && viewState.car1.label.fill;
+        if (car1NameFill) {
+          car1NameEl.setAttribute('fill', car1NameFill);
+          car1NameEl.style.fill = car1NameFill;
+          car1NameEl.querySelectorAll('tspan').forEach(ts => { ts.setAttribute('fill', car1NameFill); ts.style.fill = car1NameFill; });
+        }
+        if (viewState.carNameFontSize !== null && viewState.carNameFontSize !== undefined) {
+          car1NameEl.setAttribute('font-size', String(viewState.carNameFontSize));
+          car1NameEl.style.fontSize = `${viewState.carNameFontSize}px`;
+          car1NameEl.querySelectorAll('tspan').forEach(ts => {
+            ts.setAttribute('font-size', String(viewState.carNameFontSize));
+            ts.style.fontSize = `${viewState.carNameFontSize}px`;
+          });
+        }
+      }
+    }
+    const car1PlateEl = svgRoot && svgRoot.querySelector('[data-role="car1-name-plate-card"]');
+    if (car1PlateEl) {
+      car1PlateEl.style.display = car1NamePlateVisible ? '' : 'none';
+      if (carNamePlateColor) { car1PlateEl.setAttribute('fill', carNamePlateColor); car1PlateEl.style.fill = carNamePlateColor; }
+      if (viewState.carNamePlateBorderColor) { car1PlateEl.setAttribute('stroke', viewState.carNamePlateBorderColor); car1PlateEl.style.stroke = viewState.carNamePlateBorderColor; }
+      if (viewState.carNamePlateBorderWidth != null) { car1PlateEl.setAttribute('stroke-width', String(viewState.carNamePlateBorderWidth)); car1PlateEl.style.strokeWidth = `${viewState.carNamePlateBorderWidth}px`; }
+    }
     // car1-label elements behave like the generic `label` role: alignment
     // (left/center/right) and card_label_* styling come from each element's own
     // data-style ("config"/"config-center"/"config-right") via
@@ -2565,11 +2655,41 @@ export class TextBindingsManager {
     });
 
     const car2Visible = Boolean(viewState.car2 && viewState.car2.visible);
+    const car2HasName = Boolean(viewState.car2 && viewState.car2.label && viewState.car2.label.text);
     updateRole('car2-name', viewState.car2 && viewState.car2.label ? viewState.car2.label.text : '', {
-      visible: car2Visible,
+      visible: car2HasName,
       fill: viewState.car2 && viewState.car2.label ? viewState.car2.label.fill : undefined,
       fontSize: viewState.car2 && viewState.car2.label ? viewState.car2.label.fontSize : undefined
     });
+    // Name plate card — visibility tied to car name being set; fill from car_name_plate_color
+    const car2NamePlateVisible = car2Visible && car2HasName;
+    if (isOverviewProfile) {
+      const car2NameEl = svgRoot && svgRoot.querySelector('[data-role="car2-name"]');
+      if (car2NameEl) {
+        car2NameEl.setAttribute('dominant-baseline', 'central');
+        const car2NameFill = viewState.car2 && viewState.car2.label && viewState.car2.label.fill;
+        if (car2NameFill) {
+          car2NameEl.setAttribute('fill', car2NameFill);
+          car2NameEl.style.fill = car2NameFill;
+          car2NameEl.querySelectorAll('tspan').forEach(ts => { ts.setAttribute('fill', car2NameFill); ts.style.fill = car2NameFill; });
+        }
+        if (viewState.carNameFontSize !== null && viewState.carNameFontSize !== undefined) {
+          car2NameEl.setAttribute('font-size', String(viewState.carNameFontSize));
+          car2NameEl.style.fontSize = `${viewState.carNameFontSize}px`;
+          car2NameEl.querySelectorAll('tspan').forEach(ts => {
+            ts.setAttribute('font-size', String(viewState.carNameFontSize));
+            ts.style.fontSize = `${viewState.carNameFontSize}px`;
+          });
+        }
+      }
+    }
+    const car2PlateEl = svgRoot && svgRoot.querySelector('[data-role="car2-name-plate-card"]');
+    if (car2PlateEl) {
+      car2PlateEl.style.display = car2NamePlateVisible ? '' : 'none';
+      if (carNamePlateColor) { car2PlateEl.setAttribute('fill', carNamePlateColor); car2PlateEl.style.fill = carNamePlateColor; }
+      if (viewState.carNamePlateBorderColor) { car2PlateEl.setAttribute('stroke', viewState.carNamePlateBorderColor); car2PlateEl.style.stroke = viewState.carNamePlateBorderColor; }
+      if (viewState.carNamePlateBorderWidth != null) { car2PlateEl.setAttribute('stroke-width', String(viewState.carNamePlateBorderWidth)); car2PlateEl.style.strokeWidth = `${viewState.carNamePlateBorderWidth}px`; }
+    }
     // car2-label elements behave like the generic `label` role: alignment
     // (left/center/right) and card_label_* styling come from each element's own
     // data-style ("config"/"config-center"/"config-right") via

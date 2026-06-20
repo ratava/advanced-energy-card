@@ -437,20 +437,31 @@ export class LocalizationManager {
   getStaticTextTranslations() {
     return {
       'grid-current-power-label': this.translations.grid_current_power,
+      'grid-current-power-text': this.translations.grid_current_power,
       'grid-daily-export-label': this.translations.grid_daily_export,
+      'grid-daily-export-text': this.translations.grid_daily_export,
       'grid-daily-import-label': this.translations.grid_daily_import,
+      'grid-daily-import-text': this.translations.grid_daily_import,
       'daily-grid-export-label': this.translations.grid_daily_export,
       'daily-grid-import-label': this.translations.grid_daily_import,
       'house-load-label': this.translations.house_load,
       'washing-machine-power-label': { ...this.translations.washing_machine, linkTo: 'washing-machine-power' },
+      'washing-machine-power-text': { ...this.translations.washing_machine, linkTo: 'washing-machine-power' },
       'washing-machine-power': { ...this.translations.washing_machine, linkTo: 'washing-machine-power' },
       'dishwasher-power-label': { ...this.translations.dishwasher, linkTo: 'dishwasher-power' },
+      'dishwasher-power-text': { ...this.translations.dishwasher, linkTo: 'dishwasher-power' },
       'dryer-power-label': { ...this.translations.dryer, linkTo: 'dryer-power' },
+      'dryer-power-text': { ...this.translations.dryer, linkTo: 'dryer-power' },
       'refrigerator-power-label': { ...this.translations.refrigerator, linkTo: 'refrigerator-power' },
+      'refrigerator-power-text': { ...this.translations.refrigerator, linkTo: 'refrigerator-power' },
       'freezer-power-label': { ...this.translations.freezer, linkTo: 'freezer-power' },
+      'freezer-power-text': { ...this.translations.freezer, linkTo: 'freezer-power' },
       'heat-pump-power-label': { ...this.translations.heat_pump, linkTo: 'heat-pump-power' },
+      'heat-pump-power-text': { ...this.translations.heat_pump, linkTo: 'heat-pump-power' },
       'hot-water-power-label': { ...this.translations.hot_water, linkTo: 'hot-water-power' },
-      'pool-power-label': { ...this.translations.pool, linkTo: 'pool-power' }
+      'hot-water-power-text': { ...this.translations.hot_water, linkTo: 'hot-water-power' },
+      'pool-power-label': { ...this.translations.pool, linkTo: 'pool-power' },
+      'pool-power-text': { ...this.translations.pool, linkTo: 'pool-power' }
     };
   }
 

@@ -41,6 +41,7 @@ export class SunMoonManager {
           this._lastEffectiveNightMode = nextNight;
           if (prevNight !== null && nextNight !== prevNight) {
             card._forceRender = true;
+            window.location.reload();
           }
         } catch (e) {
           // ignore

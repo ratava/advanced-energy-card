@@ -49,6 +49,7 @@ import {
   buildArrowGroupSvg,
   SEED_DEFAULTS,
   PROFILE_SCHEMAS,
+  GENERAL_CONFIG_KEYS,
 } from './modules/constants.js';
 export {
   GEOMETRY,
@@ -166,9 +167,16 @@ class AdvancedEnergyCard extends HTMLElement {
     this._rotationSpeedFactor = 1;
     this._cardWasHidden = false;
     this._renderCount = 0;
-    this._defaults = (typeof AdvancedEnergyCard.getStubConfig === 'function')
-      ? { ...AdvancedEnergyCard.getStubConfig(), ...SEED_DEFAULTS.tech }
-      : {};
+    this._defaults = (() => {
+      const stub = (typeof AdvancedEnergyCard.getStubConfig === 'function')
+        ? AdvancedEnergyCard.getStubConfig()
+        : {};
+      const general = {};
+      for (const k of GENERAL_CONFIG_KEYS) {
+        if (k in stub) general[k] = stub[k];
+      }
+      return general;
+    })();
     this._handleEchoAliveClickBound = this._handleEchoAliveClick.bind(this);
     this._echoAliveClickTimeout = null;
 
@@ -197,26 +205,191 @@ class AdvancedEnergyCard extends HTMLElement {
     this._listenersAttachedTo = {
       echoAliveContainer: null
     };
+    this._footerStatsCache = {};
+    this._footerStatsTimer = null;
   }
 
   _ensureGoogleFont(fontFamily) {
     ensureGoogleFont(fontFamily);
   }
 
-  setConfig(config) {
-    if (!config) {
+  setConfig(rawConfig) {
+    if (!rawConfig) {
       throw new Error('Invalid configuration');
     }
-    this.config = ConfigValidator.validate(config, this._defaults || {});
+
+    // Validate + migrate to Option A structured format (general keys at top level,
+    // profile keys always inside _profiles[snapshotKey])
+    const validated = ConfigValidator.validate(rawConfig, {});
+    this._fullConfig = validated;
+
+    // Build flat merged view for the render path:
+    //   general defaults < profile defaults < profile values < user general settings
+    const profileId = this._resolveProfileIdSync(validated);
+    const snapshotKey = this._resolveSnapshotKeySync(validated, profileId);
+    const profileValues = (validated._profiles && validated._profiles[snapshotKey]) || {};
+    const profileDefaults = SEED_DEFAULTS[profileId] || {};
+
+    this.config = {
+      ...this._defaults,
+      ...profileDefaults,
+      ...profileValues,
+      ...this._extractGeneral(validated),
+    };
+
     this._forceRender = true;
     this._prevViewState = null;
+    this._footerStatsCache = {};
+    if (this._hass) this._startFooterStatsPolling();
+  }
+
+  _resolveProfileIdSync(config) {
+    const bg = (config.background || '').trim();
+    if (bg.endsWith('/overview.svg') || bg === 'overview.svg') return 'overview';
+    return 'tech';
+  }
+
+  _resolveSnapshotKeySync(config, profileId) {
+    const bg = (config.background || '').trim();
+    const builtinFile = profileId + '.svg';
+    if (!bg || bg.endsWith('/' + builtinFile) || bg === builtinFile) return profileId;
+    const filename = bg.split('/').pop()
+      .replace(/\.svg$/i, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '_')
+      .replace(/^_+|_+$/g, '') || 'unknown';
+    return `${profileId}-${filename}`;
+  }
+
+  _extractGeneral(config) {
+    const out = {};
+    for (const k of GENERAL_CONFIG_KEYS) {
+      if (k in config) out[k] = config[k];
+    }
+    return out;
+  }
+
+  _hasAutoFooterSlots() {
+    if (!this.config) return false;
+    for (let c = 1; c <= 6; c++) {
+      for (let s = 1; s <= 2; s++) {
+        if ((this.config[`footer_card${c}_slot${s}_source`] || 'custom') !== 'custom') return true;
+      }
+    }
+    return false;
+  }
+
+  _startFooterStatsPolling() {
+    if (this._footerStatsTimer) {
+      clearInterval(this._footerStatsTimer);
+      this._footerStatsTimer = null;
+    }
+    if (!this._hasAutoFooterSlots()) return;
+    const intervalMinutes = Math.max(1, parseInt(this.config.footer_update_interval || 5, 10));
+    this._fetchFooterStats();
+    this._footerStatsTimer = setInterval(() => this._fetchFooterStats(), intervalMinutes * 60 * 1000);
+  }
+
+  _computeStatTimeRange(source) {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterdayStart = new Date(todayStart.getTime() - 86400000);
+    const dow = todayStart.getDay();
+    const daysToMonday = dow === 0 ? 6 : dow - 1;
+    const thisWeekStart = new Date(todayStart.getTime() - daysToMonday * 86400000);
+    const lastWeekStart = new Date(thisWeekStart.getTime() - 7 * 86400000);
+    const thisMonthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const thisYearStart = new Date(now.getFullYear(), 0, 1);
+    const lastYearStart = new Date(now.getFullYear() - 1, 0, 1);
+    switch (source) {
+      case 'auto_today':      return { start: todayStart, end: now, period: 'day' };
+      case 'auto_yesterday':  return { start: yesterdayStart, end: todayStart, period: 'day' };
+      case 'auto_this_week':  return { start: thisWeekStart, end: now, period: 'week' };
+      case 'auto_last_week':  return { start: lastWeekStart, end: thisWeekStart, period: 'week' };
+      case 'auto_this_month': return { start: thisMonthStart, end: now, period: 'month' };
+      case 'auto_last_month': return { start: lastMonthStart, end: thisMonthStart, period: 'month' };
+      case 'auto_this_year':  return { start: thisYearStart, end: now, period: 'month' };
+      case 'auto_last_year':  return { start: lastYearStart, end: thisYearStart, period: 'month' };
+      default: return null;
+    }
+  }
+
+  _formatStatValue(value, entityId) {
+    const state = this._hass && this._hass.states && this._hass.states[entityId];
+    const unit = (state && state.attributes && state.attributes.unit_of_measurement) || '';
+    if (!isFinite(value)) return '';
+    const rounded = Math.abs(value) >= 10 ? value.toFixed(1) : value.toFixed(2);
+    return unit ? `${rounded} ${unit}` : rounded;
+  }
+
+  async _fetchFooterStats() {
+    if (!this._hass || !this.config) return;
+    const slots = [];
+    for (let c = 1; c <= 6; c++) {
+      for (let s = 1; s <= 2; s++) {
+        const source = this.config[`footer_card${c}_slot${s}_source`] || 'custom';
+        if (source === 'custom') continue;
+        const entity = (this.config[`footer_card${c}_slot${s}_entity`] || '').trim();
+        if (!entity) continue;
+        const statType = this.config[`footer_card${c}_slot${s}_stat_type`] || 'sum';
+        const range = this._computeStatTimeRange(source);
+        if (!range) continue;
+        slots.push({ key: `${c}-${s}`, entity, statType, range });
+      }
+    }
+    if (!slots.length) return;
+    const newCache = { ...this._footerStatsCache };
+    for (const slot of slots) {
+      try {
+        // For difference mode, hourly buckets are needed so we have multiple state
+        // readings to subtract. Weekly/monthly periods return a single bucket whose
+        // `sum` is the cumulative total since recording started — not the period delta.
+        const period = slot.statType === 'difference' ? 'hour' : slot.range.period;
+        const result = await this._hass.connection.sendMessagePromise({
+          type: 'recorder/statistics_during_period',
+          start_time: slot.range.start.toISOString(),
+          end_time: slot.range.end.toISOString(),
+          statistic_ids: [slot.entity],
+          period,
+          units: {},
+          types: ['sum', 'mean', 'state'],
+        });
+        const buckets = (result && result[slot.entity]) || [];
+        if (!buckets.length) { newCache[slot.key] = ''; continue; }
+        let displayValue;
+        if (slot.statType === 'sum') {
+          const total = buckets.reduce((acc, b) => acc + (b.sum || 0), 0);
+          displayValue = this._formatStatValue(total, slot.entity);
+        } else if (slot.statType === 'difference') {
+          // last.state − first.state across the hourly readings
+          const valid = buckets.filter(b => b.state !== null && b.state !== undefined && isFinite(Number(b.state)));
+          if (valid.length >= 2) {
+            displayValue = this._formatStatValue(Number(valid[valid.length - 1].state) - Number(valid[0].state), slot.entity);
+          } else {
+            displayValue = '';
+          }
+        } else {
+          const avg = buckets.reduce((acc, b) => acc + (b.mean || 0), 0) / buckets.length;
+          displayValue = this._formatStatValue(avg, slot.entity);
+        }
+        newCache[slot.key] = displayValue;
+      } catch (_) {
+        // leave prior cached value on error
+      }
+    }
+    this._footerStatsCache = newCache;
+    this._forceRender = true;
+    this.render();
   }
 
   set hass(hass) {
+    const firstHass = !this._hass;
     this._hass = hass;
     if (!this.config) {
       return;
     }
+    if (firstHass) this._startFooterStatsPolling();
     if (this._isEditorActive()) {
       this._forceRender = false;
       return;
@@ -281,6 +454,10 @@ class AdvancedEnergyCard extends HTMLElement {
     this._animationManager.killAllAnimations();
     this._animationManager._teardownRotateAnimations();
     this._animationManager._teardownAllHeadlightAnimations();
+    if (this._footerStatsTimer) {
+      clearInterval(this._footerStatsTimer);
+      this._footerStatsTimer = null;
+    }
     if (this._echoAliveClickTimeout) {
       try {
         clearTimeout(this._echoAliveClickTimeout);
@@ -420,7 +597,7 @@ class AdvancedEnergyCard extends HTMLElement {
   }
 
   static get version() {
-    return '1.3.5';
+    return '2.0.0';
   }
 }
 

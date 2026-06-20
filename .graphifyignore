@@ -17,3 +17,12 @@ dist/
 *.png
 *.jpg
 *.jpeg
+src/overview-16-9.svg
+mcp.json
+COCEOWNERS
+hasc.json
+*.md
+src/*.md
+src/*.png
+src/*.jpg
+src/*.jpeg

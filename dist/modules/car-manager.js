@@ -111,9 +111,9 @@ export class CarManager {
     }
 
     const isCarOne = carNumber === 1;
-    const nameFontSize = config[`car${isCarOne ? '' : '2'}_name_font_size`] || 14;
-    const powerFontSize = config[`car${isCarOne ? '' : '2'}_power_font_size`] || 14;
-    const socFontSize = config[`car${isCarOne ? '' : '2'}_soc_font_size`] || 14;
+    const nameFontSize = config[`car${isCarOne ? '' : '2'}_name_font_size`] || null;
+    const powerFontSize = config[`car${isCarOne ? '' : '2'}_power_font_size`] || null;
+    const socFontSize = config[`car${isCarOne ? '' : '2'}_soc_font_size`] || null;
     
     const carColor = resolveColorFn(config[`car${carNumber}_color`], '#FFFFFF');
     const nameColor = resolveColorFn(config[`car${carNumber}_name_color`], carColor);
@@ -186,7 +186,7 @@ export class CarManager {
         visible: carState.soc !== null,
         text: (carState.soc !== null) ? `${Math.round(carState.soc)}%` : '',
         fontSize: socFontSize,
-        fill: socColor,
+        fill: stateSensorId ? stateColor : socColor,
         x: textX,
         y: layout.socY,
         transform: transforms.soc

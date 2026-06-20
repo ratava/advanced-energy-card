@@ -13,3 +13,5 @@ scripts/
 .claude/
 src/
 .graphifyignore
+.env
+.graphifyignore

@@ -1,4 +1,4 @@
-import { SecurityHelpers, LEGACY_CAR_VISIBILITY_KEYS, LEGACY_DEPRECATED_KEYS } from './loader.js';
+import { SecurityHelpers, LEGACY_CAR_VISIBILITY_KEYS, LEGACY_DEPRECATED_KEYS, GENERAL_CONFIG_KEYS } from './loader.js';
 
 /**
  * Configuration Validator
@@ -149,6 +149,9 @@ export class ConfigValidator {
     // Initialize per-profile storage for the SVG-aware configuration system
     result = this._initProfileStorage(result);
 
+    // Move all profile-scoped top-level keys into _profiles[snapshotKey]
+    result = this._migrateToProfileStorage(result);
+
     return result;
   }
 
@@ -186,6 +189,79 @@ export class ConfigValidator {
       return config;
     }
     return { ...config, _profiles: {}, _profile_basis: {} };
+  }
+
+  /**
+   * Move all profile-scoped top-level keys into _profiles[snapshotKey].
+   * Idempotent: skips if any profile snapshot already has entries.
+   * @private
+   */
+  static _migrateToProfileStorage(config) {
+    if (!config || typeof config !== 'object') return config;
+
+    // Idempotency: if any profile snapshot already has entries, migration was already done
+    const profiles = config._profiles;
+    if (profiles && typeof profiles === 'object') {
+      const alreadyMigrated = Object.values(profiles).some(
+        v => v && typeof v === 'object' && Object.keys(v).length > 0
+      );
+      if (alreadyMigrated) return config;
+    }
+
+    // Determine profileId from background URL using filename heuristic (sync)
+    const bg = (config.background || '').trim();
+    let profileId = 'tech';
+    if (bg.endsWith('/overview.svg') || bg === 'overview.svg') {
+      profileId = 'overview';
+    }
+
+    // Compute snapshotKey: built-ins use bare profileId, custom SVGs use <type>-<filename>
+    const builtinFile = profileId + '.svg';
+    let snapshotKey;
+    if (!bg || bg.endsWith('/' + builtinFile) || bg === builtinFile) {
+      snapshotKey = profileId;
+    } else {
+      const filename = bg.split('/').pop()
+        .replace(/\.svg$/i, '')
+        .toLowerCase()
+        .replace(/[^a-z0-9_-]/g, '_')
+        .replace(/^_+|_+$/g, '') || 'unknown';
+      snapshotKey = `${profileId}-${filename}`;
+    }
+
+    // Partition top-level keys: general + metadata stay top-level, rest go into snapshot
+    const META_KEYS = new Set(['type', '_profiles', '_profile_basis']);
+    const snapshot = {};
+    const next = {};
+
+    for (const [key, value] of Object.entries(config)) {
+      if (META_KEYS.has(key) || GENERAL_CONFIG_KEYS.has(key)) {
+        next[key] = value;
+      } else {
+        snapshot[key] = value;
+      }
+    }
+
+    // Store the snapshot and update _profiles
+    next._profiles = { ...(config._profiles || {}), [snapshotKey]: snapshot };
+
+    // Migrate _profile_basis keys from old 'custom:xxx' format to new '<type>-<filename>' format
+    const oldBasis = config._profile_basis || {};
+    const newBasis = {};
+    for (const [k, v] of Object.entries(oldBasis)) {
+      if (k.startsWith('custom:')) {
+        const oldFilename = k.slice('custom:'.length);
+        const normalized = oldFilename.replace(/\.svg$/i, '').toLowerCase()
+          .replace(/[^a-z0-9_-]/g, '_').replace(/^_+|_+$/g, '') || 'unknown';
+        const basisId = typeof v === 'string' ? v : 'tech';
+        newBasis[`${basisId}-${normalized}`] = v;
+      } else {
+        newBasis[k] = v;
+      }
+    }
+    next._profile_basis = newBasis;
+
+    return next;
   }
 
   /**

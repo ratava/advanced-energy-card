@@ -8,6 +8,7 @@ import {
 import { applySvgLayerVisibility, getConfiguredCarCount } from './svg-layer-visibility.js';
 import { LocalizationManager } from './localization-manager.js';
 import { SecurityHelpers, ResourceRateLimiter } from './security.js';
+import { SVG_MIGRATOR, SVG_MIGRATION_PENDING } from './svg-migrator.js';
 
 /**
  * Render Manager
@@ -749,9 +750,9 @@ export class RenderManager {
     const title_text_color = (typeof config.title_text_color === 'string' && config.title_text_color.trim()) ? config.title_text_color.trim() : '';
     const title_bg_color = (typeof config.title_bg_color === 'string' && config.title_bg_color.trim()) ? config.title_bg_color.trim() : '';
     const card_label_color = (typeof config.card_label_color === 'string' && config.card_label_color.trim()) ? config.card_label_color.trim() : '';
-    const card_label_font_size = (typeof config.card_label_font_size === 'string' && config.card_label_font_size.trim()) ? config.card_label_font_size.trim() : '';
+    const card_label_font_size = (config.card_label_font_size != null && String(config.card_label_font_size).trim()) ? String(config.card_label_font_size).trim() : '';
     const card_value_color = (typeof config.card_value_color === 'string' && config.card_value_color.trim()) ? config.card_value_color.trim() : '';
-    const card_value_font_size = (typeof config.card_value_font_size === 'string' && config.card_value_font_size.trim()) ? config.card_value_font_size.trim() : '';
+    const card_value_font_size = (config.card_value_font_size != null && String(config.card_value_font_size).trim()) ? String(config.card_value_font_size).trim() : '';
     const card_background_color = (typeof config.card_background_color === 'string' && config.card_background_color.trim()) ? config.card_background_color.trim() : '';
     const card_label_css = SecurityHelpers.sanitizeLabelCss((typeof config.card_label_css === 'string') ? config.card_label_css : '');
     const card_value_css = SecurityHelpers.sanitizeLabelCss((typeof config.card_value_css === 'string') ? config.card_value_css : '');
@@ -779,74 +780,71 @@ export class RenderManager {
       }
       return Math.min(Math.max(num, min), max);
     };
+    // Returns a clamped font size when the user has explicitly configured the value,
+    // or null when not configured so the global card_value/label_font_size fallback
+    // set by applyBaselineConfigStyles takes precedence.
+    const optFontSize = (value, min, max) => {
+      if (value == null || value === '') return null;
+      const num = Number(value);
+      return Number.isFinite(num) ? Math.min(Math.max(num, min), max) : null;
+    };
 
-    const header_font_size = clampValue(config.header_font_size, 4, 32, 16);
-    const daily_label_font_size = clampValue(config.daily_label_font_size, 4, 24, 12);
-    const daily_value_font_size = clampValue(config.daily_value_font_size, 4, 32, 20);
-    const pv_font_size = clampValue(config.pv_font_size, 4, 28, 16);
-    const windmill_power_font_size = clampValue(config.windmill_power_font_size, 4, 28, 16);
-    const battery_soc_font_size = clampValue(config.battery_soc_font_size, 4, 32, 20);
-    const battery_power_font_size = clampValue(config.battery_power_font_size, 4, 28, 14);
-    const battery_time_until_font_size = clampValue(config.battery_time_until_font_size, 4, 32, 8);
-    const load_font_size = clampValue(config.load_font_size, 4, 28, 15);
-    const inv1_power_font_size = clampValue(
+    const header_font_size = optFontSize(config.header_font_size, 4, 32);
+    const daily_label_font_size = optFontSize(config.daily_label_font_size, 4, 24);
+    const daily_value_font_size = optFontSize(config.daily_value_font_size, 4, 32);
+    const pv_font_size = optFontSize(config.pv_font_size, 4, 28);
+    const windmill_power_font_size = optFontSize(config.windmill_power_font_size, 4, 28);
+    const battery_soc_font_size = optFontSize(config.battery_soc_font_size, 4, 32);
+    const battery_power_font_size = optFontSize(config.battery_power_font_size, 4, 28);
+    const battery_time_until_font_size = optFontSize(config.battery_time_until_font_size, 4, 32);
+    const load_font_size = optFontSize(config.load_font_size, 4, 28);
+    const inv1_power_font_size = optFontSize(
       config.inv1_power_font_size !== undefined ? config.inv1_power_font_size : config.load_font_size,
-      4,
-      28,
-      load_font_size
+      4, 28
     );
-    const inv2_power_font_size = clampValue(
+    const inv2_power_font_size = optFontSize(
       config.inv2_power_font_size !== undefined ? config.inv2_power_font_size : config.load_font_size,
-      4,
-      28,
-      load_font_size
+      4, 28
     );
-    const heat_pump_font_size = clampValue(config.heat_pump_font_size, 4, 28, 16);
-    const hot_water_font_size = clampValue(config.hot_water_font_size, 4, 28, 8);
-    const pool_font_size = clampValue(
+    const heat_pump_font_size = optFontSize(config.heat_pump_font_size, 4, 28);
+    const hot_water_font_size = optFontSize(config.hot_water_font_size, 4, 28);
+    const pool_font_size = optFontSize(
       config.pool_font_size !== undefined ? config.pool_font_size : config.heat_pump_font_size,
-      4,
-      28,
-      heat_pump_font_size
+      4, 28
     );
-    const washing_machine_font_size = clampValue(
+    const washing_machine_font_size = optFontSize(
       config.washing_machine_font_size !== undefined ? config.washing_machine_font_size : config.heat_pump_font_size,
-      4,
-      28,
-      heat_pump_font_size
+      4, 28
     );
-    const dishwasher_font_size = clampValue(config.dishwasher_font_size, 4, 28, 8);
-    const dryer_font_size = clampValue(
+    const dishwasher_font_size = optFontSize(config.dishwasher_font_size, 4, 28);
+    const dryer_font_size = optFontSize(
       config.dryer_font_size !== undefined ? config.dryer_font_size : config.heat_pump_font_size,
-      4,
-      28,
-      heat_pump_font_size
+      4, 28
     );
-    const refrigerator_font_size = clampValue(
+    const refrigerator_font_size = optFontSize(
       config.refrigerator_font_size !== undefined ? config.refrigerator_font_size : config.heat_pump_font_size,
-      4,
-      28,
-      heat_pump_font_size
+      4, 28
     );
-    const freezer_font_size = clampValue(
+    const freezer_font_size = optFontSize(
       config.freezer_font_size !== undefined ? config.freezer_font_size : config.heat_pump_font_size,
-      4,
-      28,
-      heat_pump_font_size
+      4, 28
     );
-    const grid_font_size = clampValue(config.grid_font_size, 4, 28, 15);
-    const grid_daily_font_size = clampValue(config.grid_daily_font_size, 4, 28, grid_font_size);
+    const grid_font_size = optFontSize(config.grid_font_size, 4, 28);
+    const grid_daily_font_size = optFontSize(
+      config.grid_daily_font_size !== undefined ? config.grid_daily_font_size : config.grid_font_size,
+      4, 28
+    );
     // Overview profile no longer exposes this toggle in its editor, so a stale/default
     // `true` value must not enable the odometer animation on the overview house-load.
     const isOverviewProfile = /overview\.svg$/i.test(bg_img);
     const grid_current_odometer = !isOverviewProfile && config.grid_current_odometer === true;
     const grid_current_odometer_duration = clampValue(config.grid_current_odometer_duration, 50, 2000, 350);
-    const car_power_font_size = clampValue(config.car_power_font_size, 4, 28, 15);
-    const car_soc_font_size = clampValue(config.car_soc_font_size, 4, 24, 12);
-    const car2_power_font_size = clampValue(config.car2_power_font_size !== undefined ? config.car2_power_font_size : config.car_power_font_size, 4, 28, car_power_font_size);
-    const car2_soc_font_size = clampValue(config.car2_soc_font_size !== undefined ? config.car2_soc_font_size : config.car_soc_font_size, 4, 24, car_soc_font_size);
-    const car_name_font_size = clampValue(config.car_name_font_size !== undefined ? config.car_name_font_size : config.car_power_font_size, 4, 28, car_power_font_size);
-    const car2_name_font_size = clampValue(config.car2_name_font_size !== undefined ? config.car2_name_font_size : (config.car2_power_font_size !== undefined ? config.car2_power_font_size : config.car_power_font_size), 4, 28, car2_power_font_size);
+    const car_power_font_size = optFontSize(config.car_power_font_size, 4, 28);
+    const car_soc_font_size = optFontSize(config.car_soc_font_size, 4, 24);
+    const car2_power_font_size = optFontSize(config.car2_power_font_size !== undefined ? config.car2_power_font_size : config.car_power_font_size, 4, 28);
+    const car2_soc_font_size = optFontSize(config.car2_soc_font_size !== undefined ? config.car2_soc_font_size : config.car_soc_font_size, 4, 24);
+    const car_name_font_size = optFontSize(config.car_name_font_size !== undefined ? config.car_name_font_size : config.car_power_font_size, 4, 28);
+    const car2_name_font_size = optFontSize(config.car2_name_font_size !== undefined ? config.car2_name_font_size : (config.car2_power_font_size !== undefined ? config.car2_power_font_size : config.car_power_font_size), 4, 28);
     const animation_speed_factor = clampValue(config.animation_speed_factor, -3, 3, 1);
     this.card._animationSpeedFactor = animation_speed_factor;
     this.card._rotationSpeedFactor = animation_speed_factor;
@@ -858,6 +856,18 @@ export class RenderManager {
     })();
     const animation_style = Boolean(config.night_mode) ? nightAnimationStyle : dayAnimationStyle;
     this.card._animationStyle = animation_style;
+
+    this.card._electronSpread = Math.max(0, Number.isFinite(Number(config.electron_spread)) ? Number(config.electron_spread) : 8);
+    this.card._electronSize = Math.max(0.5, Number.isFinite(Number(config.electron_size)) ? Number(config.electron_size) : 3.5);
+    this.card._electronSizeVariance = Math.max(0, Number.isFinite(Number(config.electron_size_variance)) ? Number(config.electron_size_variance) : 1.0);
+    this.card._electronSpacing = Math.max(10, Number.isFinite(Number(config.electron_spacing)) ? Number(config.electron_spacing) : 35);
+    this.card._electronSpacingVariance = Math.max(0, Math.min(1, Number.isFinite(Number(config.electron_spacing_variance)) ? Number(config.electron_spacing_variance) : 0.4));
+    this.card._electronPulse = config.electron_pulse !== false && config.electron_pulse !== 'false';
+    this.card._electronPulseRate = Math.max(0.1, Number.isFinite(Number(config.electron_pulse_rate)) ? Number(config.electron_pulse_rate) : 2.0);
+    this.card._electronPowerMin = Number.isFinite(Number(config.electron_power_min)) ? Number(config.electron_power_min) : 0;
+    this.card._electronPowerMax = Math.max(1, Number.isFinite(Number(config.electron_power_max)) ? Number(config.electron_power_max) : 5000);
+    this.card._electronSpeedMin = Math.max(0, Number.isFinite(Number(config.electron_speed_min)) ? Number(config.electron_speed_min) : 0.15);
+    this.card._electronSpeedMax = Math.max(0, Number.isFinite(Number(config.electron_speed_max)) ? Number(config.electron_speed_max) : 2.25);
 
     // Debugging: logs fluid_flow mask + animator lifecycle into the browser console.
     // Enable with YAML: debug_fluid_flow: true
@@ -997,14 +1007,14 @@ export class RenderManager {
     const hasInverter1TempSensor = Boolean(inverter1TempSensorId);
     const inverter1TempValue = hasInverter1TempSensor ? this.card.formatPopupValue(null, inverter1TempSensorId) : '';
     const inverter1TempColor = resolveColor(config.inverter1_temp_color, C_WHITE);
-    const inverter1TempFontSize = clampValue(config.inverter1_temp_font_size, 4, 28, 8);
+    const inverter1TempFontSize = optFontSize(config.inverter1_temp_font_size, 4, 28);
 
     // Battery 1 Temperature
     const battery1TempSensorId = (typeof config.sensor_battery1_temp === 'string') ? config.sensor_battery1_temp.trim() : '';
     const hasBattery1TempSensor = Boolean(battery1TempSensorId);
     const battery1TempValue = hasBattery1TempSensor ? this.card.formatPopupValue(null, battery1TempSensorId) : '';
     const battery1TempColor = resolveColor(config.battery1_temp_color, C_WHITE);
-    const battery1TempFontSize = clampValue(config.battery1_temp_font_size, 4, 28, 8);
+    const battery1TempFontSize = optFontSize(config.battery1_temp_font_size, 4, 28);
 
     // Battery State (shared per-state colors and font for all 4 batteries)
     const batteryStateFullyChargedColor = resolveColor(config.battery_state_fully_charged_color, '#00ff00');
@@ -1012,7 +1022,7 @@ export class RenderManager {
     const batteryStateDischargingColor = resolveColor(config.battery_state_discharging_color, '#ff8000');
     const batteryStateReserveColor = resolveColor(config.battery_state_reserve_color, '#FF3333');
     const batteryStateFullyDischargedColor = resolveColor(config.battery_state_fully_discharged_color, '#FF3333');
-    const batteryStateFontSize = clampValue(config.battery_state_font_size, 4, 28, 8);
+    const batteryStateFontSize = optFontSize(config.battery_state_font_size, 4, 28);
 
     // Grid State
     const gridStateSensorId = (typeof config.sensor_grid_state === 'string') ? config.sensor_grid_state.trim() : '';
@@ -1021,7 +1031,7 @@ export class RenderManager {
     const gridStateImportingColor = resolveColor(config.grid_state_importing_color, '#FF3333');
     const gridStateExportingColor = resolveColor(config.grid_state_exporting_color, '#00ff00');
     const gridStateFloatingColor = resolveColor(config.grid_state_floating_color, C_WHITE);
-    const gridStateFontSize = clampValue(config.grid_state_font_size, 4, 28, 8);
+    const gridStateFontSize = optFontSize(config.grid_state_font_size, 4, 28);
     const _gridStateRaw = hasGridStateSensor && this.card._hass && this.card._hass.states && this.card._hass.states[gridStateSensorId]
       ? String(this.card._hass.states[gridStateSensorId].state).toLowerCase()
       : '';
@@ -1035,7 +1045,7 @@ export class RenderManager {
     const solarStateValue = hasSolarStateSensor ? this.card.formatPopupValue(null, solarStateSensorId) : '';
     const solarStateProducingColor = resolveColor(config.solar_state_producing_color, '#00ff00');
     const solarStateNotProducingColor = resolveColor(config.solar_state_not_producing_color, '#FF3333');
-    const solarStateFontSize = clampValue(config.solar_state_font_size, 4, 28, 8);
+    const solarStateFontSize = optFontSize(config.solar_state_font_size, 4, 28);
     const _solarStateRaw = hasSolarStateSensor && this.card._hass && this.card._hass.states && this.card._hass.states[solarStateSensorId]
       ? String(this.card._hass.states[solarStateSensorId].state).toLowerCase()
       : '';
@@ -1056,45 +1066,15 @@ export class RenderManager {
     const hasWeatherIcon = Boolean(weatherIconSensorId);
     const weatherIconValue = hasWeatherIcon ? this.card.formatPopupValue(null, weatherIconSensorId) : '';
     const weatherIconColor = resolveColor(config.weather_icon_color, '#00FFFF');
-    const weatherIconFontSize = clampValue(config.weather_icon_font_size, 4, 72, 8);
+    const weatherIconFontSize = optFontSize(config.weather_icon_font_size, 4, 72);
 
     // Weather Forecast
     const weatherForecastSensorId = (typeof config.sensor_weather_forecast === 'string') ? config.sensor_weather_forecast.trim() : '';
     const hasWeatherForecast = Boolean(weatherForecastSensorId);
     const weatherForecastValue = hasWeatherForecast ? this.card.formatPopupValue(null, weatherForecastSensorId) : '';
     const weatherForecastColor = resolveColor(config.weather_forecast_color, '#00FFFF');
-    const weatherForecastFontSize = clampValue(config.weather_forecast_font_size, 4, 72, 8);
+    const weatherForecastFontSize = optFontSize(config.weather_forecast_font_size, 4, 72);
 
-    // Stats Section
-    const statsValueColor = resolveColor(config.stats_value_color, '#00FFFF');
-    const statsValueFontSize = clampValue(config.stats_value_font_size, 4, 72, 14);
-    const statsLabelColor = resolveColor(config.stats_label_color, '#FFFFFF');
-    const statsLabelFontSize = clampValue(config.stats_label_font_size, 4, 72, 12);
-    const _statsDefs = [
-      { role: 'house-consumption-today', cfgKey: 'sensor_house_consumption_today', defaultLabel: 'House Consumption Today', labelCfgKey: 'stat_label_house_consumption_today' },
-      { role: 'pv-production-today', cfgKey: 'sensor_pv_production_today', defaultLabel: 'PV Production Today', labelCfgKey: 'stat_label_pv_production_today' },
-      { role: 'house-consumption-yesterday', cfgKey: 'sensor_house_consumption_yesterday', defaultLabel: 'House Consumption Yesterday', labelCfgKey: 'stat_label_house_consumption_yesterday' },
-      { role: 'pv-production-yesterday', cfgKey: 'sensor_pv_production_yesterday', defaultLabel: 'PV Production Yesterday', labelCfgKey: 'stat_label_pv_production_yesterday' },
-      { role: 'today-grid-export', cfgKey: 'sensor_today_grid_export', defaultLabel: 'Today Grid Export', labelCfgKey: 'stat_label_today_grid_export' },
-      { role: 'today-grid-import', cfgKey: 'sensor_today_grid_import', defaultLabel: 'Today Grid Import', labelCfgKey: 'stat_label_today_grid_import' },
-      { role: 'weekly-grid-export', cfgKey: 'sensor_weekly_grid_export', defaultLabel: 'Weekly Grid Export', labelCfgKey: 'stat_label_weekly_grid_export' },
-      { role: 'weekly-grid-import', cfgKey: 'sensor_weekly_grid_import', defaultLabel: 'Weekly Grid Import', labelCfgKey: 'stat_label_weekly_grid_import' },
-      { role: 'monthly-grid-export', cfgKey: 'sensor_monthly_grid_export', defaultLabel: 'Monthly Grid Export', labelCfgKey: 'stat_label_monthly_grid_export' },
-      { role: 'monthly-grid-import', cfgKey: 'sensor_monthly_grid_import', defaultLabel: 'Monthly Grid Import', labelCfgKey: 'stat_label_monthly_grid_import' },
-      { role: 'yearly-grid-export', cfgKey: 'sensor_yearly_grid_export', defaultLabel: 'Yearly Grid Export', labelCfgKey: 'stat_label_yearly_grid_export' },
-      { role: 'yearly-grid-import', cfgKey: 'sensor_yearly_grid_import', defaultLabel: 'Yearly Grid Import', labelCfgKey: 'stat_label_yearly_grid_import' },
-    ];
-    const statsData = _statsDefs.map((def) => {
-      const sensorId = (typeof config[def.cfgKey] === 'string') ? config[def.cfgKey].trim() : '';
-      const hasSensor = Boolean(sensorId);
-      const value = hasSensor ? this.card.formatPopupValue(null, sensorId) : '';
-      const label = (typeof config[def.labelCfgKey] === 'string' && config[def.labelCfgKey].trim()) ? config[def.labelCfgKey].trim() : def.defaultLabel;
-      return {
-        role: def.role,
-        value: { text: value, fontSize: statsValueFontSize, fill: statsValueColor, visible: hasSensor && Boolean(value) },
-        label: { text: label, fontSize: statsLabelFontSize, fill: statsLabelColor, visible: hasSensor },
-      };
-    });
 
     // Footer cards (overview.svg): 6 cards x 2 slots, each with an optional sensor
     // and optional custom label. No dedicated colors/sizes - the value (*-slotN)
@@ -1104,16 +1084,26 @@ export class RenderManager {
     for (let c = 1; c <= 6; c++) {
       for (let s = 1; s <= 2; s++) {
         _footerDefs.push({
+          c, s,
           role: `footer-card${c}-slot${s}`,
           entityCfgKey: `footer_card${c}_slot${s}_entity`,
+          sourceCfgKey: `footer_card${c}_slot${s}_source`,
           labelCfgKey: `footer_card${c}_slot${s}_label`,
         });
       }
     }
+    const footerStatsCache = this.card._footerStatsCache || {};
     const footerData = _footerDefs.map((def) => {
       const sensorId = (typeof config[def.entityCfgKey] === 'string') ? config[def.entityCfgKey].trim() : '';
       const hasSensor = Boolean(sensorId);
-      const value = hasSensor ? this.card.formatPopupValue(null, sensorId) : '';
+      const source = config[def.sourceCfgKey] || 'custom';
+      let value;
+      if (source !== 'custom') {
+        const cached = footerStatsCache[`${def.c}-${def.s}`];
+        value = (cached !== undefined) ? cached : '';
+      } else {
+        value = hasSensor ? this.card.formatPopupValue(null, sensorId) : '';
+      }
       const customLabel = (typeof config[def.labelCfgKey] === 'string' && config[def.labelCfgKey].trim()) ? config[def.labelCfgKey].trim() : '';
       const label = customLabel || (hasSensor ? this.card.getEntityName(sensorId) : '');
       return {
@@ -1278,6 +1268,12 @@ export class RenderManager {
 
     const car1Direction = car1PowerValue > 0 ? 1 : (car1PowerValue < 0 ? -1 : 1);
     const car2Direction = car2PowerValue > 0 ? 1 : (car2PowerValue < 0 ? -1 : 1);
+    const car1FlowColor = isOverviewProfile
+      ? (car1PowerValue > 0 ? resolveColor(config.car_charging_color, '#00FF00') : (car1PowerValue < 0 ? resolveColor(config.car_discharging_color, '#FF4444') : carFlowColor))
+      : carFlowColor;
+    const car2FlowColor = isOverviewProfile
+      ? (car2PowerValue > 0 ? resolveColor(config.car_charging_color, '#00FF00') : (car2PowerValue < 0 ? resolveColor(config.car_discharging_color, '#FF4444') : carFlowColor))
+      : carFlowColor;
     const car1Charging = car1State.charging;
     const car2Charging = car2State.charging;
 
@@ -1309,7 +1305,8 @@ export class RenderManager {
         stroke: color,
         glowColor: color,
         active: Boolean(inverter1BatteryAllowed && bat.visible && magnitude > 10),
-        direction
+        direction,
+        power: magnitude
       };
     });
     const inverter2BatteryFlowStates = batteryStates
@@ -1324,64 +1321,67 @@ export class RenderManager {
           stroke: color,
           glowColor: color,
           active: Boolean(inverter2Active && bat.visible && magnitude > 10),
-          direction
+          direction,
+          power: magnitude
         };
       });
 
     const flows = {
       // Keep Array 1 visible even when Array 2 is generating so both flows animate together.
-      pv1: { stroke: pvPrimaryColor, glowColor: pvPrimaryColor, active: pv_primary_w > 0 },
-      pv2: { stroke: pvSecondaryColor, glowColor: pvSecondaryColor, active: inverter2ConfiguredForPv && pv_secondary_w > 0 },
-      'array-inverter1': { stroke: pvPrimaryColor, glowColor: pvPrimaryColor, active: inverter1Configured && !inverter2Active && total_pv_w > 0 },
-      'array-inverter2': { stroke: pvSecondaryColor, glowColor: pvSecondaryColor, active: inverter2Configured && total_pv_w > 0 },
-      'windmill-inverter1': { stroke: windmillFlowColor, glowColor: windmillFlowColor, active: windmillFlowActive, direction: 1 },
-      'windmill-inverter2': { stroke: windmillFlowColor, glowColor: windmillFlowColor, active: inverter2Active && windmillFlowActive, direction: 1, forceHidden: !inverter2Active },
-      load: { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: loadMagnitude > 10, direction: 1 },
-      'house-load-inverter1': { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: !gridPowerOnly && loadMagnitude > 10, direction: 1 },
-      'house-load-inverter2': { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: !gridPowerOnly && inverter2Active && loadMagnitude > 10, direction: 1 },
-      grid: { stroke: effectiveGridColor, glowColor: effectiveGridColor, active: gridActiveForGrid, direction: gridAnimationDirection },
+      pv1: { stroke: pvPrimaryColor, glowColor: pvPrimaryColor, active: pv_primary_w > 0, power: Math.abs(pv_primary_w) },
+      pv2: { stroke: pvSecondaryColor, glowColor: pvSecondaryColor, active: inverter2ConfiguredForPv && pv_secondary_w > 0, power: Math.abs(pv_secondary_w) },
+      'array-inverter1': { stroke: pvPrimaryColor, glowColor: pvPrimaryColor, active: inverter1Configured && !inverter2Active && total_pv_w > 0, power: Math.abs(total_pv_w) },
+      'array-inverter2': { stroke: pvSecondaryColor, glowColor: pvSecondaryColor, active: inverter2Configured && total_pv_w > 0, power: Math.abs(total_pv_w) },
+      'windmill-inverter1': { stroke: windmillFlowColor, glowColor: windmillFlowColor, active: windmillFlowActive, direction: 1, power: Math.abs(windmillTotalW) },
+      'windmill-inverter2': { stroke: windmillFlowColor, glowColor: windmillFlowColor, active: inverter2Active && windmillFlowActive, direction: 1, forceHidden: !inverter2Active, power: Math.abs(windmillTotalW) },
+      load: { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: loadMagnitude > 10, direction: 1, power: loadMagnitude },
+      'house-load-inverter1': { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: !gridPowerOnly && loadMagnitude > 10, direction: 1, power: loadMagnitude },
+      'house-load-inverter2': { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: !gridPowerOnly && inverter2Active && loadMagnitude > 10, direction: 1, power: loadMagnitude },
+      grid: { stroke: effectiveGridColor, glowColor: effectiveGridColor, active: gridActiveForGrid, direction: gridAnimationDirection, power: gridMagnitude },
       // House-only grid flow when no PV entities exist. Uses load thresholds/colors.
-      grid_house: { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: gridActiveForHouse && (gridPowerOnly ? true : loadMagnitude > 10), direction: gridHouseDirection },
-      'grid-house': { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: gridActiveForHouse && (gridPowerOnly ? true : loadMagnitude > 10), direction: gridHouseDirection },
+      grid_house: { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: gridActiveForHouse && (gridPowerOnly ? true : loadMagnitude > 10), direction: gridHouseDirection, power: gridMagnitude },
+      'grid-house': { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: gridActiveForHouse && (gridPowerOnly ? true : loadMagnitude > 10), direction: gridHouseDirection, power: gridMagnitude },
 
       // New optional alias flow key used by some SVGs.
       // Mirrors grid-house when running in grid-only mode, otherwise mirrors inverter1-grid.
       'grid-feed': inverterGridFlowsEnabled
-        ? { stroke: effectiveGrid1Color, glowColor: effectiveGrid1Color, active: inverterGridFlowsEnabled && grid1Active, direction: gridHouseDirection }
-        : { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: gridActiveForHouse && (gridPowerOnly ? true : loadMagnitude > 10), direction: gridHouseDirection },
+        ? { stroke: effectiveGrid1Color, glowColor: effectiveGrid1Color, active: inverterGridFlowsEnabled && grid1Active, direction: gridHouseDirection, power: gridMagnitude }
+        : { stroke: effectiveLoadFlowColor, glowColor: effectiveLoadFlowColor, active: gridActiveForHouse && (gridPowerOnly ? true : loadMagnitude > 10), direction: gridHouseDirection, power: gridMagnitude },
 
       // New per-inverter bidirectional grid flows.
-      'inverter1-import-export': { stroke: effectiveGrid1Color, glowColor: effectiveGrid1Color, active: inverterGridFlowsEnabled && grid1Active, direction: inverter1ImportExportDirection },
-      'inverter2-import-export': { stroke: effectiveGrid2Color, glowColor: effectiveGrid2Color, active: inverterGridFlowsEnabled && grid2Active, direction: inverter2ImportExportDirection },
+      'inverter1-import-export': { stroke: effectiveGrid1Color, glowColor: effectiveGrid1Color, active: inverterGridFlowsEnabled && grid1Active, direction: inverter1ImportExportDirection, power: gridMagnitude },
+      'inverter2-import-export': { stroke: effectiveGrid2Color, glowColor: effectiveGrid2Color, active: inverterGridFlowsEnabled && grid2Active, direction: inverter2ImportExportDirection, power: gridMagnitude },
       // Alias keys used by some SVGs.
-      'inverter1-grid': { stroke: effectiveGrid1Color, glowColor: effectiveGrid1Color, active: inverterGridFlowsEnabled && grid1Active, direction: inverter1ImportExportDirection },
-      'inverter2-grid': { stroke: effectiveGrid2Color, glowColor: effectiveGrid2Color, active: inverterGridFlowsEnabled && grid2Active, direction: inverter2ImportExportDirection },
+      'inverter1-grid': { stroke: effectiveGrid1Color, glowColor: effectiveGrid1Color, active: inverterGridFlowsEnabled && grid1Active, direction: inverter1ImportExportDirection, power: gridMagnitude },
+      'inverter2-grid': { stroke: effectiveGrid2Color, glowColor: effectiveGrid2Color, active: inverterGridFlowsEnabled && grid2Active, direction: inverter2ImportExportDirection, power: gridMagnitude },
       // Back-compat for older SVGs.
-      'grid-import-export': { stroke: effectiveGrid1Color, glowColor: effectiveGrid1Color, active: inverterGridFlowsEnabled && grid1Active, direction: inverter1ImportExportDirection },
-      car1: { stroke: carFlowColor, glowColor: carFlowColor, active: showCar1 && Math.abs(car1PowerValue) > 10, direction: car1Direction },
-      car2: { stroke: carFlowColor, glowColor: carFlowColor, active: showCar2 && Math.abs(car2PowerValue) > 10, direction: car2Direction },
-      heatPump: { stroke: heatPumpFlowColor, glowColor: heatPumpFlowColor, active: hasHeatPumpSensor && heat_pump_w > 10, direction: 1 },
-      pool: { stroke: poolFlowColor, glowColor: poolFlowColor, active: hasPoolSensor && Math.abs(pool_w) > 10, direction: 1 },
+      'grid-import-export': { stroke: effectiveGrid1Color, glowColor: effectiveGrid1Color, active: inverterGridFlowsEnabled && grid1Active, direction: inverter1ImportExportDirection, power: gridMagnitude },
+      car1: { stroke: car1FlowColor, glowColor: car1FlowColor, active: showCar1 && Math.abs(car1PowerValue) > 10, direction: car1Direction, power: Math.abs(car1PowerValue) },
+      car2: { stroke: car2FlowColor, glowColor: car2FlowColor, active: showCar2 && Math.abs(car2PowerValue) > 10, direction: car2Direction, power: Math.abs(car2PowerValue) },
+      heatPump: { stroke: heatPumpFlowColor, glowColor: heatPumpFlowColor, active: hasHeatPumpSensor && heat_pump_w > 10, direction: 1, power: Math.abs(heat_pump_w) },
+      pool: { stroke: poolFlowColor, glowColor: poolFlowColor, active: hasPoolSensor && Math.abs(pool_w) > 10, direction: 1, power: Math.abs(pool_w) },
       ...Object.fromEntries(batteryFlowStates.map((state) => [state.key, {
         stroke: state.stroke,
         glowColor: state.glowColor,
         active: state.active,
-        direction: state.direction
+        direction: state.direction,
+        power: state.power
       }])),
       ...Object.fromEntries(inverter2BatteryFlowStates.map((state) => [state.key, {
         stroke: state.stroke,
         glowColor: state.glowColor,
         active: state.active,
-        direction: state.direction
+        direction: state.direction,
+        power: state.power
       }])),
       'inverter-battery': (() => {
-        if (!combinedBatteryState) return { stroke: batteryChargeColor, glowColor: batteryChargeColor, active: false, direction: 1 };
+        if (!combinedBatteryState) return { stroke: batteryChargeColor, glowColor: batteryChargeColor, active: false, direction: 1, power: 0 };
         const magnitude = Math.abs(combinedBatteryState.power || 0);
         const direction = (combinedBatteryState.power || 0) >= 0 ? 1 : -1;
         const color = direction >= 0 ? batteryChargeColor : batteryDischargeColor;
-        return { stroke: color, glowColor: color, active: magnitude > 10, direction };
+        return { stroke: color, glowColor: color, active: magnitude > 10, direction, power: magnitude };
       })(),
-      'array-inverter': { stroke: pvPrimaryColor, glowColor: pvPrimaryColor, active: total_pv_w > 0, direction: 1 },
+      'array-inverter': { stroke: pvPrimaryColor, glowColor: pvPrimaryColor, active: total_pv_w > 0, direction: 1, power: Math.abs(total_pv_w) },
     };
 
     flows.pv1.direction = 1;
@@ -1459,7 +1459,6 @@ export class RenderManager {
       const power = combinedBatteryState.power || 0;
       const socText = Number.isFinite(combinedBatteryState.soc) ? `${Math.round(combinedBatteryState.soc)}%` : '';
       const powerText = Number.isFinite(power) ? this.card.formatPower(power, use_kw) : '';
-      const powerColor = power < 0 ? batteryDischargeColor : batteryChargeColor;
       const combinedTime = this.card._batteryManager.getCombinedTimeUntil(batteryStates, config, this.card._hass);
       const timeUntilText = combinedTime.timeUntil || '';
       const tempData = this.card._batteryManager.getCombinedTempAverage(config);
@@ -1467,13 +1466,13 @@ export class RenderManager {
       return {
         visible: true,
         socText,
-        socColor: batterySocColor,
+        socColor: null,
         socFontSize: battery_soc_font_size,
         powerText,
-        powerColor,
+        powerColor: null,
         powerFontSize: battery_power_font_size,
         timeUntilText,
-        timeUntilColor: batteryTimeUntilColor,
+        timeUntilColor: null,
         timeUntilFontSize: battery_time_until_font_size,
         stateText: (() => {
           const avgSoc = combinedBatteryState.soc;
@@ -1510,9 +1509,49 @@ export class RenderManager {
       };
     })();
 
-    // Build car views (using CarManager)
-    const car1View = this.card._carManager.buildCarView(1, car1State, config, carLayout.car1, car1Transforms, use_kw, this.card.formatPower.bind(this.card), resolveColor);
-    const car2View = this.card._carManager.buildCarView(2, car2State, config, carLayout.car2, car2Transforms, use_kw, this.card.formatPower.bind(this.card), resolveColor);
+    // Build car views (using CarManager).
+    // For overview, substitute card_value_color as the base car color so all value fills
+    // inherit the card default rather than a per-car color that doesn't exist in overview.
+    const carBuildConfig = isOverviewProfile
+      ? Object.assign(Object.create(null), config, { car1_color: card_value_color || '#FFFFFF', car2_color: card_value_color || '#FFFFFF' })
+      : config;
+    const car1View = this.card._carManager.buildCarView(1, car1State, carBuildConfig, carLayout.car1, car1Transforms, use_kw, this.card.formatPower.bind(this.card), resolveColor);
+    const car2View = this.card._carManager.buildCarView(2, car2State, carBuildConfig, carLayout.car2, car2Transforms, use_kw, this.card.formatPower.bind(this.card), resolveColor);
+
+    // Overview-only: shared car name plate color + unified font color/size for car names
+    const carNamePlateColor = isOverviewProfile ? resolveColor(config.car_name_plate_color, '#FFFFFF') : '';
+    const carNamePlateBorderColor = isOverviewProfile ? resolveColor(config.car_name_plate_border_color, '#FFFFFF') : '';
+    const carNamePlateBorderWidth = isOverviewProfile ? (parseFloat(config.car_name_plate_border_width) || 1) : 0;
+    const carNameFontSize = isOverviewProfile ? optFontSize(config.car_name_font_size, 4, 80) : null;
+    if (isOverviewProfile) {
+      const carNameFontColor = resolveColor(config.car_name_font_color, '#000000');
+      const carChargingColor = resolveColor(config.car_charging_color, '#00FF00');
+      const carDischargingColor = resolveColor(config.car_discharging_color, '#FF4444');
+
+      const getCarChargingState = (power) => {
+        if (!Number.isFinite(power)) return 'idle';
+        if (power > 0) return 'charging';
+        if (power < 0) return 'discharging';
+        return 'idle';
+      };
+      const getSocColor = (state) => {
+        if (state === 'charging') return carChargingColor;
+        if (state === 'discharging') return carDischargingColor;
+        return card_value_color || '#FFFFFF';
+      };
+
+      const car1ChargingState = getCarChargingState(car1State.power);
+      const car2ChargingState = getCarChargingState(car2State.power);
+
+      const applyOverviewCarOverrides = (view, chargingState) => {
+        if (!view || !view.visible) return;
+        view.label.fill = carNameFontColor;
+        view.soc.fill = getSocColor(chargingState);
+      };
+      applyOverviewCarOverrides(car1View, car1ChargingState);
+      applyOverviewCarOverrides(car2View, car2ChargingState);
+    }
+
     const headlightFlashState = {
       enabled: Boolean(config.car_headlight_flash),
       car1: { visible: showCar1, charging: car1Charging },
@@ -1536,13 +1575,13 @@ export class RenderManager {
 
     // Battery time display styling
     const inv1DatetimeColor = resolveColor(config.inv1_datetime_color, '#FFFFFF');
-    const inv1DatetimeFontSize = clampValue(config.inv1_datetime_font_size, 4, 32, 8);
+    const inv1DatetimeFontSize = optFontSize(config.inv1_datetime_font_size, 4, 32);
     const inv1TimeuntilColor = resolveColor(config.inv1_timeuntil_color, '#FFFFFF');
-    const inv1TimeuntilFontSize = clampValue(config.inv1_timeuntil_font_size, 4, 32, 8);
+    const inv1TimeuntilFontSize = optFontSize(config.inv1_timeuntil_font_size, 4, 32);
     const inv2DatetimeColor = resolveColor(config.inv2_datetime_color, '#FFFFFF');
-    const inv2DatetimeFontSize = clampValue(config.inv2_datetime_font_size, 4, 32, 8);
+    const inv2DatetimeFontSize = optFontSize(config.inv2_datetime_font_size, 4, 32);
     const inv2TimeuntilColor = resolveColor(config.inv2_timeuntil_color, '#FFFFFF');
-    const inv2TimeuntilFontSize = clampValue(config.inv2_timeuntil_font_size, 4, 32, 8);
+    const inv2TimeuntilFontSize = optFontSize(config.inv2_timeuntil_font_size, 4, 32);
 
     // ============================================================
     // SECTION 3: VIEW STATE CONSTRUCTION
@@ -1581,12 +1620,11 @@ export class RenderManager {
       solarForecastTomorrow: { text: solarForecastTomorrowValue, visible: hasSolarForecastTomorrow && Boolean(solarForecastTomorrowValue) },
       weatherIcon: { text: weatherIconValue, fontSize: weatherIconFontSize, fill: weatherIconColor, visible: hasWeatherIcon && Boolean(weatherIconValue) },
       weatherForecast: { text: weatherForecastValue, fontSize: weatherForecastFontSize, fill: weatherForecastColor, visible: hasWeatherForecast && Boolean(weatherForecastValue) },
-      statsData: statsData,
       footerData: footerData,
       load: (loadLines && loadLines.length) ? { lines: loadLines, y: loadY, fontSize: load_font_size, fill: effectiveLoadTextColor } : { text: this.card.formatPower(loadValue, use_kw), fontSize: load_font_size, fill: effectiveLoadTextColor },
       houseLoad: { text: this.card.formatPower(loadValue, use_kw), fontSize: load_font_size, fill: effectiveLoadFlowColor, visible: true, odometer: grid_current_odometer, odometerDuration: grid_current_odometer_duration },
       grid: { text: gridText, fontSize: grid_font_size, fill: effectiveGridColor, lines: gridLines },
-      gridCurrentPower: { text: gridCurrentValueText, fontSize: grid_font_size, fill: effectiveGridColor, odometer: grid_current_odometer, odometerDuration: grid_current_odometer_duration },
+      gridCurrentPower: { text: gridCurrentValueText, fontSize: grid_font_size, fill: effectiveGridColor, visible: gridActive, odometer: grid_current_odometer, odometerDuration: grid_current_odometer_duration },
       gridDailyImport: {
         text: gridDailyImportVisible ? this.card.formatEnergy(gridImportDaily, use_kw) : '',
         fontSize: grid_daily_font_size,
@@ -1653,6 +1691,10 @@ export class RenderManager {
       },
       car1: car1View,
       car2: car2View,
+      carNamePlateColor,
+      carNamePlateBorderColor,
+      carNamePlateBorderWidth,
+      carNameFontSize,
       popup: {
         lines: popupPvValues.map((valueText, i) => (valueText ? `${popupPvNames[i]}: ${valueText}` : '')),
         hasContent: popupPvValues.some((valueText) => Boolean(valueText))
@@ -1672,7 +1714,7 @@ export class RenderManager {
       windmillSpin,
       headlightFlash: headlightFlashState,
       sunMoon: sunMoonViewState,
-      configStyles: { cardBg: card_background_color, labelColor: card_label_color, labelFontSize: card_label_font_size, labelFontFamily: font_family, labelCss: card_label_css, valueColor: card_value_color, valueFontSize: card_value_font_size, valueCss: card_value_css }
+      configStyles: { cardBg: card_background_color, labelColor: card_label_color, labelFontSize: card_label_font_size, labelFontFamily: font_family, labelCss: card_label_css, valueColor: card_value_color, valueFontSize: card_value_font_size, valueFontFamily: font_family, odometerFontFamily: odometer_font_family, valueCss: card_value_css, heightOffset: config.card_height_offset }
     };
 
     // ============================================================
@@ -1692,6 +1734,11 @@ export class RenderManager {
     if (!refs) {
       return;
     }
+
+    // Apply card height offset to the host element (reduces card height in layout)
+    const _heightOffset = viewState.configStyles && viewState.configStyles.heightOffset;
+    const _heightOffsetNum = (_heightOffset != null && _heightOffset !== '') ? Number(_heightOffset) : null;
+    this.card.style.marginBottom = (_heightOffsetNum !== null && Number.isFinite(_heightOffsetNum)) ? `${_heightOffsetNum}px` : '';
 
     const prev = this.card._prevViewState || {};
     const animationStyle = viewState.animationStyle || FLOW_STYLE_DEFAULT;
@@ -1867,6 +1914,15 @@ export class RenderManager {
             // ignore
           }
           refs.backgroundSvg.appendChild(importedSvg);
+          // Apply SVG attribute migrations in-memory (card always works with any SVG version).
+          try {
+            const appliedMigrations = SVG_MIGRATOR.applyToDOM(importedSvg);
+            if (appliedMigrations.length > 0) {
+              this._persistSvgMigration(backgroundUrl, importedSvg, appliedMigrations);
+            }
+          } catch (e) {
+            console.error('[AEC Migration] Unexpected error in applyToDOM:', e);
+          }
           // Apply layer visibility after loading
           applySvgLayerVisibility(refs.backgroundSvg, this.card._sunMoonManager._layerConfigWithEffectiveNight(this.card.config));
 
@@ -1911,91 +1967,67 @@ export class RenderManager {
       const svgRoot = refs.backgroundSvg || refs.svgRoot;
       if (svgRoot) {
         const clamp01 = (v) => Math.min(Math.max(v, 0), 1);
-        const ensureClipPolygon = (target) => {
-          if (!target || !target.ownerSVGElement) return null;
-          const svg = target.ownerSVGElement;
-          const SVG_NS = 'http://www.w3.org/2000/svg';
-          let defs = svg.querySelector('defs[data-role="advanced-defs"]') || svg.querySelector('defs');
-          if (!defs) {
-            defs = document.createElementNS(SVG_NS, 'defs');
-            defs.setAttribute('data-role', 'advanced-defs');
-            svg.insertBefore(defs, svg.firstChild);
-          } else if (!defs.getAttribute('data-role')) {
-            defs.setAttribute('data-role', 'advanced-defs');
-          }
-
-          if (!target.dataset) return null;
-          if (!target.dataset.fillClipId) {
-            target.dataset.fillClipId = `advanced-batfill-${Math.random().toString(36).slice(2, 9)}`;
-          }
-          const clipId = target.dataset.fillClipId;
-          let clipPath = defs.querySelector(`#${CSS.escape(clipId)}`);
-          if (!clipPath) {
-            clipPath = document.createElementNS(SVG_NS, 'clipPath');
-            clipPath.setAttribute('id', clipId);
-            clipPath.setAttribute('clipPathUnits', 'userSpaceOnUse');
-            const polygon = document.createElementNS(SVG_NS, 'polygon');
-            polygon.setAttribute('points', '0,0 1,0 1,1 0,1');
-            clipPath.appendChild(polygon);
-            defs.appendChild(clipPath);
-          } else if (clipPath.getAttribute('clipPathUnits') !== 'userSpaceOnUse') {
-            clipPath.setAttribute('clipPathUnits', 'userSpaceOnUse');
-          }
-          const polygon = clipPath.querySelector('polygon');
-          return polygon || null;
-        };
-        const getWorldBBox = (target) => {
-          if (!target || typeof target.getBBox !== 'function') {
-            return null;
-          }
-          let bbox = null;
-          try {
-            bbox = target.getBBox();
-          } catch (e) {
-            bbox = null;
-          }
-          if (!bbox || !Number.isFinite(bbox.x) || !Number.isFinite(bbox.y)
-            || !Number.isFinite(bbox.width) || !Number.isFinite(bbox.height)
-            || bbox.width <= 0 || bbox.height <= 0) {
-            return null;
-          }
-          const ctm = (typeof target.getCTM === 'function') ? target.getCTM() : null;
-          if (!ctm || !Number.isFinite(ctm.a) || !Number.isFinite(ctm.b)
-            || !Number.isFinite(ctm.c) || !Number.isFinite(ctm.d)
-            || !Number.isFinite(ctm.e) || !Number.isFinite(ctm.f)) {
-            return bbox;
-          }
-          const toWorld = (pt) => ({
-            x: (pt.x * ctm.a) + (pt.y * ctm.c) + ctm.e,
-            y: (pt.x * ctm.b) + (pt.y * ctm.d) + ctm.f
+        // Parse the 8 corners of the isometric fill-level path from its local d attribute.
+        // Corners are in the element's own coordinate space — no transform needed since
+        // fill-level sits in the innerfill group with only an identity translate.
+        // Returns { top, bot, height } where top/bot are [bl, fl, br, fr] sorted by X.
+        const parseFillCorners = (fillEl) => {
+          const d = fillEl.getAttribute('d');
+          if (!d) return null;
+          const pts = [];
+          let cx = 0, cy = 0, spx = 0, spy = 0;
+          const cmds = d.match(/[MmLlZz][^MmLlZz]*/gi) || [];
+          cmds.forEach(cmd => {
+            const t = cmd[0];
+            const nums = cmd.slice(1).trim().split(/[\s,]+/).map(parseFloat).filter(n => !isNaN(n));
+            if (t === 'M') {
+              cx = nums[0]; cy = nums[1]; spx = cx; spy = cy; pts.push({ x: cx, y: cy });
+              for (let i = 2; i + 1 < nums.length; i += 2) { cx = nums[i]; cy = nums[i + 1]; pts.push({ x: cx, y: cy }); }
+            } else if (t === 'm') {
+              cx += nums[0]; cy += nums[1]; spx = cx; spy = cy; pts.push({ x: cx, y: cy });
+              for (let i = 2; i + 1 < nums.length; i += 2) { cx += nums[i]; cy += nums[i + 1]; pts.push({ x: cx, y: cy }); }
+            } else if (t === 'L') {
+              for (let i = 0; i + 1 < nums.length; i += 2) { cx = nums[i]; cy = nums[i + 1]; pts.push({ x: cx, y: cy }); }
+            } else if (t === 'l') {
+              for (let i = 0; i + 1 < nums.length; i += 2) { cx += nums[i]; cy += nums[i + 1]; pts.push({ x: cx, y: cy }); }
+            } else if (t === 'Z' || t === 'z') {
+              cx = spx; cy = spy;
+            }
           });
-          const corners = [
-            { x: bbox.x, y: bbox.y },
-            { x: bbox.x + bbox.width, y: bbox.y },
-            { x: bbox.x + bbox.width, y: bbox.y + bbox.height },
-            { x: bbox.x, y: bbox.y + bbox.height }
-          ].map(toWorld);
-          const xs = corners.map((p) => p.x);
-          const ys = corners.map((p) => p.y);
-          const minX = Math.min(...xs);
-          const maxX = Math.max(...xs);
-          const minY = Math.min(...ys);
-          const maxY = Math.max(...ys);
-          return {
-            x: minX,
-            y: minY,
-            width: maxX - minX,
-            height: maxY - minY
-          };
+          const unique = [];
+          for (const p of pts) {
+            if (!unique.find(u => Math.abs(u.x - p.x) < 0.5 && Math.abs(u.y - p.y) < 0.5)) unique.push({ x: p.x, y: p.y });
+          }
+          if (unique.length !== 8) return null;
+          unique.sort((a, b) => a.y - b.y);
+          const top = unique.slice(0, 4).sort((a, b) => a.x - b.x); // [bl, fl, br, fr]
+          const bot = unique.slice(4).sort((a, b) => a.x - b.x);
+          return { top, bot, height: bot[0].y - top[0].y };
+        };
+
+        // Rebuild the fill-level d attribute for a given SOC (0–1).
+        // Shifts the top 4 corners down by (1-soc)*height so the visible fill volume
+        // spans from the level plane to the battery floor across all 6 faces.
+        const buildFillPath = (corners, soc) => {
+          const { top: t, bot: b, height } = corners;
+          const drop = height * (1 - soc);
+          const nt = t.map(p => ({ x: p.x, y: p.y + drop }));
+          const f = (p) => `${p.x.toFixed(5)},${p.y.toFixed(5)}`;
+          // Indices after sort by X: 0=back-left, 1=front-left, 2=back-right, 3=front-right
+          return [
+            `M ${f(nt[1])} ${f(nt[3])} ${f(b[3])} ${f(b[1])} Z`,   // front face
+            `M ${f(b[0])} ${f(b[1])} ${f(b[3])} ${f(b[2])} Z`,      // bottom face
+            `M ${f(nt[0])} ${f(nt[1])} ${f(b[1])} ${f(b[0])} Z`,    // left face
+            `M ${f(nt[2])} ${f(nt[3])} ${f(b[3])} ${f(b[2])} Z`,    // right face
+            `M ${f(nt[0])} ${f(nt[1])} ${f(nt[3])} ${f(nt[2])} Z`,  // top (liquid surface)
+            `M ${f(nt[0])} ${f(nt[2])} ${f(b[2])} ${f(b[0])} Z`,    // back face
+          ].join(' ');
         };
 
         viewState.batteries.forEach((bat) => {
           const role = bat && bat.role ? bat.role : '';
           if (!role) return;
           const fillEl = svgRoot.querySelector(`[data-role="${role}-fill-level"]`);
-          const topEl = svgRoot.querySelector(`[data-role="${role}-fill-top"]`);
-          const bottomEl = svgRoot.querySelector(`[data-role="${role}-fill-bottom"]`) 
-            || svgRoot.querySelector(`[data-role="${role}-filll-bottom"]`);
           if (!fillEl) return;
 
           const config = this.card._config || this.card.config || {};
@@ -2015,133 +2047,67 @@ export class RenderManager {
           })();
 
           const display = bat.visible ? 'inline' : 'none';
-          if (fillEl.style.display !== display) {
-            fillEl.style.display = display;
-          }
+          if (fillEl.style.display !== display) fillEl.style.display = display;
           if (!bat.visible) return;
 
           const socValue = Number.isFinite(bat.soc) ? bat.soc : 0;
           const chosenFill = socValue <= lowThreshold ? fillLow : fillHigh;
           if (chosenFill) {
-            if (fillEl.getAttribute('fill') !== chosenFill) {
-              fillEl.setAttribute('fill', chosenFill);
-            }
-            if (fillEl.style.fill !== chosenFill) {
-              fillEl.style.fill = chosenFill;
-            }
+            if (fillEl.getAttribute('fill') !== chosenFill) fillEl.setAttribute('fill', chosenFill);
+            if (fillEl.style.fill !== chosenFill) fillEl.style.fill = chosenFill;
           }
           const opacityText = String(fillOpacity);
-          if (fillEl.style.opacity !== opacityText) {
-            fillEl.style.opacity = opacityText;
-          }
-          if (fillEl.style.fillOpacity !== opacityText) {
-            fillEl.style.fillOpacity = opacityText;
-          }
-
-          const fillBox = getWorldBBox(fillEl);
-          const topBox = topEl ? getWorldBBox(topEl) : null;
-          const bottomBox = bottomEl ? getWorldBBox(bottomEl) : null;
-
-          if (!fillBox) {
-            return;
-          }
-
-          // Function to parse all points from a path
-          const parsePathPoints = (pathEl) => {
-            if (!pathEl) return [];
-            const d = pathEl.getAttribute('d');
-            if (!d) return [];
-            const points = [];
-            let currentX = 0, currentY = 0;
-            
-            const commands = d.match(/[MmLlHhVvCcSsQqTtAaZz][^MmLlHhVvCcSsQqTtAaZz]*/g) || [];
-            commands.forEach(cmd => {
-              const type = cmd[0];
-              const coords = cmd.slice(1).trim().split(/[\s,]+/).map(parseFloat).filter(Number.isFinite);
-              
-              if (type === 'M') {
-                currentX = coords[0];
-                currentY = coords[1];
-                points.push({ x: currentX, y: currentY });
-                for (let i = 2; i < coords.length; i += 2) {
-                  currentX = coords[i];
-                  currentY = coords[i + 1];
-                  points.push({ x: currentX, y: currentY });
-                }
-              } else if (type === 'm') {
-                currentX += coords[0];
-                currentY += coords[1];
-                points.push({ x: currentX, y: currentY });
-                for (let i = 2; i < coords.length; i += 2) {
-                  currentX += coords[i];
-                  currentY += coords[i + 1];
-                  points.push({ x: currentX, y: currentY });
-                }
-              } else if (type === 'L') {
-                for (let i = 0; i < coords.length; i += 2) {
-                  currentX = coords[i];
-                  currentY = coords[i + 1];
-                  points.push({ x: currentX, y: currentY });
-                }
-              } else if (type === 'l') {
-                for (let i = 0; i < coords.length; i += 2) {
-                  currentX += coords[i];
-                  currentY += coords[i + 1];
-                  points.push({ x: currentX, y: currentY });
-                }
-              }
-            });
-            return points;
-          };
-
-          const topPoints = parsePathPoints(topEl);
-          const bottomPoints = parsePathPoints(bottomEl);
+          if (fillEl.style.opacity !== opacityText) fillEl.style.opacity = opacityText;
+          if (fillEl.style.fillOpacity !== opacityText) fillEl.style.fillOpacity = opacityText;
 
           const level = clamp01(socValue / 100);
+          const clipId = fillEl.getAttribute('data-fill-clip-id');
 
-          if (topPoints.length > 0 && bottomPoints.length > 0) {
-            // Use path-based polygon clipping with userSpaceOnUse coordinates
-            // Interpolate clip points between top and bottom paths
-            // Use (1 - level) because we want high SOC to show more fill (clip line near top)
-            const clipPoints = topPoints.map((topPt, i) => {
-              const bottomPt = bottomPoints[i] || bottomPoints[bottomPoints.length - 1];
-              return {
-                x: topPt.x + (bottomPt.x - topPt.x) * (1 - level),
-                y: topPt.y + (bottomPt.y - topPt.y) * (1 - level)
-              };
-            });
-
-            // Build polygon: clip points + bottom points reversed (using actual SVG coordinates)
-            const polygonPoints = [
-              ...clipPoints.map(p => `${p.x},${p.y}`),
-              ...bottomPoints.slice().reverse().map(p => `${p.x},${p.y}`)
-            ].join(' ');
-
-            const polygon = ensureClipPolygon(fillEl);
-            if (polygon) {
-              polygon.setAttribute('points', polygonPoints);
-              fillEl.setAttribute('clip-path', `url(#${fillEl.dataset.fillClipId})`);
+          if (clipId) {
+            // Overview profile: sentinel element with a pre-defined <clipPath> in SVG defs.
+            // Guide paths mark the top/bottom Y bounds; update the polygon to a rect
+            // from the current level Y down to the bottom bound.
+            const topEl = svgRoot.querySelector(`[data-role="${role}-fill-top"]`);
+            const bottomEl = svgRoot.querySelector(`[data-role="${role}-fill-bottom"]`);
+            const getLineStartEnd = (el) => {
+              if (!el) return null;
+              const d = el.getAttribute('d');
+              if (!d) return null;
+              const nums = d.replace(/[MmLlZz]/gi, ' ').trim().split(/[\s,]+/).map(parseFloat).filter(n => !isNaN(n));
+              if (nums.length < 2) return null;
+              const rel = /^m/i.test(d.trim());
+              const x1 = nums[0], y1 = nums[1];
+              const x2 = nums.length >= 4 ? (rel ? x1 + nums[2] : nums[2]) : x1;
+              const y2 = nums.length >= 4 ? (rel ? y1 + nums[3] : nums[3]) : y1;
+              return { x1, y1, x2, y2 };
+            };
+            const top = getLineStartEnd(topEl);
+            const bot = getLineStartEnd(bottomEl);
+            if (top && bot) {
+              const topY = Math.min(top.y1, top.y2);
+              const botY = Math.max(bot.y1, bot.y2);
+              const xMin = Math.min(top.x1, top.x2, bot.x1, bot.x2) - 1;
+              const xMax = Math.max(top.x1, top.x2, bot.x1, bot.x2) + 1;
+              const clipY = botY - (botY - topY) * level;
+              const svg = fillEl.ownerSVGElement;
+              const cp = svg && (svg.getElementById(clipId) || svg.querySelector(`#${CSS.escape(clipId)}`));
+              if (cp) {
+                let poly = cp.querySelector('polygon');
+                if (!poly) {
+                  poly = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+                  cp.appendChild(poly);
+                }
+                const pts = `${xMin},${clipY} ${xMax},${clipY} ${xMax},${botY + 1} ${xMin},${botY + 1}`;
+                if (poly.getAttribute('points') !== pts) poly.setAttribute('points', pts);
+              }
             }
           } else {
-            // Fallback to rectangle clipping if no paths found
-            const topYRaw = (topBox && Number.isFinite(topBox.y)) ? topBox.y : fillBox.y;
-            const bottomYRaw = (bottomBox && Number.isFinite(bottomBox.y) && Number.isFinite(bottomBox.height))
-              ? (bottomBox.y + bottomBox.height)
-              : (fillBox.y + fillBox.height);
-            const topY = Math.min(topYRaw, bottomYRaw);
-            const bottomY = Math.max(topYRaw, bottomYRaw);
-            const range = Math.max(bottomY - topY, 1);
-            const currentHeight = range * level;
-            const y = bottomY - currentHeight;
-
-            const rectY = clamp01((y - fillBox.y) / fillBox.height);
-            const rectH = clamp01(currentHeight / fillBox.height);
-
-            const polygon = ensureClipPolygon(fillEl);
-            if (polygon) {
-              polygon.setAttribute('points', `0,${rectY} 1,${rectY} 1,1 0,1`);
-              fillEl.setAttribute('clip-path', `url(#${fillEl.dataset.fillClipId})`);
-            }
+            // Tech profile: isometric 6-face cube — rebuild d attribute directly.
+            if (!fillEl._fillCorners) fillEl._fillCorners = parseFillCorners(fillEl);
+            const corners = fillEl._fillCorners;
+            if (!corners) return;
+            const newD = buildFillPath(corners, level);
+            if (fillEl.getAttribute('d') !== newD) fillEl.setAttribute('d', newD);
           }
         });
       }
@@ -2468,6 +2434,17 @@ export class RenderManager {
     this.card._attachEventListeners();
   }
 
+  // Called once per unique SVG URL when migrations are applied in-memory.
+  // Records the pending state (for the editor download button) and sends a one-time
+  // HA notification directing the user to the card editor to download the migrated file.
+  _persistSvgMigration(svgUrl, migratedSvgEl, appliedRules) {
+    const filename = (svgUrl.split('/').pop() || 'custom.svg').replace(/[?#].*$/, '');
+    console.log('[AEC Migration] Applied to', filename, ':', appliedRules.map(r => r.id));
+
+    // Store pending state so the card editor can offer a Download button.
+    SVG_MIGRATION_PENDING.set(svgUrl, appliedRules.map(r => r.id));
+  }
+
   _cacheDomReferences() {
     if (!this.card.shadowRoot) {
       return;
@@ -2540,7 +2517,9 @@ export class RenderManager {
         'inverter1-battery4': root.querySelector('[data-flow-key="inverter1-battery4"]'),
         'inverter2-battery3': root.querySelector('[data-flow-key="inverter2-battery3"]'),
         'inverter2-battery4': root.querySelector('[data-flow-key="inverter2-battery4"]'),
-        pool: root.querySelector('[data-flow-key="pool"]')
+        pool: root.querySelector('[data-flow-key="pool"]'),
+        'inverter-battery': root.querySelector('[data-flow-key="inverter-battery"]'),
+        'array-inverter': root.querySelector('[data-flow-key="array-inverter"]')
       },
       rotateElements: []
     };
@@ -2588,7 +2567,9 @@ export class RenderManager {
       'inverter1-battery3': root.querySelector('[data-arrow-key="inverter1-battery3"]'),
       'inverter1-battery4': root.querySelector('[data-arrow-key="inverter1-battery4"]'),
       'inverter2-battery3': root.querySelector('[data-arrow-key="inverter2-battery3"]'),
-      'inverter2-battery4': root.querySelector('[data-arrow-key="inverter2-battery4"]')
+      'inverter2-battery4': root.querySelector('[data-arrow-key="inverter2-battery4"]'),
+      'inverter-battery': root.querySelector('[data-arrow-key="inverter-battery"]'),
+      'array-inverter': root.querySelector('[data-arrow-key="array-inverter"]')
     };
     this.card._domRefs.arrowShapes = {
       pv1: Array.from(root.querySelectorAll('[data-arrow-shape="pv1"]')),
@@ -2617,7 +2598,9 @@ export class RenderManager {
       'inverter1-battery3': Array.from(root.querySelectorAll('[data-arrow-shape="inverter1-battery3"]')),
       'inverter1-battery4': Array.from(root.querySelectorAll('[data-arrow-shape="inverter1-battery4"]')),
       'inverter2-battery3': Array.from(root.querySelectorAll('[data-arrow-shape="inverter2-battery3"]')),
-      'inverter2-battery4': Array.from(root.querySelectorAll('[data-arrow-shape="inverter2-battery4"]'))
+      'inverter2-battery4': Array.from(root.querySelectorAll('[data-arrow-shape="inverter2-battery4"]')),
+      'inverter-battery': Array.from(root.querySelectorAll('[data-arrow-shape="inverter-battery"]')),
+      'array-inverter': Array.from(root.querySelectorAll('[data-arrow-shape="array-inverter"]'))
     };
     this.card._domRefs.headlights = {
       car1: Array.from(root.querySelectorAll('[data-feature~="car1-headlights"]')),

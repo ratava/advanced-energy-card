@@ -1,5 +1,6 @@
-import { SEED_DEFAULTS, PROFILE_SCHEMAS, _CARD_BASE_URL, stripLegacyCarVisibility } from './constants.js';
+import { SEED_DEFAULTS, PROFILE_SCHEMAS, GENERAL_CONFIG_KEYS, _CARD_BASE_URL, stripLegacyCarVisibility } from './constants.js';
 import { ConfigValidator } from './config-validator.js';
+import { SVG_MIGRATOR, SVG_MIGRATION_PENDING } from './svg-migrator.js';
 
 /**
  * Advanced Energy Card Editor
@@ -13,9 +14,16 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
     this._isEditing = false;
     this._pendingConfigChange = false;
     const cardClass = customElements.get('advanced-energy-card');
-    this._defaults = (cardClass && typeof cardClass.getStubConfig === 'function')
-      ? { ...cardClass.getStubConfig(), ...SEED_DEFAULTS.tech }
-      : {};
+    this._defaults = (() => {
+      const stub = (cardClass && typeof cardClass.getStubConfig === 'function')
+        ? cardClass.getStubConfig()
+        : {};
+      const general = {};
+      for (const k of GENERAL_CONFIG_KEYS) {
+        if (k in stub) general[k] = stub[k];
+      }
+      return general;
+    })();
     this._strings = this._buildStrings();
     this._sectionOpenState = {};
     this._sectionCache = new Map();
@@ -26,6 +34,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
     this._activeSnapshotKey = 'tech';
     this._pendingProfileBasis = null;
     this._pendingSwitchFrom = null;
+    this._configWasChanged = false;
 
     // Avoid losing focus while typing: HA may rebuild the editor when it receives
     // a debounced config-changed event. We therefore defer dispatching config-changed
@@ -93,6 +102,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           display_unit: { label: 'Display Unit', helper: 'Unit used when formatting power values.' },
           update_interval: { label: 'Update Interval', helper: 'Refresh cadence for card updates (0 disables throttling).' },
           initial_configuration: { label: 'Initial Configuration', helper: 'Show the Initial Configuration section in the editor.' },
+          initial_background: { label: 'Which background layout do you want to use?', helper: 'Tech shows detailed power flows with individual elements. Overview shows a simplified combined energy summary.' },
           initial_has_pv: { label: 'Do you have Solar/PV Power?', helper: 'Select Yes if you have solar production to configure.' },
           initial_inverters: { label: 'How many inverters do you have?', helper: 'Shown only when Solar/PV is enabled.' },
           initial_has_battery: { label: 'Do you have Battery storage?', helper: '' },
@@ -100,6 +110,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           initial_has_grid: { label: 'Do you have Grid supplied electricity?', helper: '' },
           initial_can_export: { label: 'Can you export excess electricity to the grid?', helper: '' },
           initial_has_windmill: { label: 'Do you have a Windmill?', helper: '' },
+          initial_has_sun_moon: { label: 'Do you want to enable the Sun/Moon display?', helper: 'Tracks the day/night cycle with a sun by day and moon by night.' },
           initial_has_ev: { label: 'Do you have Electric Vehicles/EV\'s?', helper: '' },
           initial_ev_count: { label: 'How many do you have?', helper: '' },
           initial_config_items_title: { label: 'Required configuration items', helper: '' },
@@ -116,6 +127,17 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           flow_stroke_width: { label: 'Flow Stroke Width (px)', helper: 'Optional override for the animated flow stroke width (no SVG edits). Leave blank to keep SVG defaults.' },
           fluid_flow_stroke_width: { label: 'Fluid Flow Stroke Width (px)', helper: 'Base stroke width for animation_style: fluid_flow. Overlay/mask widths are derived from this.' },
           arrow_scale: { label: 'Arrow Scale', helper: 'Extra size multiplier for the arrows in the "Arrows" animation style. Arrows already scale automatically with Flow Stroke Width; increase if still too small, decrease if too large.' },
+          electron_spread: { label: 'Electron Spread Width', helper: 'How far electrons spread perpendicular to the flow path (SVG units). 0 = on path, higher = wider band.' },
+          electron_spacing: { label: 'Electron Spacing', helper: 'Average gap between electrons along the path (SVG units). Smaller = denser.' },
+          electron_spacing_variance: { label: 'Electron Spacing Variance', helper: 'Randomness in electron spacing (0 = perfectly uniform, 1 = maximum jitter).' },
+          electron_size: { label: 'Electron Size', helper: 'Base radius of each electron (SVG units).' },
+          electron_size_variance: { label: 'Electron Size Variance', helper: 'Random ± variation from base size (SVG units). 0 = all electrons identical size.' },
+          electron_pulse: { label: 'Electron Pulse', helper: 'Enable individual electron opacity/radius pulsing.' },
+          electron_pulse_rate: { label: 'Electron Pulse Rate (Hz)', helper: 'Base pulsing frequency in cycles per second. Each electron varies slightly around this value.' },
+          electron_power_min: { label: 'Speed: Min Power (W)', helper: 'Power level (W) at which electrons travel at minimum speed.' },
+          electron_power_max: { label: 'Speed: Max Power (W)', helper: 'Power level (W) at which electrons reach maximum speed.' },
+          electron_speed_min: { label: 'Speed: Min Fraction', helper: 'Electron speed at minimum power, as a fraction of the configured animation speed (0–1). Keeps electrons visibly moving at low power.' },
+          electron_speed_max: { label: 'Speed: Max Fraction', helper: 'Electron speed at maximum power, as a fraction of the configured animation speed (0–1).' },
           sensor_pv_total: { label: 'PV Total Sensor', helper: 'Optional aggregate production sensor displayed as the combined line.' },
           sensor_pv_total_secondary: { label: 'PV Total Sensor (Inverter 2)', helper: 'Optional second inverter total; added to the PV total when provided.' },
           sensor_windmill_total: { label: 'Windmill Total', helper: 'Power sensor for the windmill generator (W). When not configured the windmill SVG group is hidden.' },
@@ -252,6 +274,8 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           grid2_import_color: { label: 'Inverter 2 Grid Import Flow Color', helper: 'Base colour before thresholds when inverter 2 is importing from the grid.' },
           grid2_export_color: { label: 'Inverter 2 Grid Export Flow Color', helper: 'Base colour before thresholds when inverter 2 is exporting to the grid.' },
           car_flow_color: { label: 'EV Flow Color', helper: 'Colour applied to the electric vehicle animation line.' },
+          car_charging_color: { label: 'Car Charging Color', helper: 'Sets Car SOC Color when the car is charging.' },
+          car_discharging_color: { label: 'Car Discharging Color', helper: 'Sets Car SOC Color when the car is discharging.' },
           battery_fill_high_color: { label: 'Battery Fill (Normal) Color', helper: 'Liquid fill colour when the battery SOC is above the low threshold.' },
           battery_fill_low_color: { label: 'Battery Fill (Low) Color', helper: 'Liquid fill colour when the battery SOC is at or below the low threshold.' },
           battery_fill_low_threshold: { label: 'Battery Low Fill Threshold (%)', helper: 'Use the low fill colour when SOC is at or below this percentage.' },
@@ -282,7 +306,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           car1_climate_entity: { label: 'Car 1 HVAC Climate Entity', helper: 'Climate entity for EV 1 HVAC control (climate domain only).' },
           car_soc: { label: 'Car SOC', helper: 'Sensor for EV battery SOC (percentage).' },
           car_charger_power: { label: 'Car Charger Power', helper: 'Sensor for EV charger power.' },
-          car1_label: { label: 'Car 1 Label', helper: 'Car 1 Name' },
+          car1_label: { label: 'Car 1 Name', helper: 'Car 1 Name' },
           sensor_car2_power: { label: 'Car 2 Power Sensor', helper: 'Sensor for EV 2 charge/discharge power.' },
           car2_power: { label: 'Car 2 Power', helper: 'Sensor for EV 2 charge/discharge power.' },
           sensor_car2_soc: { label: 'Car 2 SOC Sensor', helper: 'State of Charge sensor for EV 2 (percentage).' },
@@ -295,7 +319,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           car2_climate_entity: { label: 'Car 2 HVAC Climate Entity', helper: 'Climate entity for EV 2 HVAC control (climate domain only).' },
           car2_soc: { label: 'Car 2 SOC', helper: 'Sensor for EV 2 battery SOC (percentage).' },
           car2_charger_power: { label: 'Car 2 Charger Power', helper: 'Sensor for EV 2 charger power.' },
-          car2_label: { label: 'Car 2 Label', helper: 'Car 2 Name' },
+          car2_label: { label: 'Car 2 Name', helper: 'Car 2 Name' },
           car_headlight_flash: { label: 'Headlight Flash While Charging', helper: 'Enable to flash the EV headlights whenever charging is detected.' },
           car1_glow_brightness: { label: 'Car Glow Effect', helper: 'Percentage the car flow effects show while not charging.' },
           car2_glow_brightness: { label: 'Car Glow Effect', helper: 'Percentage the car flow effects show while not charging.' },
@@ -350,6 +374,10 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           grid_font_size: { label: 'Grid Font Size (px)', helper: '' },
           car_power_font_size: { label: 'Car Power Font Size (px)', helper: '' },
           car2_power_font_size: { label: 'Car 2 Power Font Size (px)', helper: '' },
+          car_name_plate_color: { label: 'Car Name Plate Card Color', helper: 'Background color of the car name plate card.' },
+          car_name_plate_border_color: { label: 'Car Name Plate Border Color', helper: 'Border color of the car name plate card.' },
+          car_name_plate_border_width: { label: 'Car Name Plate Border Width (px)', helper: '' },
+          car_name_font_color: { label: 'Car Name Font Color', helper: 'Text color for the car name on the name plate.' },
           car_name_font_size: { label: 'Car Name Font Size (px)', helper: '' },
           car2_name_font_size: { label: 'Car 2 Name Font Size (px)', helper: '' },
           car_soc_font_size: { label: 'Car SOC Font Size (px)', helper: '' },
@@ -512,29 +540,54 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           sensor_popup_inverter_6_name: { label: 'Inverter Popup 6 Name', helper: 'Optional custom name for inverter popup line 6. Leave blank to use entity name.' },
           sensor_popup_inverter_6_color: { label: 'Inverter Popup 6 Color', helper: 'Color for inverter popup line 6 text.' },
           sensor_popup_inverter_6_font_size: { label: 'Inverter Popup 6 Font Size (px)', helper: 'Font size for inverter popup line 6.' },
-          footer_card1_slot1_entity: { label: 'Footer Card 1 Slot 1 Sensor', helper: 'Entity shown in footer card 1, slot 1' },
+          footer_update_interval: { label: 'Footer Update Interval', helper: 'How often statistics data is refreshed (minutes). Default 5, minimum 1. Only applies when a slot uses an Auto data source.' },
+          footer_card1_slot1_source: { label: 'Card 1 Slot 1 Data Source', helper: 'Auto modes fetch from HA statistics. Custom Entity uses the sensor\'s current live state.' },
+          footer_card1_slot1_entity: { label: 'Footer Card 1 Slot 1 Sensor', helper: 'Entity shown in footer card 1, slot 1. Used as the statistic ID for Auto sources.' },
+          footer_card1_slot1_stat_type: { label: 'Card 1 Slot 1 Statistic Type', helper: 'Sum: total increase for the period. Mean: average. Difference: end value minus start value.' },
           footer_card1_slot1_label: { label: 'Footer Card 1 Slot 1 Label', helper: 'Optional custom label for footer card 1, slot 1. If empty, the entity friendly name is used' },
-          footer_card1_slot2_entity: { label: 'Footer Card 1 Slot 2 Sensor', helper: 'Entity shown in footer card 1, slot 2' },
+          footer_card1_slot2_source: { label: 'Card 1 Slot 2 Data Source', helper: 'Auto modes fetch from HA statistics. Custom Entity uses the sensor\'s current live state.' },
+          footer_card1_slot2_entity: { label: 'Footer Card 1 Slot 2 Sensor', helper: 'Entity shown in footer card 1, slot 2. Used as the statistic ID for Auto sources.' },
+          footer_card1_slot2_stat_type: { label: 'Card 1 Slot 2 Statistic Type', helper: 'Sum: total increase for the period. Mean: average. Difference: end value minus start value.' },
           footer_card1_slot2_label: { label: 'Footer Card 1 Slot 2 Label', helper: 'Optional custom label for footer card 1, slot 2. If empty, the entity friendly name is used' },
-          footer_card2_slot1_entity: { label: 'Footer Card 2 Slot 1 Sensor', helper: 'Entity shown in footer card 2, slot 1' },
+          footer_card2_slot1_source: { label: 'Card 2 Slot 1 Data Source', helper: 'Auto modes fetch from HA statistics. Custom Entity uses the sensor\'s current live state.' },
+          footer_card2_slot1_entity: { label: 'Footer Card 2 Slot 1 Sensor', helper: 'Entity shown in footer card 2, slot 1. Used as the statistic ID for Auto sources.' },
+          footer_card2_slot1_stat_type: { label: 'Card 2 Slot 1 Statistic Type', helper: 'Sum: total increase for the period. Mean: average. Difference: end value minus start value.' },
           footer_card2_slot1_label: { label: 'Footer Card 2 Slot 1 Label', helper: 'Optional custom label for footer card 2, slot 1. If empty, the entity friendly name is used' },
-          footer_card2_slot2_entity: { label: 'Footer Card 2 Slot 2 Sensor', helper: 'Entity shown in footer card 2, slot 2' },
+          footer_card2_slot2_source: { label: 'Card 2 Slot 2 Data Source', helper: 'Auto modes fetch from HA statistics. Custom Entity uses the sensor\'s current live state.' },
+          footer_card2_slot2_entity: { label: 'Footer Card 2 Slot 2 Sensor', helper: 'Entity shown in footer card 2, slot 2. Used as the statistic ID for Auto sources.' },
+          footer_card2_slot2_stat_type: { label: 'Card 2 Slot 2 Statistic Type', helper: 'Sum: total increase for the period. Mean: average. Difference: end value minus start value.' },
           footer_card2_slot2_label: { label: 'Footer Card 2 Slot 2 Label', helper: 'Optional custom label for footer card 2, slot 2. If empty, the entity friendly name is used' },
-          footer_card3_slot1_entity: { label: 'Footer Card 3 Slot 1 Sensor', helper: 'Entity shown in footer card 3, slot 1' },
+          footer_card3_slot1_source: { label: 'Card 3 Slot 1 Data Source', helper: 'Auto modes fetch from HA statistics. Custom Entity uses the sensor\'s current live state.' },
+          footer_card3_slot1_entity: { label: 'Footer Card 3 Slot 1 Sensor', helper: 'Entity shown in footer card 3, slot 1. Used as the statistic ID for Auto sources.' },
+          footer_card3_slot1_stat_type: { label: 'Card 3 Slot 1 Statistic Type', helper: 'Sum: total increase for the period. Mean: average. Difference: end value minus start value.' },
           footer_card3_slot1_label: { label: 'Footer Card 3 Slot 1 Label', helper: 'Optional custom label for footer card 3, slot 1. If empty, the entity friendly name is used' },
-          footer_card3_slot2_entity: { label: 'Footer Card 3 Slot 2 Sensor', helper: 'Entity shown in footer card 3, slot 2' },
+          footer_card3_slot2_source: { label: 'Card 3 Slot 2 Data Source', helper: 'Auto modes fetch from HA statistics. Custom Entity uses the sensor\'s current live state.' },
+          footer_card3_slot2_entity: { label: 'Footer Card 3 Slot 2 Sensor', helper: 'Entity shown in footer card 3, slot 2. Used as the statistic ID for Auto sources.' },
+          footer_card3_slot2_stat_type: { label: 'Card 3 Slot 2 Statistic Type', helper: 'Sum: total increase for the period. Mean: average. Difference: end value minus start value.' },
           footer_card3_slot2_label: { label: 'Footer Card 3 Slot 2 Label', helper: 'Optional custom label for footer card 3, slot 2. If empty, the entity friendly name is used' },
-          footer_card4_slot1_entity: { label: 'Footer Card 4 Slot 1 Sensor', helper: 'Entity shown in footer card 4, slot 1' },
+          footer_card4_slot1_source: { label: 'Card 4 Slot 1 Data Source', helper: 'Auto modes fetch from HA statistics for the selected period. Custom Entity uses the sensor\'s current live state.' },
+          footer_card4_slot1_entity: { label: 'Footer Card 4 Slot 1 Sensor', helper: 'Entity shown in footer card 4, slot 1. Used as the statistic ID for Auto sources.' },
+          footer_card4_slot1_stat_type: { label: 'Card 4 Slot 1 Statistic Type', helper: 'Sum: total increase for the period. Mean: average. Difference: end value minus start value (for accumulating sensors not tracked as energy).' },
           footer_card4_slot1_label: { label: 'Footer Card 4 Slot 1 Label', helper: 'Optional custom label for footer card 4, slot 1. If empty, the entity friendly name is used' },
-          footer_card4_slot2_entity: { label: 'Footer Card 4 Slot 2 Sensor', helper: 'Entity shown in footer card 4, slot 2' },
+          footer_card4_slot2_source: { label: 'Card 4 Slot 2 Data Source', helper: 'Auto modes fetch from HA statistics for the selected period. Custom Entity uses the sensor\'s current live state.' },
+          footer_card4_slot2_entity: { label: 'Footer Card 4 Slot 2 Sensor', helper: 'Entity shown in footer card 4, slot 2. Used as the statistic ID for Auto sources.' },
+          footer_card4_slot2_stat_type: { label: 'Card 4 Slot 2 Statistic Type', helper: 'Sum: total increase for the period. Mean: average. Difference: end value minus start value (for accumulating sensors not tracked as energy).' },
           footer_card4_slot2_label: { label: 'Footer Card 4 Slot 2 Label', helper: 'Optional custom label for footer card 4, slot 2. If empty, the entity friendly name is used' },
-          footer_card5_slot1_entity: { label: 'Footer Card 5 Slot 1 Sensor', helper: 'Entity shown in footer card 5, slot 1' },
+          footer_card5_slot1_source: { label: 'Card 5 Slot 1 Data Source', helper: 'Auto modes fetch from HA statistics. Custom Entity uses the sensor\'s current live state.' },
+          footer_card5_slot1_entity: { label: 'Footer Card 5 Slot 1 Sensor', helper: 'Entity shown in footer card 5, slot 1. Used as the statistic ID for Auto sources.' },
+          footer_card5_slot1_stat_type: { label: 'Card 5 Slot 1 Statistic Type', helper: 'Sum: total increase for the period. Mean: average. Difference: end value minus start value.' },
           footer_card5_slot1_label: { label: 'Footer Card 5 Slot 1 Label', helper: 'Optional custom label for footer card 5, slot 1. If empty, the entity friendly name is used' },
-          footer_card5_slot2_entity: { label: 'Footer Card 5 Slot 2 Sensor', helper: 'Entity shown in footer card 5, slot 2' },
+          footer_card5_slot2_source: { label: 'Card 5 Slot 2 Data Source', helper: 'Auto modes fetch from HA statistics. Custom Entity uses the sensor\'s current live state.' },
+          footer_card5_slot2_entity: { label: 'Footer Card 5 Slot 2 Sensor', helper: 'Entity shown in footer card 5, slot 2. Used as the statistic ID for Auto sources.' },
+          footer_card5_slot2_stat_type: { label: 'Card 5 Slot 2 Statistic Type', helper: 'Sum: total increase for the period. Mean: average. Difference: end value minus start value.' },
           footer_card5_slot2_label: { label: 'Footer Card 5 Slot 2 Label', helper: 'Optional custom label for footer card 5, slot 2. If empty, the entity friendly name is used' },
-          footer_card6_slot1_entity: { label: 'Footer Card 6 Slot 1 Sensor', helper: 'Entity shown in footer card 6, slot 1' },
+          footer_card6_slot1_source: { label: 'Card 6 Slot 1 Data Source', helper: 'Auto modes fetch from HA statistics. Custom Entity uses the sensor\'s current live state.' },
+          footer_card6_slot1_entity: { label: 'Footer Card 6 Slot 1 Sensor', helper: 'Entity shown in footer card 6, slot 1. Used as the statistic ID for Auto sources.' },
+          footer_card6_slot1_stat_type: { label: 'Card 6 Slot 1 Statistic Type', helper: 'Sum: total increase for the period. Mean: average. Difference: end value minus start value.' },
           footer_card6_slot1_label: { label: 'Footer Card 6 Slot 1 Label', helper: 'Optional custom label for footer card 6, slot 1. If empty, the entity friendly name is used' },
-          footer_card6_slot2_entity: { label: 'Footer Card 6 Slot 2 Sensor', helper: 'Entity shown in footer card 6, slot 2' },
+          footer_card6_slot2_source: { label: 'Card 6 Slot 2 Data Source', helper: 'Auto modes fetch from HA statistics. Custom Entity uses the sensor\'s current live state.' },
+          footer_card6_slot2_entity: { label: 'Footer Card 6 Slot 2 Sensor', helper: 'Entity shown in footer card 6, slot 2. Used as the statistic ID for Auto sources.' },
+          footer_card6_slot2_stat_type: { label: 'Card 6 Slot 2 Statistic Type', helper: 'Sum: total increase for the period. Mean: average. Difference: end value minus start value.' },
           footer_card6_slot2_label: { label: 'Footer Card 6 Slot 2 Label', helper: 'Optional custom label for footer card 6, slot 2. If empty, the entity friendly name is used' }
         },
         options: {
@@ -555,8 +608,11 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
             { value: 'dashes_glow', label: 'Dashes + Glow' },
             { value: 'fluid_flow', label: 'Fluid Flow' },
             { value: 'dots', label: 'Dots' },
-            { value: 'arrows', label: 'Arrows' }
+            { value: 'arrows', label: 'Arrows' },
+            { value: 'electrons', label: 'Electrons' }
           ],
+          initial_background_tech: 'Tech',
+          initial_background_overview: 'Overview',
           initial_yes: 'Yes',
           initial_no: 'No',
           initial_inverters_1: '1',
@@ -611,6 +667,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           display_unit: { label: 'Unità di visualizzazione', helper: 'Unità usata per formattare i valori di potenza.' },
           update_interval: { label: 'Intervallo aggiornamento', helper: 'Cadenza di aggiornamento della scheda (0 disabilita il throttling).' },
           initial_configuration: { label: 'Configurazione iniziale', helper: 'Mostra la sezione di configurazione iniziale nell\'editor.' },
+          initial_background: { label: 'Quale layout di sfondo vuoi usare?', helper: 'Tech mostra flussi di potenza dettagliati. Overview mostra un riepilogo energetico semplificato.' },
           initial_has_pv: { label: 'Hai impianto solare/PV?', helper: 'Seleziona Sì se hai produzione solare da configurare.' },
           initial_inverters: { label: 'Quanti inverter hai?', helper: 'Mostrato solo quando Solare/PV è abilitato.' },
           initial_has_battery: { label: 'Hai accumulo a batteria?', helper: '' },
@@ -618,6 +675,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           initial_has_grid: { label: 'Hai elettricità fornita dalla rete?', helper: '' },
           initial_can_export: { label: 'Puoi esportare l\'energia in eccesso alla rete?', helper: '' },
           initial_has_windmill: { label: 'Hai un mulino a vento?', helper: '' },
+          initial_has_sun_moon: { label: 'Vuoi abilitare la visualizzazione Sole/Luna?', helper: 'Segue il ciclo giorno/notte con un sole di giorno e una luna di notte.' },
           initial_has_ev: { label: 'Hai veicoli elettrici (EV)?', helper: '' },
           initial_ev_count: { label: 'Quanti ne hai?', helper: '' },
           initial_config_items_title: { label: 'Elementi di configurazione richiesti', helper: '' },
@@ -764,6 +822,8 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           grid2_import_color: { label: 'Colore import rete Inverter 2', helper: 'Colore base prima delle soglie quando l\'inverter 2 importa dalla rete.' },
           grid2_export_color: { label: 'Colore export rete Inverter 2', helper: 'Colore base prima delle soglie quando l\'inverter 2 esporta in rete.' },
           car_flow_color: { label: 'Colore flusso EV', helper: 'Colore applicato alla linea di animazione del veicolo elettrico.' },
+          car_charging_color: { label: 'Colore ricarica auto', helper: 'Imposta il colore SOC auto quando l\'auto è in ricarica.' },
+          car_discharging_color: { label: 'Colore scarica auto', helper: 'Imposta il colore SOC auto quando l\'auto si sta scaricando.' },
           battery_fill_high_color: { label: 'Colore riempimento batteria (Normale)', helper: 'Colore di riempimento liquido quando il SOC è sopra la soglia bassa.' },
           battery_fill_low_color: { label: 'Colore riempimento batteria (Basso)', helper: 'Colore di riempimento liquido quando il SOC è al di sotto o uguale alla soglia bassa.' },
           battery_fill_low_threshold: { label: 'Soglia riempimento batteria bassa (%)', helper: 'Usa il colore basso di riempimento quando il SOC è a o sotto questa percentuale.' },
@@ -794,7 +854,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           car1_climate_entity: { label: 'Entità Climatizzazione HVAC Auto 1', helper: 'Entità climate per il controllo HVAC dell\'EV 1 (solo dominio climate).' },
           car_soc: { label: 'SOC Auto', helper: 'Sensore per il SOC della batteria dell\'EV (percentuale).' },
           car_charger_power: { label: 'Potenza caricatore Auto', helper: 'Sensore per la potenza del caricatore EV.' },
-          car1_label: { label: 'Etichetta Auto 1', helper: 'Testo mostrato accanto ai valori del primo EV.' },
+          car1_label: { label: 'Nome Auto 1', helper: 'Nome Auto 1' },
           sensor_car2_power: { label: 'Sensore potenza Auto 2', helper: 'Sensore per la potenza di carica/scarica del secondo EV.' },
           car2_power: { label: 'Potenza Auto 2', helper: 'Sensore per la potenza di carica/scarica del secondo EV.' },
           sensor_car2_soc: { label: 'Sensore SOC Auto 2', helper: 'Sensore Stato di Carica per EV 2 (percentuale).' },
@@ -807,7 +867,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           car2_climate_entity: { label: 'Entità Climatizzazione HVAC Auto 2', helper: 'Entità climate per il controllo HVAC dell\'EV 2 (solo dominio climate).' },
           car2_soc: { label: 'SOC Auto 2', helper: 'Sensore per il SOC dell\'EV 2 (percentuale).' },
           car2_charger_power: { label: 'Potenza caricatore Auto 2', helper: 'Sensore per la potenza del caricatore EV 2.' },
-          car2_label: { label: 'Etichetta Auto 2', helper: 'Testo mostrato accanto ai valori del secondo EV.' },
+          car2_label: { label: 'Nome Auto 2', helper: 'Testo mostrato accanto ai valori del secondo EV.' },
           car_headlight_flash: { label: 'Flash fari durante la ricarica', helper: 'Abilita per far lampeggiare i fari dell\'EV quando la ricarica è rilevata.' },
           car1_glow_brightness: { label: 'Effetto glow Auto 1', helper: 'Percentuale dell\'effetto glow quando non si sta caricando.' },
           car2_glow_brightness: { label: 'Effetto glow Auto 2', helper: 'Percentuale dell\'effetto glow quando non si sta caricando.' },
@@ -862,6 +922,10 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           grid_font_size: { label: 'Dimensione font rete (px)', helper: '' },
           car_power_font_size: { label: 'Dimensione font potenza auto (px)', helper: '' },
           car2_power_font_size: { label: 'Dimensione font potenza auto 2 (px)', helper: '' },
+          car_name_plate_color: { label: 'Colore tessera nome auto', helper: 'Colore di sfondo della tessera del nome auto.' },
+          car_name_plate_border_color: { label: 'Colore bordo tessera nome auto', helper: 'Colore del bordo della tessera del nome auto.' },
+          car_name_plate_border_width: { label: 'Spessore bordo tessera nome auto (px)', helper: '' },
+          car_name_font_color: { label: 'Colore font nome auto', helper: 'Colore del testo del nome auto sulla tessera.' },
           car_name_font_size: { label: 'Dimensione font nome auto (px)', helper: '' },
           car2_name_font_size: { label: 'Dimensione font nome auto 2 (px)', helper: '' },
           car_soc_font_size: { label: 'Dimensione font SOC auto (px)', helper: '' },
@@ -909,8 +973,11 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
             { value: 'dashes_glow', label: 'Dashes + Glow' },
             { value: 'fluid_flow', label: 'Fluid Flow' },
             { value: 'dots', label: 'Dots' },
-            { value: 'arrows', label: 'Arrows' }
+            { value: 'arrows', label: 'Arrows' },
+            { value: 'electrons', label: 'Electrons' }
           ],
+          initial_background_tech: 'Tech',
+          initial_background_overview: 'Overview',
           initial_yes: 'Yes',
           initial_no: 'No',
           initial_inverters_1: '1',
@@ -967,6 +1034,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           display_unit: { label: 'Anzeigeeinheit', helper: 'Unit used when formatting power values.' },
           update_interval: { label: 'Aktualisierungsintervall', helper: 'Refresh cadence for card updates (0 disables throttling).' },
           initial_configuration: { label: 'Erstkonfiguration', helper: 'Show the Erstkonfiguration section in the editor.' },
+          initial_background: { label: 'Welches Hintergrundlayout möchten Sie verwenden?', helper: 'Tech zeigt detaillierte Leistungsflüsse. Overview zeigt eine vereinfachte Energieübersicht.' },
           initial_has_pv: { label: 'Do you have Solar/PV Leistung?', helper: 'Wähle Yes if you have solar production to configure.' },
           initial_inverters: { label: 'How many inverters do you have?', helper: 'Shown only when Solar/PV is enabled.' },
           initial_has_battery: { label: 'Do you have Batterie storage?', helper: '' },
@@ -974,6 +1042,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           initial_has_grid: { label: 'Do you have Netz supplied electricity?', helper: '' },
           initial_can_export: { label: 'Can you export excess electricity to the grid?', helper: '' },
           initial_has_windmill: { label: 'Do you have a Windrad?', helper: '' },
+          initial_has_sun_moon: { label: 'Möchten Sie die Sonne/Mond-Anzeige aktivieren?', helper: 'Verfolgt den Tag/Nacht-Zyklus mit einer Sonne tagsüber und einem Mond nachts.' },
           initial_has_ev: { label: 'Do you have Electric Vehicles/EV\'s?', helper: '' },
           initial_ev_count: { label: 'How many do you have?', helper: '' },
           initial_config_items_title: { label: 'Erforderlich configuration items', helper: '' },
@@ -1120,6 +1189,8 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           grid2_import_color: { label: 'Wechselrichter 2 Netz Import Flow Farbe', helper: 'Base colour before thresholds when inverter 2 is importing from the grid.' },
           grid2_export_color: { label: 'Wechselrichter 2 Netz Export Flow Farbe', helper: 'Base colour before thresholds when inverter 2 is exporting to the grid.' },
           car_flow_color: { label: 'EV Flow Farbe', helper: 'Colour applied to the electric vehicle animation line.' },
+          car_charging_color: { label: 'Auto Ladefarbe', helper: 'Legt die Auto-SOC-Farbe fest, wenn das Auto lädt.' },
+          car_discharging_color: { label: 'Auto Entladefarbe', helper: 'Legt die Auto-SOC-Farbe fest, wenn das Auto entlädt.' },
           battery_fill_high_color: { label: 'Batterie Fill (Normal) Farbe', helper: 'Liquid fill colour when the battery SOC is above the low threshold.' },
           battery_fill_low_color: { label: 'Batterie Fill (Low) Farbe', helper: 'Liquid fill colour when the battery SOC is at or below the low threshold.' },
           battery_fill_low_threshold: { label: 'Batterie Low Fill Schwellenwert (%)', helper: 'Use the low fill colour when SOC is at or below this percentage.' },
@@ -1150,7 +1221,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           car1_climate_entity: { label: 'Auto 1 HVAC Climate-Entität', helper: 'Climate-Entität für die HVAC-Steuerung von EV 1 (nur climate-Domäne).' },
           car_soc: { label: 'Auto SOC', helper: 'Sensor for EV battery SOC (percentage).' },
           car_charger_power: { label: 'Auto Charger Leistung', helper: 'Sensor for EV charger power.' },
-          car1_label: { label: 'Auto 1 Bezeichnung', helper: 'Text displayed next to the first EV values.' },
+          car1_label: { label: 'Auto 1 Name', helper: 'Auto 1 Name' },
           sensor_car2_power: { label: 'Auto 2 Leistung Sensor', helper: 'Sensor for EV 2 charge/discharge power.' },
           car2_power: { label: 'Auto 2 Leistung', helper: 'Sensor for EV 2 charge/discharge power.' },
           sensor_car2_soc: { label: 'Auto 2 SOC Sensor', helper: 'Ladezustand sensor for EV 2 (percentage).' },
@@ -1163,7 +1234,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           car2_climate_entity: { label: 'Auto 2 HVAC Climate-Entität', helper: 'Climate-Entität für die HVAC-Steuerung von EV 2 (nur climate-Domäne).' },
           car2_soc: { label: 'Auto 2 SOC', helper: 'Sensor for EV 2 battery SOC (percentage).' },
           car2_charger_power: { label: 'Auto 2 Charger Leistung', helper: 'Sensor for EV 2 charger power.' },
-          car2_label: { label: 'Auto 2 Bezeichnung', helper: 'Text displayed next to the second EV values.' },
+          car2_label: { label: 'Auto 2 Name', helper: 'Text displayed next to the second EV values.' },
           car_headlight_flash: { label: 'Headlight Flash While Charging', helper: 'Aktivieren to flash the EV headlights whenever charging is detected.' },
           car1_glow_brightness: { label: 'Auto Glow Effect', helper: 'Percentage the car flow effects show while not charging.' },
           car2_glow_brightness: { label: 'Auto Glow Effect', helper: 'Percentage the car flow effects show while not charging.' },
@@ -1218,6 +1289,10 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           grid_font_size: { label: 'Netz Font Size ((px))', helper: '' },
           car_power_font_size: { label: 'Auto Leistung Font Size ((px))', helper: '' },
           car2_power_font_size: { label: 'Auto 2 Leistung Font Size ((px))', helper: '' },
+          car_name_plate_color: { label: 'Auto Namensschild Farbe', helper: 'Hintergrundfarbe der Auto-Namensschildkarte.' },
+          car_name_plate_border_color: { label: 'Auto Namensschild Rahmenfarbe', helper: 'Rahmenfarbe der Auto-Namensschildkarte.' },
+          car_name_plate_border_width: { label: 'Auto Namensschild Rahmenbreite (px)', helper: '' },
+          car_name_font_color: { label: 'Auto Name Schriftfarbe', helper: 'Textfarbe des Autonamens auf dem Namensschild.' },
           car_name_font_size: { label: 'Auto Name Font Size ((px))', helper: '' },
           car2_name_font_size: { label: 'Auto 2 Name Font Size ((px))', helper: '' },
           car_soc_font_size: { label: 'Auto SOC Font Size ((px))', helper: '' },
@@ -1351,7 +1426,8 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
             { value: 'dashes_glow', label: 'Striche + Leuchten' },
             { value: 'fluid_flow', label: 'Fließend' },
             { value: 'dots', label: 'Punkte' },
-            { value: 'arrows', label: 'Pfeile' }
+            { value: 'arrows', label: 'Pfeile' },
+            { value: 'electrons', label: 'Elektronen' }
           ],
           initial_yes: 'Ja',
           initial_no: 'Nein',
@@ -1407,6 +1483,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           display_unit: { label: 'Unité d’affichage', helper: 'Unit used when formatting power values.' },
           update_interval: { label: 'Intervalle de mise à jour', helper: 'Refresh cadence for card updates (0 disables throttling).' },
           initial_configuration: { label: 'Configuration initiale', helper: 'Show the Configuration initiale section in the editor.' },
+          initial_background: { label: 'Quel fond souhaitez-vous utiliser ?', helper: 'Tech affiche des flux de puissance détaillés. Overview affiche un résumé énergétique simplifié.' },
           initial_has_pv: { label: 'Do you have Solar/PV puissance?', helper: 'Sélectionnez Yes if you have solar production to configure.' },
           initial_inverters: { label: 'How many inverters do you have?', helper: 'Shown only when Solar/PV is enabled.' },
           initial_has_battery: { label: 'Do you have Batterie storage?', helper: '' },
@@ -1414,6 +1491,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           initial_has_grid: { label: 'Do you have Réseau supplied electricity?', helper: '' },
           initial_can_export: { label: 'Can you export excess electricity to the grid?', helper: '' },
           initial_has_windmill: { label: 'Do you have a Éolienne?', helper: '' },
+          initial_has_sun_moon: { label: "Voulez-vous activer l'affichage Soleil/Lune?", helper: 'Suit le cycle jour/nuit avec un soleil le jour et une lune la nuit.' },
           initial_has_ev: { label: 'Do you have Electric Vehicles/VE\'s?', helper: '' },
           initial_ev_count: { label: 'How many do you have?', helper: '' },
           initial_config_items_title: { label: 'Requis configuration items', helper: '' },
@@ -1560,6 +1638,8 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           grid2_import_color: { label: 'Onduleur 2 Réseau Import Flow Couleur', helper: 'Base colour before thresholds when inverter 2 is importing from the grid.' },
           grid2_export_color: { label: 'Onduleur 2 Réseau Export Flow Couleur', helper: 'Base colour before thresholds when inverter 2 is exporting to the grid.' },
           car_flow_color: { label: 'VE Flow Couleur', helper: 'Colour applied to the electric vehicle animation line.' },
+          car_charging_color: { label: 'Couleur Charge Voiture', helper: 'Définit la couleur SOC voiture lors de la charge.' },
+          car_discharging_color: { label: 'Couleur Décharge Voiture', helper: 'Définit la couleur SOC voiture lors de la décharge.' },
           battery_fill_high_color: { label: 'Batterie Fill (Normal) Couleur', helper: 'Liquid fill colour when the battery SOC is above the low threshold.' },
           battery_fill_low_color: { label: 'Batterie Fill (Low) Couleur', helper: 'Liquid fill colour when the battery SOC is at or below the low threshold.' },
           battery_fill_low_threshold: { label: 'Batterie Low Fill Seuil (%)', helper: 'Use the low fill colour when SOC is at or below this percentage.' },
@@ -1590,7 +1670,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           car1_climate_entity: { label: 'Voiture 1 Entité Climatisation HVAC', helper: 'Entité climate pour le contrôle HVAC du VE 1 (domaine climate uniquement).' },
           car_soc: { label: 'Voiture SOC', helper: 'capteur for VE battery SOC (percentage).' },
           car_charger_power: { label: 'Voiture Charger puissance', helper: 'capteur for VE charger power.' },
-          car1_label: { label: 'Voiture 1 Libellé', helper: 'Text displayed next to the first VE values.' },
+          car1_label: { label: 'Nom Voiture 1', helper: 'Nom Voiture 1' },
           sensor_car2_power: { label: 'Voiture 2 puissance capteur', helper: 'capteur for VE 2 charge/discharge power.' },
           car2_power: { label: 'Voiture 2 puissance', helper: 'capteur for VE 2 charge/discharge power.' },
           sensor_car2_soc: { label: 'Voiture 2 SOC capteur', helper: 'État de charge sensor for VE 2 (percentage).' },
@@ -1603,7 +1683,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           car2_climate_entity: { label: 'Voiture 2 Entité Climatisation HVAC', helper: 'Entité climate pour le contrôle HVAC du VE 2 (domaine climate uniquement).' },
           car2_soc: { label: 'Voiture 2 SOC', helper: 'capteur for VE 2 battery SOC (percentage).' },
           car2_charger_power: { label: 'Voiture 2 Charger puissance', helper: 'capteur for VE 2 charger power.' },
-          car2_label: { label: 'Voiture 2 Libellé', helper: 'Text displayed next to the second VE values.' },
+          car2_label: { label: 'Nom Voiture 2', helper: 'Text displayed next to the second VE values.' },
           car_headlight_flash: { label: 'Headlight Flash While Charging', helper: 'Activer to flash the VE headlights whenever charging is detected.' },
           car1_glow_brightness: { label: 'Voiture Glow Effect', helper: 'Percentage the car flow effects show while not charging.' },
           car2_glow_brightness: { label: 'Voiture Glow Effect', helper: 'Percentage the car flow effects show while not charging.' },
@@ -1658,6 +1738,10 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           grid_font_size: { label: 'Réseau Font Size (px)', helper: '' },
           car_power_font_size: { label: 'Voiture puissance Font Size (px)', helper: '' },
           car2_power_font_size: { label: 'Voiture 2 puissance Font Size (px)', helper: '' },
+          car_name_plate_color: { label: 'Voiture Plaque Nom Couleur', helper: 'Couleur de fond de la carte plaque nom de voiture.' },
+          car_name_plate_border_color: { label: 'Voiture Plaque Nom Bordure Couleur', helper: 'Couleur de bordure de la carte plaque nom de voiture.' },
+          car_name_plate_border_width: { label: 'Voiture Plaque Nom Bordure Largeur (px)', helper: '' },
+          car_name_font_color: { label: 'Voiture Nom Couleur Police', helper: 'Couleur du texte du nom de voiture sur la plaque.' },
           car_name_font_size: { label: 'Voiture Nom Font Size (px)', helper: '' },
           car2_name_font_size: { label: 'Voiture 2 Nom Font Size (px)', helper: '' },
           car_soc_font_size: { label: 'Voiture SOC Font Size (px)', helper: '' },
@@ -1791,7 +1875,8 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
             { value: 'dashes_glow', label: 'Tirets + Lueur' },
             { value: 'fluid_flow', label: 'Flux fluide' },
             { value: 'dots', label: 'Points' },
-            { value: 'arrows', label: 'Flèches' }
+            { value: 'arrows', label: 'Flèches' },
+            { value: 'electrons', label: 'Électrons' }
           ],
           initial_yes: 'Oui',
           initial_no: 'Non',
@@ -1847,6 +1932,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           display_unit: { label: 'Weergave-eenheid', helper: 'Unit used when formatting power values.' },
           update_interval: { label: 'Update-interval', helper: 'Refresh cadence for card updates (0 disables throttling).' },
           initial_configuration: { label: 'Initiële configuratie', helper: 'Show the Initiële configuratie section in the editor.' },
+          initial_background: { label: 'Welke achtergrondindeling wilt u gebruiken?', helper: 'Tech toont gedetailleerde vermogensstromen. Overview toont een vereenvoudigd energieoverzicht.' },
           initial_has_pv: { label: 'Do you have Solar/PV vermogen?', helper: 'Selecteer Yes if you have solar production to configure.' },
           initial_inverters: { label: 'How many inverters do you have?', helper: 'Shown only when Solar/PV is enabled.' },
           initial_has_battery: { label: 'Do you have Batterij storage?', helper: '' },
@@ -1854,6 +1940,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           initial_has_grid: { label: 'Do you have Net supplied electricity?', helper: '' },
           initial_can_export: { label: 'Can you export excess electricity to the grid?', helper: '' },
           initial_has_windmill: { label: 'Do you have a Windmolen?', helper: '' },
+          initial_has_sun_moon: { label: 'Wilt u de Zon/Maan weergave inschakelen?', helper: 'Volgt de dag/nacht cyclus met een zon overdag en een maan \'s nachts.' },
           initial_has_ev: { label: 'Do you have Electric Vehicles/EV\'s?', helper: '' },
           initial_ev_count: { label: 'How many do you have?', helper: '' },
           initial_config_items_title: { label: 'Vereist configuration items', helper: '' },
@@ -2000,6 +2087,8 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           grid2_import_color: { label: 'Omvormer 2 Net Import Flow Kleur', helper: 'Base colour before thresholds when inverter 2 is importing from the grid.' },
           grid2_export_color: { label: 'Omvormer 2 Net Export Flow Kleur', helper: 'Base colour before thresholds when inverter 2 is exporting to the grid.' },
           car_flow_color: { label: 'EV Flow Kleur', helper: 'Colour applied to the electric vehicle animation line.' },
+          car_charging_color: { label: 'Auto Laadkleur', helper: 'Stelt de auto SOC kleur in tijdens het laden.' },
+          car_discharging_color: { label: 'Auto Ontlaadkleur', helper: 'Stelt de auto SOC kleur in tijdens het ontladen.' },
           battery_fill_high_color: { label: 'Batterij Fill (Normal) Kleur', helper: 'Liquid fill colour when the battery SOC is above the low threshold.' },
           battery_fill_low_color: { label: 'Batterij Fill (Low) Kleur', helper: 'Liquid fill colour when the battery SOC is at or below the low threshold.' },
           battery_fill_low_threshold: { label: 'Batterij Low Fill Drempel (%)', helper: 'Use the low fill colour when SOC is at or below this percentage.' },
@@ -2030,7 +2119,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           car1_climate_entity: { label: 'Auto 1 HVAC Climate-entiteit', helper: 'Climate-entiteit voor de HVAC-besturing van EV 1 (alleen climate-domein).' },
           car_soc: { label: 'Auto SOC', helper: 'sensor for EV battery SOC (percentage).' },
           car_charger_power: { label: 'Auto Charger vermogen', helper: 'sensor for EV charger power.' },
-          car1_label: { label: 'Auto 1 Label', helper: 'Text displayed next to the first EV values.' },
+          car1_label: { label: 'Auto 1 Naam', helper: 'Auto 1 Naam' },
           sensor_car2_power: { label: 'Auto 2 vermogen sensor', helper: 'sensor for EV 2 charge/discharge power.' },
           car2_power: { label: 'Auto 2 vermogen', helper: 'sensor for EV 2 charge/discharge power.' },
           sensor_car2_soc: { label: 'Auto 2 SOC sensor', helper: 'Laadstatus sensor for EV 2 (percentage).' },
@@ -2098,6 +2187,10 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           grid_font_size: { label: 'Net Font Size (px)', helper: '' },
           car_power_font_size: { label: 'Auto vermogen Font Size (px)', helper: '' },
           car2_power_font_size: { label: 'Auto 2 vermogen Font Size (px)', helper: '' },
+          car_name_plate_color: { label: 'Auto Naamplaat Kleur', helper: 'Achtergrondkleur van de auto naamplaat kaart.' },
+          car_name_plate_border_color: { label: 'Auto Naamplaat Randkleur', helper: 'Randkleur van de auto naamplaat kaart.' },
+          car_name_plate_border_width: { label: 'Auto Naamplaat Randbreedte (px)', helper: '' },
+          car_name_font_color: { label: 'Auto Naam Letterkleur', helper: 'Tekstkleur van de autonaam op de naamplaat.' },
           car_name_font_size: { label: 'Auto Naam Font Size (px)', helper: '' },
           car2_name_font_size: { label: 'Auto 2 Naam Font Size (px)', helper: '' },
           car_soc_font_size: { label: 'Auto SOC Font Size (px)', helper: '' },
@@ -2231,7 +2324,8 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
             { value: 'dashes_glow', label: 'Streepjes + gloed' },
             { value: 'fluid_flow', label: 'Vloeiende stroom' },
             { value: 'dots', label: 'Punten' },
-            { value: 'arrows', label: 'Pijlen' }
+            { value: 'arrows', label: 'Pijlen' },
+            { value: 'electrons', label: 'Elektronen' }
           ],
           initial_yes: 'Ja',
           initial_no: 'Nee',
@@ -2287,6 +2381,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           display_unit: { label: 'Unidad de visualización', helper: 'Unit used when formatting power values.' },
           update_interval: { label: 'Intervalo de actualización', helper: 'Refresh cadence for card updates (0 disables throttling).' },
           initial_configuration: { label: 'Configuración inicial', helper: 'Show the Configuración inicial section in the editor.' },
+          initial_background: { label: '¿Qué diseño de fondo desea utilizar?', helper: 'Tech muestra flujos de energía detallados. Overview muestra un resumen energético simplificado.' },
           initial_has_pv: { label: 'Do you have Solar/PV potencia?', helper: 'Selecciona Yes if you have solar production to configure.' },
           initial_inverters: { label: 'How many inverters do you have?', helper: 'Shown only when Solar/PV is enabled.' },
           initial_has_battery: { label: 'Do you have Batería storage?', helper: '' },
@@ -2294,6 +2389,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           initial_has_grid: { label: 'Do you have Red supplied electricity?', helper: '' },
           initial_can_export: { label: 'Can you export excess electricity to the grid?', helper: '' },
           initial_has_windmill: { label: 'Do you have a Aerogenerador?', helper: '' },
+          initial_has_sun_moon: { label: '¿Desea habilitar la visualización Sol/Luna?', helper: 'Sigue el ciclo día/noche con un sol de día y una luna de noche.' },
           initial_has_ev: { label: 'Do you have Electric Vehicles/VE\'s?', helper: '' },
           initial_ev_count: { label: 'How many do you have?', helper: '' },
           initial_config_items_title: { label: 'Requerido configuration items', helper: '' },
@@ -2440,6 +2536,8 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           grid2_import_color: { label: 'Inversor 2 Red Import Flow Color', helper: 'Base colour before thresholds when inverter 2 is importing from the grid.' },
           grid2_export_color: { label: 'Inversor 2 Red Export Flow Color', helper: 'Base colour before thresholds when inverter 2 is exporting to the grid.' },
           car_flow_color: { label: 'VE Flow Color', helper: 'Colour applied to the electric vehicle animation line.' },
+          car_charging_color: { label: 'Color Carga Coche', helper: 'Establece el color SOC del coche cuando está cargando.' },
+          car_discharging_color: { label: 'Color Descarga Coche', helper: 'Establece el color SOC del coche cuando está descargando.' },
           battery_fill_high_color: { label: 'Batería Fill (Normal) Color', helper: 'Liquid fill colour when the battery SOC is above the low threshold.' },
           battery_fill_low_color: { label: 'Batería Fill (Low) Color', helper: 'Liquid fill colour when the battery SOC is at or below the low threshold.' },
           battery_fill_low_threshold: { label: 'Batería Low Fill Umbral (%)', helper: 'Use the low fill colour when SOC is at or below this percentage.' },
@@ -2470,7 +2568,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           car1_climate_entity: { label: 'Entidad Climatización HVAC Coche 1', helper: 'Entidad climate para el control HVAC del VE 1 (solo dominio climate).' },
           car_soc: { label: 'Coche SOC', helper: 'sensor for VE battery SOC (percentage).' },
           car_charger_power: { label: 'Coche Charger potencia', helper: 'sensor for VE charger power.' },
-          car1_label: { label: 'Coche 1 Etiqueta', helper: 'Text displayed next to the first VE values.' },
+          car1_label: { label: 'Nombre Coche 1', helper: 'Nombre Coche 1' },
           sensor_car2_power: { label: 'Coche 2 potencia sensor', helper: 'sensor for VE 2 charge/discharge power.' },
           car2_power: { label: 'Coche 2 potencia', helper: 'sensor for VE 2 charge/discharge power.' },
           sensor_car2_soc: { label: 'Coche 2 SOC sensor', helper: 'Estado de carga sensor for VE 2 (percentage).' },
@@ -2483,7 +2581,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           car2_climate_entity: { label: 'Entidad Climatización HVAC Coche 2', helper: 'Entidad climate para el control HVAC del VE 2 (solo dominio climate).' },
           car2_soc: { label: 'Coche 2 SOC', helper: 'sensor for VE 2 battery SOC (percentage).' },
           car2_charger_power: { label: 'Coche 2 Charger potencia', helper: 'sensor for VE 2 charger power.' },
-          car2_label: { label: 'Coche 2 Etiqueta', helper: 'Text displayed next to the second VE values.' },
+          car2_label: { label: 'Nombre Coche 2', helper: 'Text displayed next to the second VE values.' },
           car_headlight_flash: { label: 'Headlight Flash While Charging', helper: 'Habilitar to flash the VE headlights whenever charging is detected.' },
           car1_glow_brightness: { label: 'Coche Glow Effect', helper: 'Percentage the car flow effects show while not charging.' },
           car2_glow_brightness: { label: 'Coche Glow Effect', helper: 'Percentage the car flow effects show while not charging.' },
@@ -2538,6 +2636,10 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           grid_font_size: { label: 'Red Font Size (px)', helper: '' },
           car_power_font_size: { label: 'Coche potencia Font Size (px)', helper: '' },
           car2_power_font_size: { label: 'Coche 2 potencia Font Size (px)', helper: '' },
+          car_name_plate_color: { label: 'Color Placa Nombre Coche', helper: 'Color de fondo de la tarjeta placa nombre del coche.' },
+          car_name_plate_border_color: { label: 'Color Borde Placa Nombre Coche', helper: 'Color del borde de la tarjeta placa nombre del coche.' },
+          car_name_plate_border_width: { label: 'Ancho Borde Placa Nombre Coche (px)', helper: '' },
+          car_name_font_color: { label: 'Color Fuente Nombre Coche', helper: 'Color del texto del nombre del coche en la placa.' },
           car_name_font_size: { label: 'Coche Nombre Font Size (px)', helper: '' },
           car2_name_font_size: { label: 'Coche 2 Nombre Font Size (px)', helper: '' },
           car_soc_font_size: { label: 'Coche SOC Font Size (px)', helper: '' },
@@ -2671,7 +2773,8 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
             { value: 'dashes_glow', label: 'Guiones + brillo' },
             { value: 'fluid_flow', label: 'Flujo fluido' },
             { value: 'dots', label: 'Puntos' },
-            { value: 'arrows', label: 'Flechas' }
+            { value: 'arrows', label: 'Flechas' },
+            { value: 'electrons', label: 'Electrones' }
           ],
           initial_yes: 'Sí',
           initial_no: 'No',
@@ -2794,16 +2897,28 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
         ] } } },
         { name: 'language', label: fields.language.label, helper: fields.language.helper, selector: { select: { options: optionDefs.language } } },
         { name: 'display_unit', label: fields.display_unit.label, helper: fields.display_unit.helper, selector: { select: { options: optionDefs.display_unit } } },
-        { name: 'update_interval', label: fields.update_interval.label, helper: fields.update_interval.helper, selector: { number: { min: 0, max: 60, step: 5, mode: 'slider', unit_of_measurement: 's' } } },
+        { name: 'update_interval', label: fields.update_interval.label, helper: fields.update_interval.helper, selector: { number: { min: 0, max: 60, step: 5, mode: 'box', unit_of_measurement: 's' } } },
         { name: 'initial_configuration', label: fields.initial_configuration.label, helper: fields.initial_configuration.helper, selector: { boolean: {} }, default: true },
         { name: 'enable_echo_alive', label: (fields.enable_echo_alive && fields.enable_echo_alive.label) || 'Enable Echo Alive', helper: (fields.enable_echo_alive && fields.enable_echo_alive.helper) || 'Enables an invisible iframe to keep the Silk browser open on Echo Show.', selector: { boolean: {} }, default: false },
-        { name: 'animation_speed_factor', label: fields.animation_speed_factor.label, helper: fields.animation_speed_factor.helper, selector: { number: { min: -3, max: 3, step: 0.25, mode: 'slider', unit_of_measurement: 'x' } } },
+        { name: 'animation_speed_factor', label: fields.animation_speed_factor.label, helper: fields.animation_speed_factor.helper, selector: { number: { min: -3, max: 3, step: 0.25, mode: 'box', unit_of_measurement: 'x' } } },
         { name: 'animation_style', label: fields.animation_style.label, helper: fields.animation_style.helper, selector: { select: { options: optionDefs.animation_style } } },
         { name: 'night_animation_style', label: fields.night_animation_style.label, helper: fields.night_animation_style.helper, selector: { select: { options: optionDefs.animation_style } } },
-        { name: 'dashes_glow_intensity', label: fields.dashes_glow_intensity.label, helper: fields.dashes_glow_intensity.helper, selector: { number: { min: 0, max: 3, step: 0.1, mode: 'slider' } } },
-        { name: 'flow_stroke_width', label: fields.flow_stroke_width.label, helper: fields.flow_stroke_width.helper, selector: { number: { min: 0.5, max: 30, step: 0.5, mode: 'slider', unit_of_measurement: 'px' } }, default: 3 },
-        { name: 'fluid_flow_stroke_width', label: fields.fluid_flow_stroke_width.label, helper: fields.fluid_flow_stroke_width.helper, selector: { number: { min: 0.5, max: 30, step: 0.5, mode: 'slider', unit_of_measurement: 'px' } }, default: 4 },
-        { name: 'arrow_scale', label: fields.arrow_scale.label, helper: fields.arrow_scale.helper, selector: { number: { min: 0.5, max: 5, step: 0.25, mode: 'slider', unit_of_measurement: 'x' } }, default: 1 },
+        { name: 'dashes_glow_intensity', label: fields.dashes_glow_intensity.label, helper: fields.dashes_glow_intensity.helper, selector: { number: { min: 0, max: 3, step: 0.1, mode: 'box' } } },
+        { name: 'flow_stroke_width', label: fields.flow_stroke_width.label, helper: fields.flow_stroke_width.helper, selector: { number: { min: 0.5, max: 30, step: 0.5, mode: 'box', unit_of_measurement: 'px' } }, default: 3 },
+        { name: 'fluid_flow_stroke_width', label: fields.fluid_flow_stroke_width.label, helper: fields.fluid_flow_stroke_width.helper, selector: { number: { min: 0.5, max: 30, step: 0.5, mode: 'box', unit_of_measurement: 'px' } }, default: 4 },
+        { name: 'arrow_scale', label: fields.arrow_scale.label, helper: fields.arrow_scale.helper, selector: { number: { min: 0.5, max: 5, step: 0.25, mode: 'box', unit_of_measurement: 'x' } }, default: 1 },
+        { type: 'divider' },
+        { name: 'electron_spread', label: (fields.electron_spread && fields.electron_spread.label) || 'Electron Spread Width', helper: (fields.electron_spread && fields.electron_spread.helper) || '', selector: { number: { min: 0, max: 50, step: 1, mode: 'box', unit_of_measurement: 'svg' } }, default: 8 },
+        { name: 'electron_spacing', label: (fields.electron_spacing && fields.electron_spacing.label) || 'Electron Spacing', helper: (fields.electron_spacing && fields.electron_spacing.helper) || '', selector: { number: { min: 10, max: 200, step: 5, mode: 'box', unit_of_measurement: 'svg' } }, default: 35 },
+        { name: 'electron_spacing_variance', label: (fields.electron_spacing_variance && fields.electron_spacing_variance.label) || 'Electron Spacing Variance', helper: (fields.electron_spacing_variance && fields.electron_spacing_variance.helper) || '', selector: { number: { min: 0, max: 1, step: 0.05, mode: 'box' } }, default: 0.4 },
+        { name: 'electron_size', label: (fields.electron_size && fields.electron_size.label) || 'Electron Size', helper: (fields.electron_size && fields.electron_size.helper) || '', selector: { number: { min: 0.5, max: 15, step: 0.5, mode: 'box', unit_of_measurement: 'svg' } }, default: 3.5 },
+        { name: 'electron_size_variance', label: (fields.electron_size_variance && fields.electron_size_variance.label) || 'Electron Size Variance', helper: (fields.electron_size_variance && fields.electron_size_variance.helper) || '', selector: { number: { min: 0, max: 10, step: 0.5, mode: 'box', unit_of_measurement: 'svg' } }, default: 1.0 },
+        { name: 'electron_pulse', label: (fields.electron_pulse && fields.electron_pulse.label) || 'Electron Pulse', helper: (fields.electron_pulse && fields.electron_pulse.helper) || '', selector: { boolean: {} }, default: true },
+        { name: 'electron_pulse_rate', label: (fields.electron_pulse_rate && fields.electron_pulse_rate.label) || 'Electron Pulse Rate (Hz)', helper: (fields.electron_pulse_rate && fields.electron_pulse_rate.helper) || '', selector: { number: { min: 0.1, max: 5, step: 0.1, mode: 'box', unit_of_measurement: 'Hz' } }, default: 2.0 },
+        { name: 'electron_power_min', label: (fields.electron_power_min && fields.electron_power_min.label) || 'Speed: Min Power (W)', helper: (fields.electron_power_min && fields.electron_power_min.helper) || '', selector: { number: { min: 0, max: 10000, step: 100, mode: 'box', unit_of_measurement: 'W' } }, default: 0 },
+        { name: 'electron_power_max', label: (fields.electron_power_max && fields.electron_power_max.label) || 'Speed: Max Power (W)', helper: (fields.electron_power_max && fields.electron_power_max.helper) || '', selector: { number: { min: 100, max: 50000, step: 100, mode: 'box', unit_of_measurement: 'W' } }, default: 5000 },
+        { name: 'electron_speed_min', label: (fields.electron_speed_min && fields.electron_speed_min.label) || 'Speed: Min Fraction', helper: (fields.electron_speed_min && fields.electron_speed_min.helper) || '', selector: { number: { min: 0, max: 5, step: 0.25, mode: 'box' } }, default: 0.15 },
+        { name: 'electron_speed_max', label: (fields.electron_speed_max && fields.electron_speed_max.label) || 'Speed: Max Fraction', helper: (fields.electron_speed_max && fields.electron_speed_max.helper) || '', selector: { number: { min: 0, max: 5, step: 0.25, mode: 'box' } }, default: 2.25 },
         { type: 'divider' },
         { name: 'sun_moon_display', label: (fields.sun_moon_display && fields.sun_moon_display.label) || 'Sun/Moon Display', helper: (fields.sun_moon_display && fields.sun_moon_display.helper) || '', selector: { select: { options: [
           { value: 'off', label: 'Off' },
@@ -2811,7 +2926,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
           { value: 'sun-moon', label: 'Sun & Moon' }
         ] } }, default: 'off' },
         { name: 'sun_moon_arc_color', label: (fields.sun_moon_arc_color && fields.sun_moon_arc_color.label) || 'Arc Path Color', helper: (fields.sun_moon_arc_color && fields.sun_moon_arc_color.helper) || '', selector: { color_picker: {} } },
-        { name: 'sun_moon_arc_stroke_width', label: (fields.sun_moon_arc_stroke_width && fields.sun_moon_arc_stroke_width.label) || 'Arc Path Stroke Width', helper: (fields.sun_moon_arc_stroke_width && fields.sun_moon_arc_stroke_width.helper) || '', selector: { number: { min: 0.5, max: 30, step: 0.5, mode: 'slider', unit_of_measurement: 'px' } } },
+        { name: 'sun_moon_arc_stroke_width', label: (fields.sun_moon_arc_stroke_width && fields.sun_moon_arc_stroke_width.label) || 'Arc Path Stroke Width', helper: (fields.sun_moon_arc_stroke_width && fields.sun_moon_arc_stroke_width.helper) || '', selector: { number: { min: 0.5, max: 30, step: 0.5, mode: 'box', unit_of_measurement: 'px' } } },
         { name: 'sun_moon_sunrise_label', label: (fields.sun_moon_sunrise_label && fields.sun_moon_sunrise_label.label) || 'Sunrise Label Text', helper: (fields.sun_moon_sunrise_label && fields.sun_moon_sunrise_label.helper) || '', selector: { text: { mode: 'blur' } } },
         { name: 'sun_moon_sunset_label', label: (fields.sun_moon_sunset_label && fields.sun_moon_sunset_label.label) || 'Sunset Label Text', helper: (fields.sun_moon_sunset_label && fields.sun_moon_sunset_label.helper) || '', selector: { text: { mode: 'blur' } } },
         { name: 'sun_moon_label_color', label: (fields.sun_moon_label_color && fields.sun_moon_label_color.label) || 'Sunrise/Sunset Label Color', helper: (fields.sun_moon_label_color && fields.sun_moon_label_color.helper) || '', selector: { color_picker: {} } },
@@ -2846,7 +2961,19 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
   }
 
   _configWithDefaults() {
-    const merged = { ...this._defaults, ...this._config };
+    const profileId = this._activeProfileId || this._resolveProfileIdSync(this._config);
+    const snapshotKey = this._activeSnapshotKey || this._resolveSnapshotKeySync(this._config);
+    const profileValues = (this._config && this._config._profiles && this._config._profiles[snapshotKey]) || {};
+    const profileDefaults = SEED_DEFAULTS[profileId] || {};
+    const general = {};
+    GENERAL_CONFIG_KEYS.forEach(k => { if (this._config && k in this._config) general[k] = this._config[k]; });
+
+    const merged = {
+      ...this._defaults,
+      ...profileDefaults,
+      ...profileValues,
+      ...general,
+    };
 
     const rawMode = merged.day_night_mode;
     const normalized = typeof rawMode === 'string' ? rawMode.trim().toLowerCase() : '';
@@ -2864,17 +2991,23 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
     let migrated = ConfigValidator._consolidateBackground(config);
     migrated = ConfigValidator._migrateBackgroundFilenames(migrated);
     const sanitized = stripLegacyCarVisibility(migrated);
-    const normalized = ConfigValidator._initProfileStorage(sanitized);
-    this._config = { ...normalized };
+    const initialized = ConfigValidator._initProfileStorage(sanitized);
+    const structured = ConfigValidator._migrateToProfileStorage(initialized);
+    this._config = { ...structured };
     this._rendered = false;
     this.render();
     this._resolveActiveProfile();
 
-    // Persist any migrations (background consolidation, profile storage init, etc.)
-    // back into the dashboard config.
+    // Persist any migrations (background consolidation, profile storage, etc.)
+    // back into the dashboard config. Dispatch silently — do NOT call configChanged()
+    // here because that sets _configWasChanged=true, which causes disconnectedCallback
+    // to reload the page (e.g. when the user clicks "show code editor"), preventing HA
+    // from ever persisting the migrated config.
     try {
       if (JSON.stringify(config) !== JSON.stringify(this._config)) {
-        this.configChanged(this._config);
+        const evt = new Event('config-changed', { bubbles: true, composed: true });
+        evt.detail = { config: this._config };
+        this.dispatchEvent(evt);
       }
     } catch (e) {
       // ignore
@@ -2986,10 +3119,103 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
 
   // Derives a stable id for a custom (non-built-in) background, used as a key into
   // _profile_basis when the SVG itself has no/unrecognized data-profile-id.
-  _sanitizeBackgroundFilename(url) {
-    const file = (typeof url === 'string' && url.includes('/')) ? url.split('/').pop() : (url || '');
-    const base = file.replace(/\.svg$/i, '').trim();
-    return `custom:${base.replace(/[^a-zA-Z0-9_-]/g, '_') || 'unknown'}`;
+  // Returns the snapshot key for a given profileId + SVG URL.
+  // Built-in profiles (tech/overview) return bare profileId when the filename matches.
+  // Custom SVGs return '<profileId>-<normalizedFilename>'.
+  _resolveSnapshotKey(profileId, svgUrl) {
+    const knownBuiltins = new Set(['tech', 'overview']);
+    const filename = (svgUrl || '').split('/').pop()
+      .replace(/\.svg$/i, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '_')
+      .replace(/^_+|_+$/g, '') || 'unknown';
+    if (knownBuiltins.has(profileId) && filename === profileId) return profileId;
+    return `${profileId}-${filename}`;
+  }
+
+  // Attempts to verify that data-profile-id is set on the SVG file, then notifies
+  // the user via HA persistent_notification to add it manually if needed.
+  // HA has no standard REST API for writing arbitrary files to /local/, so the
+  // actual file write isn't possible here — the notification is the fallback.
+  async _writeProfileIdToSvg(svgUrl, profileId) {
+    if (!svgUrl || !profileId || !this._hass) return;
+    const filename = svgUrl.split('/').pop() || 'custom.svg';
+
+    try {
+      const response = await fetch(svgUrl);
+      if (response.ok) {
+        const text = await response.text();
+        const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
+        const svgEl = doc.querySelector('svg');
+        if (svgEl && svgEl.getAttribute('data-profile-id') === profileId) {
+          return; // Attribute already correct — nothing to do
+        }
+      }
+    } catch (e) {
+      // Fetch failed — still proceed to notify
+    }
+
+    // Notify the user to add the attribute manually
+    const message = `Add \`data-profile-id="${profileId}"\` to the root \`<svg>\` element of \`${filename}\`. This prevents the layout-type prompt from appearing each time this background is selected.`;
+    try {
+      this._hass.callService('persistent_notification', 'create', {
+        title: 'Advanced Energy Card — SVG Update Needed',
+        message,
+        notification_id: `aec_profile_id_${filename.replace(/[^a-z0-9]/gi, '_')}`,
+      });
+    } catch (e) {
+      // ignore notification failure
+    }
+  }
+
+  // Fetches the current background SVG, applies all pending migrations in-memory,
+  // and triggers a browser download of the migrated file. Called from the editor UI
+  // when the user clicks "Download Migrated SVG".
+  async _downloadMigratedSvg() {
+    const svgUrl = this._config && this._config.background;
+    if (!svgUrl) return;
+    try {
+      await SVG_MIGRATOR.triggerDownload(svgUrl);
+      if (this._hass) {
+        try {
+          const filename = (svgUrl.split('/').pop() || 'custom.svg').replace(/[?#].*$/, '');
+          this._hass.callService('persistent_notification', 'create', {
+            title: 'Advanced Energy Card — SVG Downloaded',
+            message:
+              `\`${filename}\` has been downloaded with the latest attribute updates. ` +
+              `Copy it to your HA server to replace the original, then **clear your browser cache** ` +
+              `and force-reload the page (Ctrl+Shift+R / Cmd+Shift+R) to pick up the changes.`,
+            notification_id: 'aec_svg_migration_downloaded',
+          });
+        } catch (_) { /* ignore */ }
+      }
+    } catch (e) {
+      if (this._hass) {
+        try {
+          this._hass.callService('persistent_notification', 'create', {
+            title: 'Advanced Energy Card — SVG Download Failed',
+            message: `Could not download migrated SVG: ${e.message}`,
+            notification_id: 'aec_svg_migration_download_error',
+          });
+        } catch (_) { /* ignore */ }
+      }
+    }
+  }
+
+  // Returns true if the currently configured background SVG has any applicable migrations.
+  // Fetches the SVG — keep calls infrequent (e.g. only when the editor first opens).
+  async _svgNeedsMigration() {
+    const svgUrl = this._config && this._config.background;
+    if (!svgUrl) return false;
+    try {
+      const response = await fetch(svgUrl);
+      if (!response.ok) return false;
+      const text = await response.text();
+      const doc = new DOMParser().parseFromString(text, 'image/svg+xml');
+      return SVG_MIGRATOR.needsMigration(doc.documentElement);
+    } catch (e) {
+      return false;
+    }
   }
 
   // Returns the set of profile-scoped field names (across all 15 sections) for the
@@ -3017,6 +3243,25 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
   // Known built-in profiles are used directly; unrecognized/custom SVGs fall back
   // to a remembered _profile_basis choice, or prompt the user to pick one.
   // Returns { schemaProfileId, snapshotKey, pendingBasis }.
+  _resolveProfileIdSync(config) {
+    const bg = (config && config.background || '').trim();
+    if (bg.endsWith('/overview.svg') || bg === 'overview.svg') return 'overview';
+    return 'tech';
+  }
+
+  _resolveSnapshotKeySync(config) {
+    const profileId = this._resolveProfileIdSync(config);
+    const bg = (config && config.background || '').trim();
+    const builtinFile = profileId + '.svg';
+    if (!bg || bg.endsWith('/' + builtinFile) || bg === builtinFile) return profileId;
+    const filename = bg.split('/').pop()
+      .replace(/\.svg$/i, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '_')
+      .replace(/^_+|_+$/g, '') || 'unknown';
+    return `${profileId}-${filename}`;
+  }
+
   _resolveProfileTarget(info, svgUrl) {
     const knownProfiles = this._svgFiles || [
       { file: 'tech.svg', profileName: 'Tech', profileId: 'tech' },
@@ -3024,59 +3269,56 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
     ];
     const knownIds = new Set(knownProfiles.map((f) => f.profileId).filter(Boolean));
 
+    // SVG has a known data-profile-id: use profileId + filename to get snapshot key
     if (info.profileId && knownIds.has(info.profileId) && PROFILE_SCHEMAS[info.profileId]) {
-      return { schemaProfileId: info.profileId, snapshotKey: info.profileId, pendingBasis: null };
+      const snapshotKey = this._resolveSnapshotKey(info.profileId, svgUrl);
+      return { schemaProfileId: info.profileId, snapshotKey, pendingBasis: null };
     }
 
-    const customId = info.profileId || this._sanitizeBackgroundFilename(svgUrl);
-    const basis = (this._config && this._config._profile_basis) ? this._config._profile_basis[customId] : undefined;
+    // Custom SVG with no data-profile-id: use normalized filename as the pending lookup key
+    const filenameKey = (svgUrl || '').split('/').pop()
+      .replace(/\.svg$/i, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9_-]/g, '_')
+      .replace(/^_+|_+$/g, '') || 'unknown';
+
+    const basis = (this._config && this._config._profile_basis)
+      ? this._config._profile_basis[filenameKey]
+      : undefined;
     if (basis && PROFILE_SCHEMAS[basis]) {
-      return { schemaProfileId: basis, snapshotKey: customId, pendingBasis: null };
+      const snapshotKey = this._resolveSnapshotKey(basis, svgUrl);
+      return { schemaProfileId: basis, snapshotKey, pendingBasis: null };
     }
-    return { schemaProfileId: 'tech', snapshotKey: customId, pendingBasis: customId };
+    return { schemaProfileId: 'tech', snapshotKey: filenameKey, pendingBasis: filenameKey };
   }
 
-  // Moves profile-scoped values from one profile "slot" to another: snapshots the
-  // outgoing profile's current top-level values into _profiles[fromSnapshotKey],
-  // then populates top-level with the incoming profile's remembered snapshot
-  // (_profiles[toSnapshotKey]) or, on first activation, SEED_DEFAULTS[toProfileId]
-  // (keeping current values for any field shared between the two profiles).
+  // Switches the active profile slot. In Option A, profile values always live in
+  // _profiles[snapshotKey] — nothing moves to/from the top level.
+  // If the target snapshot doesn't exist yet, it is seeded from SEED_DEFAULTS[toProfileId]
+  // with shared fields copied from the outgoing snapshot.
   _switchProfileValues(fromProfileId, fromSnapshotKey, toProfileId, toSnapshotKey) {
-    const config = { ...this._config };
-    const profiles = { ...(config._profiles || {}) };
-
     if (fromProfileId === toProfileId && fromSnapshotKey === toSnapshotKey) {
-      config._profiles = profiles;
-      this._config = config;
       return;
     }
 
-    const fromFields = this._getProfileFieldNames(fromProfileId);
-    const toFields = this._getProfileFieldNames(toProfileId);
+    const config = { ...this._config };
+    const profiles = { ...(config._profiles || {}) };
 
-    const snapshot = {};
-    fromFields.forEach((name) => {
-      if (Object.prototype.hasOwnProperty.call(config, name)) {
-        snapshot[name] = config[name];
-      }
-    });
-    profiles[fromSnapshotKey] = snapshot;
-    fromFields.forEach((name) => { delete config[name]; });
+    // Seed the incoming snapshot if it hasn't been visited before
+    if (!profiles[toSnapshotKey] || Object.keys(profiles[toSnapshotKey]).length === 0) {
+      const fromSnapshot = profiles[fromSnapshotKey] || {};
+      const fromFields = this._getProfileFieldNames(fromProfileId);
+      const toFields = this._getProfileFieldNames(toProfileId);
 
-    let restoreSource = profiles[toSnapshotKey];
-    if (!restoreSource) {
-      restoreSource = { ...(SEED_DEFAULTS[toProfileId] || {}) };
+      const newSnapshot = { ...(SEED_DEFAULTS[toProfileId] || {}) };
+      // Copy values shared between both profile schemas from the outgoing snapshot
       toFields.forEach((name) => {
-        if (fromFields.has(name) && Object.prototype.hasOwnProperty.call(snapshot, name)) {
-          restoreSource[name] = snapshot[name];
+        if (fromFields.has(name) && Object.prototype.hasOwnProperty.call(fromSnapshot, name)) {
+          newSnapshot[name] = fromSnapshot[name];
         }
       });
+      profiles[toSnapshotKey] = newSnapshot;
     }
-    toFields.forEach((name) => {
-      if (Object.prototype.hasOwnProperty.call(restoreSource, name)) {
-        config[name] = restoreSource[name];
-      }
-    });
 
     config._profiles = profiles;
     this._config = config;
@@ -3177,22 +3419,25 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
       radio.style.cursor = 'pointer';
       radio.addEventListener('change', () => {
         if (!radio.checked || !this._pendingProfileBasis) return;
-        const customId = this._pendingProfileBasis;
+        const pendingKey = this._pendingProfileBasis;  // normalized filename key
         const chosenBasis = profileEntry.profileId;
+        const svgUrl = (this._config && this._config.background) || '';
+        const basisSnapshotKey = this._resolveSnapshotKey(chosenBasis, svgUrl);
 
-        const from = this._pendingSwitchFrom || { profileId: chosenBasis, snapshotKey: customId };
-        this._switchProfileValues(from.profileId, from.snapshotKey, chosenBasis, customId);
+        const from = this._pendingSwitchFrom || { profileId: chosenBasis, snapshotKey: pendingKey };
+        this._switchProfileValues(from.profileId, from.snapshotKey, chosenBasis, basisSnapshotKey);
 
         const newConfig = { ...this._config };
-        newConfig._profile_basis = { ...(newConfig._profile_basis || {}), [customId]: chosenBasis };
+        newConfig._profile_basis = { ...(newConfig._profile_basis || {}), [pendingKey]: chosenBasis };
         this._config = newConfig;
         this._activeProfileId = chosenBasis;
-        this._activeSnapshotKey = customId;
+        this._activeSnapshotKey = basisSnapshotKey;
         this._pendingProfileBasis = null;
         this._pendingSwitchFrom = null;
         this._rendered = false;
         this.render();
         this._debouncedConfigChanged(newConfig, true);
+        this._writeProfileIdToSvg(svgUrl, chosenBasis);
       });
       label.appendChild(radio);
 
@@ -3207,12 +3452,19 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
   }
 
   configChanged(newConfig) {
+    this._configWasChanged = true;
     const event = new Event('config-changed', {
       bubbles: true,
       composed: true,
     });
     event.detail = { config: newConfig };
     this.dispatchEvent(event);
+  }
+
+  disconnectedCallback() {
+    if (this._configWasChanged) {
+      window.location.reload();
+    }
   }
 
   _debouncedConfigChanged(newConfig, immediate = false) {
@@ -3423,13 +3675,13 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
     const divider = document.createElement('div');
     divider.setAttribute('role', 'separator');
     divider.style.display = 'block';
-    divider.style.width = '100%';
-    divider.style.minWidth = '100%';
-    divider.style.borderTop = '2px solid var(--divider-color, #ccc)';
+    divider.style.width = '80%';
+    divider.style.marginLeft = 'auto';
+    divider.style.marginRight = 'auto';
+    divider.style.borderTop = '1px solid var(--divider-color, #ccc)';
     divider.style.height = '0';
-    divider.style.margin = '1em 0';
+    divider.style.margin = '1em auto';
     divider.style.boxShadow = 'none';
-    divider.style.alignSelf = 'stretch';
     return divider;
   }
 
@@ -3615,6 +3867,17 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
       container.appendChild(this._createStandardField(languageField, value));
     }
 
+    const backgroundField = {
+      name: 'initial_background',
+      label: (fields.initial_background && fields.initial_background.label) || 'Which background layout do you want to use?',
+      helper: (fields.initial_background && fields.initial_background.helper) || 'Tech shows detailed power flows with individual elements. Overview shows a simplified combined energy summary.'
+    };
+    const backgroundValue = data.initial_background !== undefined && data.initial_background !== null ? String(data.initial_background) : '';
+    container.appendChild(this._createRadioGroupField(backgroundField, backgroundValue, [
+      { value: 'tech', label: options.initial_background_tech || 'Tech' },
+      { value: 'overview', label: options.initial_background_overview || 'Overview' }
+    ]));
+
     const yesLabel = options.initial_yes || 'Yes';
     const noLabel = options.initial_no || 'No';
     const inverter1Label = options.initial_inverters_1 || '1';
@@ -3712,18 +3975,35 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
       ]));
     }
 
-    const hasWindmillField = {
-      name: 'initial_has_windmill',
-      label: (fields.initial_has_windmill && fields.initial_has_windmill.label) || 'Do you have a Windmill?',
-      helper: (fields.initial_has_windmill && fields.initial_has_windmill.helper) || ''
-    };
     const hasWindmillValue = data.initial_has_windmill !== undefined && data.initial_has_windmill !== null
       ? String(data.initial_has_windmill)
       : '';
-    container.appendChild(this._createRadioGroupField(hasWindmillField, hasWindmillValue, [
-      { value: 'yes', label: yesLabel },
-      { value: 'no', label: noLabel }
-    ]));
+    if (backgroundValue !== 'overview') {
+      const hasWindmillField = {
+        name: 'initial_has_windmill',
+        label: (fields.initial_has_windmill && fields.initial_has_windmill.label) || 'Do you have a Windmill?',
+        helper: (fields.initial_has_windmill && fields.initial_has_windmill.helper) || ''
+      };
+      container.appendChild(this._createRadioGroupField(hasWindmillField, hasWindmillValue, [
+        { value: 'yes', label: yesLabel },
+        { value: 'no', label: noLabel }
+      ]));
+    }
+
+    const hasSunMoonValue = data.initial_has_sun_moon !== undefined && data.initial_has_sun_moon !== null
+      ? String(data.initial_has_sun_moon)
+      : '';
+    if (backgroundValue === 'overview') {
+      const hasSunMoonField = {
+        name: 'initial_has_sun_moon',
+        label: (fields.initial_has_sun_moon && fields.initial_has_sun_moon.label) || 'Do you want to enable the Sun/Moon display?',
+        helper: (fields.initial_has_sun_moon && fields.initial_has_sun_moon.helper) || ''
+      };
+      container.appendChild(this._createRadioGroupField(hasSunMoonField, hasSunMoonValue, [
+        { value: 'yes', label: yesLabel },
+        { value: 'no', label: noLabel }
+      ]));
+    }
 
     const hasEvField = {
       name: 'initial_has_ev',
@@ -4154,7 +4434,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
     // Custom path text input — only visible when "Other" is selected
     const customInput = document.createElement('input');
     customInput.type = 'text';
-    customInput.value = isOther ? (value || '') : '';
+    customInput.value = isOther ? (value || '') : '/local/community/advanced-energy-card/';
     customInput.placeholder = '/local/community/advanced-energy-card/my-background.svg';
     customInput.style.display = isOther ? 'block' : 'none';
     customInput.style.padding = '8px 12px';
@@ -4219,10 +4499,22 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
       this._config = {};
     }
     const newConfig = { ...this._config };
-    if (value === '' || value === null || value === undefined) {
-      delete newConfig[fieldName];
+    if (GENERAL_CONFIG_KEYS.has(fieldName)) {
+      if (value === '' || value === null || value === undefined) {
+        delete newConfig[fieldName];
+      } else {
+        newConfig[fieldName] = value;
+      }
     } else {
-      newConfig[fieldName] = value;
+      const key = this._activeSnapshotKey || this._resolveSnapshotKeySync(newConfig);
+      newConfig._profiles = { ...(newConfig._profiles || {}) };
+      const snapshot = { ...(newConfig._profiles[key] || {}) };
+      if (value === '' || value === null || value === undefined) {
+        delete snapshot[fieldName];
+      } else {
+        snapshot[fieldName] = value;
+      }
+      newConfig._profiles[key] = snapshot;
     }
     if (fieldName === 'initial_has_pv' && String(value) !== 'yes') {
       delete newConfig.initial_inverters;
@@ -4236,11 +4528,23 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
     if (fieldName === 'initial_has_ev' && String(value) !== 'yes') {
       delete newConfig.initial_ev_count;
     }
+    if (fieldName === 'initial_has_sun_moon') {
+      newConfig.sun_moon_display = String(value) === 'yes' ? 'sun-moon' : 'off';
+    }
+    if (fieldName === 'initial_background' && value) {
+      const bgPaths = {
+        tech: '/hacsfiles/advanced-energy-card/tech.svg',
+        overview: '/hacsfiles/advanced-energy-card/overview.svg'
+      };
+      if (bgPaths[value]) {
+        newConfig.background = bgPaths[value];
+      }
+    }
     this._config = newConfig;
-    if (fieldName === 'initial_configuration' || fieldName === 'initial_has_pv' || fieldName === 'initial_inverters' || fieldName === 'initial_has_battery' || fieldName === 'initial_battery_count' || fieldName === 'initial_has_grid' || fieldName === 'initial_has_windmill' || fieldName === 'initial_has_ev' || fieldName === 'initial_ev_count' || fieldName === 'language') {
+    if (fieldName === 'initial_configuration' || fieldName === 'initial_background' || fieldName === 'initial_has_pv' || fieldName === 'initial_inverters' || fieldName === 'initial_has_battery' || fieldName === 'initial_battery_count' || fieldName === 'initial_has_grid' || fieldName === 'initial_has_windmill' || fieldName === 'initial_has_sun_moon' || fieldName === 'initial_has_ev' || fieldName === 'initial_ev_count' || fieldName === 'language') {
       this.render();
     }
-    if (fieldName === 'background') {
+    if (fieldName === 'background' || fieldName === 'initial_background') {
       this._handleBackgroundChange();
     }
     this._debouncedConfigChanged(newConfig, Boolean(immediate));
@@ -4270,11 +4574,12 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
         .filter((f) => f && f.name && f.selector && f.selector.entity)
         .map((f) => f.name)
       : [];
+    const prevConfigFlat = this._configWithDefaults();
     const forceImmediate = Boolean(rawObj) && entitySelectorKeys.some((k) => {
       if (!Object.prototype.hasOwnProperty.call(rawObj, k)) {
         return false;
       }
-      const prev = this._config ? normalizeEntityId(this._config[k]) : '';
+      const prev = normalizeEntityId(prevConfigFlat[k]);
       const next = normalizeEntityId(rawObj[k]);
       return next !== prev;
     });
@@ -4287,27 +4592,48 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
 
     const prevDisplayUnit = (this._config && this._config.display_unit ? this._config.display_unit : this._defaults.display_unit || 'kW').toUpperCase();
     const newConfig = { ...this._config };
+
+    // Build a mutable copy of the active profile snapshot for profile-scoped fields
+    const activeKey = this._activeSnapshotKey || this._resolveSnapshotKeySync(newConfig);
+    const profileSnapshot = { ...(newConfig._profiles && newConfig._profiles[activeKey] || {}) };
+    let profileChanged = false;
+
     schema.forEach((field) => {
       if (!field.name) {
         return;
       }
       const fieldValue = value[field.name];
       const defaultVal = field.default !== undefined ? field.default : this._defaults[field.name];
-      if (
-        fieldValue === '' ||
-        fieldValue === null ||
-        fieldValue === undefined ||
-        (defaultVal !== undefined && fieldValue === defaultVal)
-      ) {
-        delete newConfig[field.name];
+      const isEmpty = fieldValue === '' || fieldValue === null || fieldValue === undefined;
+      const isDefault = !isEmpty && defaultVal !== undefined && fieldValue === defaultVal;
+
+      if (GENERAL_CONFIG_KEYS.has(field.name)) {
+        if (isEmpty || isDefault) {
+          delete newConfig[field.name];
+        } else {
+          newConfig[field.name] = fieldValue;
+        }
       } else {
-        newConfig[field.name] = fieldValue;
+        if (isEmpty) {
+          if (field.name in profileSnapshot) {
+            delete profileSnapshot[field.name];
+            profileChanged = true;
+          }
+        } else {
+          profileSnapshot[field.name] = fieldValue;
+          profileChanged = true;
+        }
       }
     });
 
     const nextDisplayUnit = (newConfig.display_unit || prevDisplayUnit).toUpperCase();
     if (nextDisplayUnit !== prevDisplayUnit) {
-      this._convertThresholdValues(newConfig, prevDisplayUnit, nextDisplayUnit);
+      this._convertThresholdValues(profileSnapshot, prevDisplayUnit, nextDisplayUnit);
+      profileChanged = true;
+    }
+
+    if (profileChanged) {
+      newConfig._profiles = { ...(newConfig._profiles || {}), [activeKey]: profileSnapshot };
     }
 
     this._config = newConfig;
@@ -4321,7 +4647,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
     }
   }
 
-  _convertThresholdValues(config, fromUnit, toUnit) {
+  _convertThresholdValues(snapshot, fromUnit, toUnit) {
     const normalizeUnit = (unit) => (unit || 'kW').toUpperCase();
     const sourceUnit = normalizeUnit(fromUnit);
     const targetUnit = normalizeUnit(toUnit);
@@ -4348,12 +4674,8 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
       'grid2_threshold_critical'
     ];
     fieldsToConvert.forEach((name) => {
-      const hasOwn = Object.prototype.hasOwnProperty.call(config, name);
-      const currentValue = hasOwn ? config[name] : (this._config ? this._config[name] : undefined);
+      const currentValue = snapshot[name];
       if (currentValue === undefined || currentValue === null || currentValue === '') {
-        if (hasOwn) {
-          config[name] = currentValue;
-        }
         return;
       }
       const numeric = Number(currentValue);
@@ -4363,7 +4685,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
       const converted = numeric * factor;
       const precision = factor < 1 ? 3 : 0;
       const rounded = precision > 0 ? Number(converted.toFixed(precision)) : Math.round(converted);
-      config[name] = rounded;
+      snapshot[name] = rounded;
     });
   }
 
@@ -4385,6 +4707,7 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
         configWithDefaults.initial_battery_count,
         configWithDefaults.initial_has_grid,
         configWithDefaults.initial_has_windmill,
+        configWithDefaults.initial_has_sun_moon,
         configWithDefaults.initial_has_ev,
         configWithDefaults.initial_ev_count
       );
@@ -4405,6 +4728,26 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
       .filter((section) => section.id !== 'initialConfig' || showInitialConfig);
 
     const newCache = new Map();
+    // SVG migration notice — shown when the current background SVG needed in-memory migration.
+    const bgUrl = this._config && this._config.background;
+    if (bgUrl && SVG_MIGRATION_PENDING.has(bgUrl)) {
+      const notice = document.createElement('div');
+      notice.className = 'svg-migration-notice';
+      const filename = (bgUrl.split('/').pop() || 'custom.svg').replace(/[?#].*$/, '');
+      notice.innerHTML = `
+        <div class="svg-migration-text">
+          <strong>SVG update required:</strong> <code>${filename}</code> uses older attribute
+          patterns that have been automatically fixed in memory. Download the updated version
+          and replace the original file on your HA server to make it permanent.
+        </div>
+        <button class="svg-migration-btn">Download Migrated SVG</button>
+      `;
+      notice.querySelector('.svg-migration-btn').addEventListener('click', () => {
+        this._downloadMigratedSvg();
+      });
+      container.appendChild(notice);
+    }
+
     sections.forEach((section) => {
       let element;
       if (section.id === 'profileBasis') {
@@ -4440,6 +4783,35 @@ export class AdvancedEnergyCardEditor extends HTMLElement {
         gap: 12px;
         padding: 16px;
       }
+      .svg-migration-notice {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 14px;
+        border: 1px solid var(--warning-color, #ff9800);
+        border-radius: 8px;
+        background: color-mix(in srgb, var(--warning-color, #ff9800) 10%, transparent);
+        font-size: 0.9em;
+      }
+      .svg-migration-text { flex: 1; }
+      .svg-migration-text code {
+        font-size: 0.9em;
+        background: var(--code-editor-background-color, rgba(0,0,0,0.08));
+        padding: 1px 4px;
+        border-radius: 3px;
+      }
+      .svg-migration-btn {
+        flex-shrink: 0;
+        padding: 6px 14px;
+        border: none;
+        border-radius: 6px;
+        background: var(--primary-color);
+        color: var(--text-primary-color, #fff);
+        font-size: 0.85em;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+      .svg-migration-btn:hover { opacity: 0.85; }
       details.section {
         border: 1px solid var(--divider-color);
         border-radius: 10px;

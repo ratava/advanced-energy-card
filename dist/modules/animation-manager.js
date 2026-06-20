@@ -100,12 +100,13 @@ export class AnimationManager {
     const animationStyle = this.card._animationStyle || FLOW_STYLE_DEFAULT;
     let pattern = FLOW_STYLE_PATTERNS[animationStyle] || FLOW_STYLE_PATTERNS[FLOW_STYLE_DEFAULT];
     const useArrows = animationStyle === 'arrows';
+    const useElectrons = animationStyle === 'electrons';
     const arrowGroup = useArrows && this.card._domRefs && this.card._domRefs.arrows ? this.card._domRefs.arrows[flowKey] : null;
     const arrowShapes = useArrows && this.card._domRefs && this.card._domRefs.arrowShapes ? this.card._domRefs.arrowShapes[flowKey] : null;
     const dashReferenceCycle = FLOW_STYLE_PATTERNS.dashes && Number.isFinite(FLOW_STYLE_PATTERNS.dashes.cycle)
       ? FLOW_STYLE_PATTERNS.dashes.cycle
       : 32;
-    const pathLength = useArrows ? this._getFlowPathLength(flowKey) : 0;
+    const pathLength = (useArrows || useElectrons) ? this._getFlowPathLength(flowKey) : 0;
     let resolvedPathLength = pathLength;
     if (!Number.isFinite(resolvedPathLength) || resolvedPathLength <= 0) {
       resolvedPathLength = this._getFlowPathLength(flowKey);
@@ -122,7 +123,7 @@ export class AnimationManager {
     const fluidFlowSpeedScale = animationStyle === 'fluid_flow' ? 0.25 : 1;
     const baseLoopRate = this._computeFlowLoopRate(speedMagnitude * fluidFlowSpeedScale);
     let loopRate = baseLoopRate;
-    if (useArrows) {
+    if (useArrows || useElectrons) {
       if (Number.isFinite(resolvedPathLength) && resolvedPathLength > 0) {
         loopRate = baseLoopRate * (dashReferenceCycle / resolvedPathLength);
       } else {
@@ -266,7 +267,7 @@ export class AnimationManager {
     // width ≈ 677 units. Custom SVGs (e.g. 2525-wide) need proportionally larger values.
     // Paths that already have a transform (e.g. 3.78× scale) are handled automatically
     // because getScreenCTM() reflects the full chain including element transforms.
-    if (pattern && animationStyle !== 'arrows') {
+    if (pattern && animationStyle !== 'arrows' && animationStyle !== 'electrons') {
       try {
         const _scaleTarget = element.tagName === 'g' ? (element.querySelector('path') || element) : element;
         const _pctm = (typeof _scaleTarget.getScreenCTM === 'function') ? _scaleTarget.getScreenCTM() : null;
@@ -338,7 +339,11 @@ export class AnimationManager {
         // Smooth corners and ends on polyline-like path segments
         target.style.strokeLinecap = 'round';
         target.style.strokeLinejoin = 'round';
-        if (useArrows) {
+        if (useElectrons) {
+          target.style.strokeDasharray = '';
+          target.style.strokeDashoffset = '';
+          target.style.strokeOpacity = '0';
+        } else if (useArrows) {
           target.style.strokeDasharray = '';
           target.style.strokeDashoffset = '';
           target.style.strokeOpacity = '';
@@ -535,6 +540,10 @@ export class AnimationManager {
         overlayPaths: [],
         maskId: null,
         maskPaths: [],
+        electronGroup: null,
+        electronCirclesPerPath: [],
+        electronSpeedMultiplier: 1,
+        electronTime: 0,
         dashCycle: pattern && pattern.cycle ? pattern.cycle : 24,
         speedMagnitude,
         loopRate,
@@ -562,6 +571,16 @@ export class AnimationManager {
           loopRate,
           direction: effectiveDirection
         });
+      }
+
+      if (useElectrons) {
+        const eg = this._ensureElectronGroup(flowKey, element, strokeColor);
+        newEntry.electronGroup = eg.group;
+        newEntry.electronCirclesPerPath = eg.circlesPerPath;
+        newEntry.electronSpeedMultiplier = this._computeElectronSpeedMultiplier(flowState);
+        if (newEntry.electronGroup) {
+          newEntry.electronGroup.style.opacity = isActive ? '1' : '0';
+        }
       }
 
       newEntry.tickerCallback = this._createFlowTicker(newEntry);
@@ -647,6 +666,21 @@ export class AnimationManager {
         entry.overlayPaths = [];
         entry.maskId = null;
         entry.maskPaths = [];
+      }
+      if (useElectrons) {
+        if (!entry.electronGroup || entry.color !== strokeColor) {
+          const eg = this._ensureElectronGroup(flowKey, element, strokeColor);
+          entry.electronGroup = eg.group;
+          entry.electronCirclesPerPath = eg.circlesPerPath;
+        }
+        entry.electronSpeedMultiplier = this._computeElectronSpeedMultiplier(flowState);
+        if (entry.electronGroup) {
+          entry.electronGroup.style.opacity = isActive ? '1' : '0';
+        }
+      } else if (entry.electronGroup) {
+        this._removeElectronGroup(flowKey);
+        entry.electronGroup = null;
+        entry.electronCirclesPerPath = [];
       }
       if (!entry.motionState) {
         entry.motionState = { phase: Math.random(), distance: 0 };
@@ -1012,6 +1046,19 @@ export class AnimationManager {
     if (entry.arrowShapes && entry.arrowShapes.length) {
       entry.arrowShapes.forEach((shape) => shape.removeAttribute('transform'));
     }
+    if (entry.electronGroup) {
+      try {
+        if (typeof entry.electronGroup.remove === 'function') {
+          entry.electronGroup.remove();
+        } else if (entry.electronGroup.parentNode) {
+          entry.electronGroup.parentNode.removeChild(entry.electronGroup);
+        }
+      } catch (e) {
+        // ignore
+      }
+      entry.electronGroup = null;
+      entry.electronCirclesPerPath = [];
+    }
     entry.speedMagnitude = 0;
     entry.loopRate = 0;
   }
@@ -1102,6 +1149,14 @@ export class AnimationManager {
           this._positionArrowOnPath(path, distance, shape, directionSign, entry.arrowScale);
         });
       });
+    } else if (entry.mode === 'electrons' && entry.electronGroup && entry.electronCirclesPerPath) {
+      const directionValue = entry.directionState && Number.isFinite(entry.directionState.value)
+        ? entry.directionState.value : (entry.direction || 1);
+      const directionSign = directionValue >= 0 ? 1 : -1;
+      const distance = Math.abs((entry.motionState && Number.isFinite(entry.motionState.distance)) ? entry.motionState.distance : 0);
+      const geometry = this._getFlowGeometryPaths(entry.element);
+      this._positionElectronsOnPath(geometry, entry.electronCirclesPerPath, distance, directionSign, entry.electronTime || 0);
+      entry.electronGroup.style.opacity = entry.active ? '1' : '0';
     } else if (entry.mode !== 'arrows') {
       const cycle = entry.dashCycle || 24;
       const directionValue = entry.directionState && Number.isFinite(entry.directionState.value)
@@ -1190,9 +1245,13 @@ export class AnimationManager {
         entry.motionState = { phase: 0, distance: 0 };
       }
 
-      if (entry.mode === 'arrows') {
+      if (entry.mode === 'electrons') {
+        entry.electronTime = time;
+      }
+      if (entry.mode === 'arrows' || entry.mode === 'electrons') {
         const speedPx = Number(entry.arrowSpeedPx) || 0;
-        const delta = deltaTime * speedPx * (directionValue >= 0 ? 1 : -1);
+        const electronMult = entry.mode === 'electrons' ? (Number(entry.electronSpeedMultiplier) || 1) : 1;
+        const delta = deltaTime * speedPx * electronMult * (directionValue >= 0 ? 1 : -1);
         if (!Number.isFinite(delta) || delta === 0) {
           return;
         }
@@ -1431,6 +1490,207 @@ export class AnimationManager {
       return Array.from(element.querySelectorAll('path')).filter((p) => typeof p.getTotalLength === 'function');
     }
     return [];
+  }
+
+  // ----------------------------------------------------------
+  // ELECTRON ANIMATION
+  // ----------------------------------------------------------
+
+  _getElectronGradient(svgRoot, flowKey, color) {
+    if (!svgRoot) return null;
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    const safeKey = String(flowKey).replace(/[^a-z0-9_-]/gi, '_');
+    const gradId = `aec-egl-grad-${safeKey}`;
+    let defs = svgRoot.querySelector('defs');
+    if (!defs) {
+      defs = document.createElementNS(SVG_NS, 'defs');
+      svgRoot.insertBefore(defs, svgRoot.firstChild);
+    }
+    const existing = defs.querySelector(`#${gradId}`);
+    if (existing) existing.parentNode.removeChild(existing);
+    const grad = document.createElementNS(SVG_NS, 'radialGradient');
+    grad.setAttribute('id', gradId);
+    grad.setAttribute('cx', '50%');
+    grad.setAttribute('cy', '50%');
+    grad.setAttribute('r', '50%');
+    grad.setAttribute('gradientUnits', 'objectBoundingBox');
+    [
+      { offset: '0%',   stopColor: 'white',   stopOpacity: '0.95' },
+      { offset: '30%',  stopColor: 'white',   stopOpacity: '0.6'  },
+      { offset: '55%',  stopColor: color || '#00ffff', stopOpacity: '0.75' },
+      { offset: '85%',  stopColor: color || '#00ffff', stopOpacity: '0.3'  },
+      { offset: '100%', stopColor: color || '#00ffff', stopOpacity: '0'    },
+    ].forEach(({ offset, stopColor, stopOpacity }) => {
+      const stop = document.createElementNS(SVG_NS, 'stop');
+      stop.setAttribute('offset', offset);
+      stop.setAttribute('stop-color', stopColor);
+      stop.setAttribute('stop-opacity', stopOpacity);
+      grad.appendChild(stop);
+    });
+    defs.appendChild(grad);
+    return gradId;
+  }
+
+  _getElectronFilters(svgRoot, flowKey) {
+    if (!svgRoot) return [];
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    const blurs = [1.5, 2.5, 4.0];
+    const safeKey = String(flowKey).replace(/[^a-z0-9_-]/gi, '_');
+    let defs = svgRoot.querySelector('defs');
+    if (!defs) {
+      defs = document.createElementNS(SVG_NS, 'defs');
+      svgRoot.insertBefore(defs, svgRoot.firstChild);
+    }
+    return blurs.map((blur, i) => {
+      const id = `aec-egl-${safeKey}-${i}`;
+      if (!defs.querySelector(`#${id}`)) {
+        const filter = document.createElementNS(SVG_NS, 'filter');
+        filter.setAttribute('id', id);
+        filter.setAttribute('x', '-100%');
+        filter.setAttribute('y', '-100%');
+        filter.setAttribute('width', '300%');
+        filter.setAttribute('height', '300%');
+        const blurEl = document.createElementNS(SVG_NS, 'feGaussianBlur');
+        blurEl.setAttribute('in', 'SourceGraphic');
+        blurEl.setAttribute('stdDeviation', String(blur));
+        blurEl.setAttribute('result', 'blur');
+        const merge = document.createElementNS(SVG_NS, 'feMerge');
+        const n1 = document.createElementNS(SVG_NS, 'feMergeNode');
+        n1.setAttribute('in', 'blur');
+        const n2 = document.createElementNS(SVG_NS, 'feMergeNode');
+        n2.setAttribute('in', 'SourceGraphic');
+        merge.appendChild(n1);
+        merge.appendChild(n2);
+        filter.appendChild(blurEl);
+        filter.appendChild(merge);
+        defs.appendChild(filter);
+      }
+      return id;
+    });
+  }
+
+  _ensureElectronGroup(flowKey, element, color) {
+    const SVG_NS = 'http://www.w3.org/2000/svg';
+    if (!flowKey || !element) return { group: null, circlesPerPath: [] };
+    this._removeElectronGroup(flowKey);
+    const svgRoot = element.ownerSVGElement || (element.tagName === 'svg' ? element : null);
+    const filters = this._getElectronFilters(svgRoot, flowKey);
+    const gradId = this._getElectronGradient(svgRoot, flowKey, color);
+    const fillValue = gradId ? `url(#${gradId})` : (color || '#00ffff');
+    const group = document.createElementNS(SVG_NS, 'g');
+    group.setAttribute('data-electron-flow', String(flowKey));
+    group.style.pointerEvents = 'none';
+    const geometry = this._getFlowGeometryPaths(element);
+    const baseSpacing = Math.max(10, Number(this.card._electronSpacing) || 35);
+    const spacingVariance = Math.max(0, Math.min(1, Number(this.card._electronSpacingVariance) || 0.4));
+    const baseSpread = Math.max(0, Number(this.card._electronSpread) || 8);
+    const basePulseRate = Math.max(0.1, Number(this.card._electronPulseRate) || 2.0);
+    const baseSize = Math.max(0.5, Number(this.card._electronSize) || 3.5);
+    const sizeVariance = Math.max(0, Number(this.card._electronSizeVariance) || 1.0);
+    const circlesPerPath = geometry.map((path) => {
+      let pathLength = 0;
+      try { pathLength = path.getTotalLength(); } catch (e) { /* ignore */ }
+      const count = Math.max(3, Math.floor(pathLength / baseSpacing));
+      return Array.from({ length: count }, (_, i) => {
+        const r = Math.max(0.5, baseSize + (Math.random() * 2 - 1) * sizeVariance);
+        const opacity = 0.55 + Math.random() * 0.45;
+        const filterIdx = Math.floor(Math.random() * Math.max(1, filters.length));
+        const circle = document.createElementNS(SVG_NS, 'circle');
+        circle.setAttribute('r', String(+(r.toFixed(2))));
+        circle.setAttribute('fill', fillValue);
+        circle.setAttribute('opacity', String(+(opacity.toFixed(3))));
+        circle.setAttribute('cx', '0');
+        circle.setAttribute('cy', '0');
+        if (filters[filterIdx]) {
+          circle.setAttribute('filter', `url(#${filters[filterIdx]})`);
+        }
+        group.appendChild(circle);
+        const idealOffset = i * baseSpacing;
+        const jitter = spacingVariance * baseSpacing * (Math.random() * 2 - 1);
+        const phaseOffset = pathLength > 0 ? ((idealOffset + jitter) % pathLength + pathLength) % pathLength : 0;
+        const spreadOffset = baseSpread > 0 ? (Math.random() * 2 - 1) * baseSpread : 0;
+        const pulsePhase = Math.random() * Math.PI * 2;
+        const pulseRate = basePulseRate * (0.7 + Math.random() * 0.6);
+        return { circle, baseR: r, baseOpacity: opacity, phaseOffset, spreadOffset, pulsePhase, pulseRate };
+      });
+    });
+    const insertParent = element.parentNode;
+    if (insertParent) {
+      insertParent.insertBefore(group, element.nextSibling);
+    } else if (svgRoot) {
+      svgRoot.appendChild(group);
+    }
+    return { group, circlesPerPath };
+  }
+
+  _removeElectronGroup(flowKey) {
+    if (!flowKey) return;
+    const svgRoot = this.card._domRefs && this.card._domRefs.svgRoot ? this.card._domRefs.svgRoot : null;
+    if (!svgRoot) return;
+    const key = String(flowKey);
+    let el = null;
+    try {
+      const escapeFn = (typeof CSS !== 'undefined' && CSS.escape) ? CSS.escape : (v) => v;
+      el = svgRoot.querySelector(`[data-electron-flow="${escapeFn(key)}"]`);
+    } catch (e) {
+      el = svgRoot.querySelector(`[data-electron-flow="${key}"]`);
+    }
+    if (el && el.parentNode) {
+      el.parentNode.removeChild(el);
+    }
+  }
+
+  _positionElectronsOnPath(geometry, circlesPerPath, distance, directionSign, time) {
+    if (!geometry || !circlesPerPath) return;
+    const pulseEnabled = this.card._electronPulse !== false;
+    geometry.forEach((path, pathIdx) => {
+      const circles = circlesPerPath[pathIdx];
+      if (!circles || !circles.length) return;
+      let pathLength = 0;
+      try { pathLength = path.getTotalLength(); } catch (e) { /* ignore */ }
+      if (!pathLength) return;
+      circles.forEach((electron) => {
+        const { circle, baseR, baseOpacity, phaseOffset, spreadOffset, pulsePhase, pulseRate } = electron;
+        const raw = directionSign >= 0
+          ? distance + phaseOffset
+          : pathLength - (distance + phaseOffset);
+        const offset = ((raw % pathLength) + pathLength) % pathLength;
+        let point;
+        try { point = path.getPointAtLength(offset); } catch (e) { return; }
+        let cx = point.x;
+        let cy = point.y;
+        if (spreadOffset !== 0) {
+          const aheadOffset = (offset + 1) % pathLength;
+          let ahead;
+          try { ahead = path.getPointAtLength(aheadOffset); } catch (e) { ahead = null; }
+          if (ahead) {
+            const dx = ahead.x - point.x;
+            const dy = ahead.y - point.y;
+            const len = Math.sqrt(dx * dx + dy * dy) || 1;
+            cx += (-dy / len) * spreadOffset;
+            cy += (dx / len) * spreadOffset;
+          }
+        }
+        circle.setAttribute('cx', String(+cx.toFixed(3)));
+        circle.setAttribute('cy', String(+cy.toFixed(3)));
+        if (pulseEnabled && baseR && baseOpacity) {
+          const pulse = 0.5 + 0.5 * Math.sin(time * pulseRate + pulsePhase);
+          circle.setAttribute('r', String(+(baseR * (0.7 + 0.3 * pulse)).toFixed(3)));
+          circle.setAttribute('opacity', String(+(baseOpacity * (0.6 + 0.4 * pulse)).toFixed(3)));
+        }
+      });
+    });
+  }
+
+  _computeElectronSpeedMultiplier(flowState) {
+    const power = flowState && flowState.power != null ? Math.abs(Number(flowState.power)) : NaN;
+    if (!Number.isFinite(power)) return 1;
+    const powerMin = Number(this.card._electronPowerMin) || 0;
+    const powerMax = Math.max(powerMin + 1, Number(this.card._electronPowerMax) || 5000);
+    const speedMin = Math.max(0, Number.isFinite(Number(this.card._electronSpeedMin)) ? Number(this.card._electronSpeedMin) : 0.15);
+    const speedMax = Math.max(0, Number.isFinite(Number(this.card._electronSpeedMax)) ? Number(this.card._electronSpeedMax) : 2.25);
+    const fraction = Math.max(0, Math.min(1, (power - powerMin) / (powerMax - powerMin)));
+    return speedMin + (speedMax - speedMin) * fraction;
   }
 
   _ensureFluidFlowOverlay(flowKey, element) {
