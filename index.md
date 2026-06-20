@@ -25,6 +25,10 @@ feature_row:
 
 ![Advanced Energy Card Overview Demo](https://raw.githubusercontent.com/ratava/advanced-energy-card/main/Images/AEC_Overview_Demo.gif)
 
+## Tech Profile
+
+![Tech Profile](https://raw.githubusercontent.com/ratava/advanced-energy-card/main/Images/AEC%20Example.png)
+
 ## Overview Profile — Day & Night
 
 | Day | Night |
