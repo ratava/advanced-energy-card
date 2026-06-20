@@ -34,6 +34,12 @@ The Overview layout shows your home energy picture at a glance: solar, battery, 
 
 ---
 
+## Tech Profile
+
+![Tech Profile](Images/AEC%20Example.png)
+
+---
+
 ## Custom Profiles
 
 Each background SVG carries its own independent set of sensor and styling settings, stored under `_profiles` in your config YAML. Switching between Tech, Overview, or any custom background preserves every profile's settings independently. General settings — language, animation style, update interval, sun/moon display, and so on — are shared across all profiles.
