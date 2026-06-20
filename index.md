@@ -23,6 +23,14 @@ feature_row:
 
 {% include feature_row %}
 
+![Advanced Energy Card Overview Demo](https://raw.githubusercontent.com/ratava/advanced-energy-card/main/Images/AEC_Overview_Demo.gif)
+
+## Overview Profile — Day & Night
+
+| Day | Night |
+|-----|-------|
+| ![Overview Day](https://raw.githubusercontent.com/ratava/advanced-energy-card/main/Images/AEC_Overview_Day.png) | ![Overview Night](https://raw.githubusercontent.com/ratava/advanced-energy-card/main/Images/AEC_Overview_Night.png) |
+
 ## What is Advanced Energy Card?
 
 Advanced Energy Card is a custom Lovelace card for Home Assistant that gives you a real-time animated view of your home energy system. It is designed around inverter-based solar installations with battery storage, but works for any combination of solar, grid, battery, and load sensors.
