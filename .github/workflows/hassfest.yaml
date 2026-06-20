@@ -1,4 +1,4 @@
-name: Validate with hassfest
+name: Validate with HACS
 
 on:
   push:
@@ -9,17 +9,13 @@ on:
 
 jobs:
   validate:
-    runs-on: "ubuntu-latest"
-    name: Validate integration
+    runs-on: ubuntu-latest
+    name: Validate plugin
     steps:
       - name: Check out repository
-        uses: "actions/checkout@v6"
-      
-      - name: Validate with hassfest
-        uses: "home-assistant/actions/hassfest@master"
-        
+        uses: actions/checkout@v4
+
       - name: Validate HACS
-        uses: "hacs/action@main"
+        uses: hacs/action@main
         with:
-          category: "integration"
-          ignore: brands
+          category: plugin
