@@ -16,22 +16,22 @@
  */
 
 
-import { SecurityHelpers, ResourceRateLimiter } from './modules/security.js';
-import { EntityStateManager } from './modules/entity-state-manager.js';
-import { LocalizationManager } from './modules/localization-manager.js';
-import { getConfiguredCarCount, applySvgLayerVisibility } from './modules/svg-layer-visibility.js';
-import { PopupManager } from './modules/popup-manager.js';
-import { BatteryManager } from './modules/battery-manager.js';
-import { CarManager } from './modules/car-manager.js';
-import { AnimationManager } from './modules/animation-manager.js';
-import { SunMoonManager } from './modules/sun-moon-manager.js';
-import { ConfigValidator } from './modules/config-validator.js';
-import { TextBindingsManager } from './modules/text-bindings.js';
-import { RenderManager } from './modules/render-manager.js';
-import { STUB_CONFIG } from './modules/stub-config.js';
-import { getStateSafe, getEntityName, formatPower, formatEnergy, formatPopupValue } from './modules/entity-helpers.js';
-import { ensureGoogleFont } from './modules/font-loader.js';
-import './modules/card-editor.js';
+import { SecurityHelpers, ResourceRateLimiter } from './security.js';
+import { EntityStateManager } from './entity-state-manager.js';
+import { LocalizationManager } from './localization-manager.js';
+import { getConfiguredCarCount, applySvgLayerVisibility } from './svg-layer-visibility.js';
+import { PopupManager } from './popup-manager.js';
+import { BatteryManager } from './battery-manager.js';
+import { CarManager } from './car-manager.js';
+import { AnimationManager } from './animation-manager.js';
+import { SunMoonManager } from './sun-moon-manager.js';
+import { ConfigValidator } from './config-validator.js';
+import { TextBindingsManager } from './text-bindings.js';
+import { RenderManager } from './render-manager.js';
+import { STUB_CONFIG } from './stub-config.js';
+import { getStateSafe, getEntityName, formatPower, formatEnergy, formatPopupValue } from './entity-helpers.js';
+import { ensureGoogleFont } from './font-loader.js';
+import './card-editor.js';
 import {
   _CARD_BASE_URL,
   GEOMETRY, SVG_DIMENSIONS, TEXT_POSITIONS,
@@ -50,7 +50,7 @@ import {
   SEED_DEFAULTS,
   PROFILE_SCHEMAS,
   GENERAL_CONFIG_KEYS,
-} from './modules/constants.js';
+} from './constants.js';
 export {
   GEOMETRY,
   SVG_LAYER_CONFIG,
@@ -59,7 +59,7 @@ export {
   DEBUG_LAYER_2ARRAY_ENABLED,
   LEGACY_CAR_VISIBILITY_KEYS,
   LEGACY_DEPRECATED_KEYS,
-} from './modules/constants.js';
+} from './constants.js';
 
 
 // ============================================================
