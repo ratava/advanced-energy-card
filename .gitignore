@@ -1,8 +1,6 @@
 .vscode/
 locales
 graphify-out/
-graphify-out_/
-CLAUD.md
 plan.md
 data-roles.md
 NEXT_SESSION.md
@@ -12,6 +10,5 @@ CLAUDE.md
 scripts/
 .claude/
 src/
-.graphifyignore
 .env
 .graphifyignore
