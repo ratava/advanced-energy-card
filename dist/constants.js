@@ -51,6 +51,22 @@ export const TEXT_TRANSFORMS = {
   heatPump: buildTextTransform(TEXT_POSITIONS.heatPump)
 };
 
+// HTML overlay placement for the grid-current-power spike field.
+// Position derived from tech.svg: the <text data-role="grid-current-power"> sits at
+//   x="579.96063" y="54.652931" inside <g id="g21"> transform="matrix(0.9922,0.06991,-0.03699,1.00524,-30.190,25.465)".
+// The text node itself also has transform="matrix(0.98479,6.73e-4,0.01192,1.01545,0,0)".
+// Composing both matrices and applying to (579.96, 54.65) gives rendered anchor ≈ (535, 122) in SVG 800×450 space.
+// The composed 2×2 matrix [0.97752, 0.07166; -0.02445, 1.02074] decomposes to:
+//   rotate ≈ 4.2°, skewX ≈ -1.4°, skewY ≈ 0° (scale factors ≈ 0.98 / 1.02, absorbed into the text size).
+// text-anchor in the SVG is "start" (text-align:left), so the anchor is the left baseline of the glyph.
+export const GRID_CURRENT_OVERLAY_PLACEMENT = {
+  x: 535,         // rendered SVG user-coord x of text left-baseline anchor
+  y: 122,         // rendered SVG user-coord y of text left-baseline anchor
+  rotate: 4.2,    // degrees — from composed matrix atan2(0.07166, 0.97752)
+  skewX: -1.4,    // degrees — residual shear after removing rotation
+  skewY: 0        // degrees — negligible in composed matrix
+};
+
 // Debug and default configuration constants
 export const DEBUG = {
   LAYER_NOSOLAR_ENABLED: false,

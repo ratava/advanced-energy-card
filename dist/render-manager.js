@@ -4,6 +4,7 @@ import {
   DEFAULT_BATTERY_FILL_HIGH_COLOR, DEFAULT_BATTERY_FILL_LOW_COLOR, DEFAULT_BATTERY_LOW_THRESHOLD,
   FLOW_STYLE_DEFAULT, BATTERY_GEOMETRY, TXT_STYLE,
   HEADLIGHT_SVG_FILTER_ID, HEADLIGHT_SVG_FILTER_STD_DEV, FLOW_ARROW_COUNT,
+  GRID_CURRENT_OVERLAY_PLACEMENT,
 } from './constants.js';
 import { applySvgLayerVisibility, getConfiguredCarCount } from './svg-layer-visibility.js';
 import { LocalizationManager } from './localization-manager.js';
@@ -117,6 +118,30 @@ export class RenderManager {
           border-radius: 5px;
           box-shadow: inset 0 0 6px currentColor, 0 0 2px currentColor, 0 0 8px currentColor;
           text-shadow: 0 0 6px currentColor;
+        }
+
+        /* HTML value overlay — positions HTML text nodes over the background SVG
+           at SVG-equivalent coordinates. The container fills the card using the
+           same 800:450 aspect the SVG uses; individual field elements are placed
+           by left/top % within that space. display:none by default (flag OFF). */
+        .html-overlay {
+          display: none;
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          overflow: visible;
+          /* Establish a query container so field font-size can scale with card
+             width via cqw units (1cqw = 1% of this container's width). */
+          container-type: inline-size;
+        }
+        .html-overlay-field {
+          position: absolute;
+          white-space: nowrap;
+          font-family: sans-serif;
+          line-height: 1;
+          transform-origin: 0% 100%;
+          display: inline-block;
+          transition: opacity 0.2s ease;
         }
 
         .popup-backdrop {
@@ -336,6 +361,9 @@ export class RenderManager {
         </svg>
         <div class="title-overlay" data-role="title-overlay"></div>
         <div class="title-overlay" data-role="pv-daily-overlay"></div>
+        <div class="html-overlay" data-role="html-overlay">
+          <span class="html-overlay-field" data-role="ov-grid-current-power" style="left:${(GRID_CURRENT_OVERLAY_PLACEMENT.x / 800 * 100).toFixed(4)}%; top:${(GRID_CURRENT_OVERLAY_PLACEMENT.y / 450 * 100).toFixed(4)}%; transform:rotate(${GRID_CURRENT_OVERLAY_PLACEMENT.rotate}deg) skewX(${GRID_CURRENT_OVERLAY_PLACEMENT.skewX}deg) skewY(${GRID_CURRENT_OVERLAY_PLACEMENT.skewY}deg);"></span>
+        </div>
         <div class="popup-backdrop" data-role="popup-backdrop">
           <div class="popup-overlay" data-role="popup-overlay">
             <div class="popup-lines" data-role="popup-lines"></div>
@@ -839,6 +867,7 @@ export class RenderManager {
     const isOverviewProfile = /overview\.svg$/i.test(bg_img);
     const grid_current_odometer = !isOverviewProfile && config.grid_current_odometer === true;
     const grid_current_odometer_duration = clampValue(config.grid_current_odometer_duration, 50, 2000, 350);
+    const grid_current_html_overlay = config.grid_current_html_overlay === true;
     const car_power_font_size = optFontSize(config.car_power_font_size, 4, 28);
     const car_soc_font_size = optFontSize(config.car_soc_font_size, 4, 24);
     const car2_power_font_size = optFontSize(config.car2_power_font_size !== undefined ? config.car2_power_font_size : config.car_power_font_size, 4, 28);
@@ -1625,6 +1654,7 @@ export class RenderManager {
       houseLoad: { text: this.card.formatPower(loadValue, use_kw), fontSize: load_font_size, fill: effectiveLoadFlowColor, visible: true, odometer: grid_current_odometer, odometerDuration: grid_current_odometer_duration },
       grid: { text: gridText, fontSize: grid_font_size, fill: effectiveGridColor, lines: gridLines },
       gridCurrentPower: { text: gridCurrentValueText, fontSize: grid_font_size, fill: effectiveGridColor, visible: gridActive, odometer: grid_current_odometer, odometerDuration: grid_current_odometer_duration },
+      gridCurrentHtmlOverlay: grid_current_html_overlay,
       gridDailyImport: {
         text: gridDailyImportVisible ? this.card.formatEnergy(gridImportDaily, use_kw) : '',
         fontSize: grid_daily_font_size,
@@ -2428,6 +2458,8 @@ export class RenderManager {
 
     // Populate SVG-embedded text placeholders (safe no-op if none exist).
     this.card._textBindingsManager.apply(viewState);
+    // Apply HTML overlay fields (no-op when flag is off).
+    this.card._htmlOverlayManager.apply(viewState);
 
     // Re-attach event listeners after DOM updates
     this._cacheDomReferences(); // Re-cache refs in case DOM was updated
@@ -2486,6 +2518,8 @@ export class RenderManager {
       inverterPopup: root.querySelector('[data-role="inverter-popup"]'),
       inverterPopupLines: Array.from({ length: 6 }, (_, index) => root.querySelector(`[data-role="inverter-popup-line-${index}"]`)),
       echoAliveContainer: root.querySelector('[data-role="echo-alive-container"]'),
+      htmlOverlay: root.querySelector('[data-role="html-overlay"]'),
+      gridCurrentOverlay: root.querySelector('[data-role="ov-grid-current-power"]'),
 
       windmillBlades: root.querySelector('[data-key-rotate="windmill-blades"]'),
 

@@ -27,6 +27,7 @@ import { AnimationManager } from './animation-manager.js';
 import { SunMoonManager } from './sun-moon-manager.js';
 import { ConfigValidator } from './config-validator.js';
 import { TextBindingsManager } from './text-bindings.js';
+import { HtmlOverlayManager } from './html-overlay.js';
 import { RenderManager } from './render-manager.js';
 import { STUB_CONFIG } from './stub-config.js';
 import { getStateSafe, getEntityName, formatPower, formatEnergy, formatPopupValue } from './entity-helpers.js';
@@ -187,6 +188,7 @@ class AdvancedEnergyCard extends HTMLElement {
     this._animationManager = new AnimationManager(this);
     this._sunMoonManager = new SunMoonManager(this);
     this._textBindingsManager = new TextBindingsManager(this);
+    this._htmlOverlayManager = new HtmlOverlayManager(this);
     this._renderManager = new RenderManager(this);
 
     // Event handler bindings (must be stable so we can detach/reattach across renders)
@@ -597,7 +599,7 @@ class AdvancedEnergyCard extends HTMLElement {
   }
 
   static get version() {
-    return '2.0.1';
+    return '2.0.2';
   }
 }
 
